@@ -1,11 +1,13 @@
 [gd_resource type="Resource" script_class="AttachmentData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_1p3qh"]
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_de0di"]
+[ext_resource type="Script" path="res://scripts/attachments/target_grip_viewmodel.gd" id="2_3mawm"]
 
 [resource]
-script = ExtResource("1_1p3qh")
+script = ExtResource("1_de0di")
 slot = 2
 interface_tag = &"ar15_grip"
+viewmodel_part = ExtResource("2_3mawm")
 ergonomics_delta = 8
 ads_time_mult = 0.92
 id = &"grip_target"

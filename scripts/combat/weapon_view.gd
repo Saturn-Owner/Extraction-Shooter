@@ -171,6 +171,15 @@ func _on_weapon_changed(new_data: WeaponData) -> void:
 
 	_viewmodel = new_data.create_viewmodel()
 	_viewmodel.name = "Viewmodel"
+
+	# REIHENFOLGE IST HIER WICHTIG: WeaponViewmodel._ready() baut das Modell,
+	# und _ready() laeuft beim Einhaengen in den Baum. Bestueckung und Daten
+	# muessen also VOR add_child() stehen — danach gesetzt kaeme beides zu
+	# spaet und die Anbauteile fehlten kommentarlos.
+	_viewmodel.weapon_data = new_data
+	if _weapon != null and _weapon.build != null:
+		_viewmodel.attachments = _weapon.build.attachments.duplicate()
+
 	_recoil.add_child(_viewmodel)
 
 	# Ruhelage sofort setzen, sonst schwingt die neue Waffe aus der alten

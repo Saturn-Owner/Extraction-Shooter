@@ -23,15 +23,40 @@
 class_name WeaponViewmodel
 extends Node3D
 
-## Hoehe der Visierlinie ueber dem Modellursprung.
+## Hoehe der AKTIVEN Visierlinie ueber dem Modellursprung.
 ##
 ## weapon_view.gd senkt das Modell beim Zielen um genau diesen Wert ab, damit
 ## die Visierlinie auf der Kameramitte landet. Wer hier lügt, baut eine Waffe,
 ## die neben ihrem eigenen Korn vorbeischiesst.
+##
+## Unterklassen setzen hier in _configure() die Hoehe ihrer EIGENEN Visierung.
+## Sitzt spaeter eine Optik auf der Waffe, wird der Wert auf deren Zielpunkt
+## umgestellt — die Notvisierung klappt dann weg und zaehlt nicht mehr.
 var sight_height: float = 0.068
 
+## Die Hoehe der eingebauten Visierung, unabhaengig von Anbauteilen.
+## Wird nach _configure() gesichert und danach nie wieder veraendert.
+var iron_sight_height: float = 0.068
+
 ## Wie weit vorn die Muendung sitzt (negatives Z).
+## Ein Schalldaempfer schiebt den Wert nach vorn.
 var muzzle_z: float = -0.575
+
+## Die Muendung ohne Anbauteile.
+var bare_muzzle_z: float = -0.575
+
+## Die Waffendaten, zu denen dieses Modell gehoert.
+## Liefert die Aufnahmen — ohne sie kann nichts angebaut werden.
+var weapon_data: WeaponData
+
+## Was montiert werden soll: {int(AttachmentData.Slot): StringName}.
+##
+## MUSS VOR build() GESETZT SEIN. Da _ready() build() aufruft, heisst das in
+## der Praxis: vor dem Einhaengen in den Szenenbaum.
+var attachments: Dictionary = {}
+
+## Die tatsaechlich montierten Modelle, nach Steckplatz.
+var mounted: Dictionary = {}
 
 @export_group("Haltung")
 
@@ -82,15 +107,106 @@ var _trigger_pull: float = 0.0
 var _handle_pull: float = 0.0
 
 
+## Ob das Modell schon gebaut wurde.
+##
+## Verhindert doppeltes Bauen, wenn jemand build() von Hand aufruft und den
+## Knoten danach in den Baum haengt — dann liefe _ready() ein zweites Mal
+## darueber und jedes Teil waere doppelt vorhanden.
+var _built: bool = false
+
+
 func _ready() -> void:
 	build()
 
 
 ## Modell aufbauen. Wird auch vom Renderwerkzeug ausserhalb des Spiels genutzt.
 func build() -> void:
+	if _built:
+		return
+	_built = true
+
 	_configure()
+	# Die eingebauten Werte sichern, bevor Anbauteile sie verschieben.
+	iron_sight_height = sight_height
+	bare_muzzle_z = muzzle_z
+
 	_build_parts()
 	_collect_parts()
+	_apply_attachments()
+
+
+## Haengt die Anbauteile an ihre Aufnahmen und blendet aus, was sie ersetzen.
+##
+## Laeuft einmal beim Bauen. Aendert sich die Bestueckung, wird das ganze
+## Modell neu erzeugt statt hier nachgebessert — die Teile unterscheiden sich
+## zu stark, um sie ineinander umzubauen.
+func _apply_attachments() -> void:
+	if weapon_data == null or attachments.is_empty():
+		return
+
+	for mount in weapon_data.mounts:
+		if mount == null:
+			continue
+		var id: StringName = attachments.get(int(mount.slot), &"")
+		if id == &"":
+			continue
+
+		var data := ItemRegistry.get_item(id) as AttachmentData
+		if data == null or data.interface_tag != mount.interface_tag:
+			push_warning("[%s] %s passt nicht an die Aufnahme %s"
+				% [get_model_name(), id, mount.interface_tag])
+			continue
+
+		var anchor := get_node_or_null(String(mount.anchor)) as Node3D
+		if anchor == null:
+			# Stiller Fehlschlag waere hier das Schlimmste: Das Teil
+			# verschwaende einfach, ohne Hinweis. verify_weapon_handling
+			# prueft deshalb jeden Ankernamen gegen das gebaute Modell.
+			push_error("[%s] Aufnahme-Knoten '%s' fehlt im Modell"
+				% [get_model_name(), mount.anchor])
+			continue
+
+		# Was das Teil ersetzt, wird unsichtbar — nicht geloescht. Beim Visier
+		# ist das sogar ehrlich: Die Notvisierung klappt nur weg.
+		for hidden_name in mount.hides:
+			var hidden := get_node_or_null(String(hidden_name)) as Node3D
+			if hidden != null:
+				hidden.visible = false
+
+		if data.viewmodel_part == null:
+			continue
+
+		var part: AttachmentViewmodel = data.viewmodel_part.new()
+		part.name = "Attachment%s" % AttachmentData.slot_name(mount.slot)
+		anchor.add_child(part)
+		part.build()
+		mounted[int(mount.slot)] = part
+
+		_adopt_attachment_geometry(mount, part)
+
+
+## Uebernimmt Visierlinie und Muendung vom Anbauteil.
+##
+## Die Aufnahmen sind direkte, ungedrehte Kinder des Modells — deshalb genuegt
+## es, ihre Position mit der des Teils zu addieren. Waeren sie verschachtelt
+## oder gedreht, muesste hier ueber Transformationen gerechnet werden.
+func _adopt_attachment_geometry(mount: WeaponMount, part: AttachmentViewmodel) -> void:
+	var anchor := get_node_or_null(String(mount.anchor)) as Node3D
+	if anchor == null:
+		return
+
+	if mount.slot == AttachmentData.Slot.SIGHT and part.aim_point != null:
+		# Ab jetzt zielt der Spieler durch die Optik, nicht mehr ueber Kimme
+		# und Korn. Genau hier entscheidet sich, ob die Waffe dorthin schiesst,
+		# wo der Punkt steht.
+		sight_height = anchor.position.y + part.aim_point.position.y
+
+	if mount.slot == AttachmentData.Slot.MUZZLE and part.muzzle_point != null:
+		muzzle_z = anchor.position.z + part.muzzle_point.position.z
+		# Den Muendungspunkt der Waffe mitziehen, damit das Muendungsfeuer
+		# an der Spitze des Daempfers erscheint und nicht mittendrin.
+		if muzzle_point != null:
+			muzzle_point.position.z = muzzle_z
 
 
 # --- Von Unterklassen zu ueberschreiben ---

@@ -53,6 +53,14 @@ func _build_parts() -> void:
 	add_child(ViewmodelParts.pivot("MuzzlePoint", Vector3(0.0, BORE_Y, muzzle_z)))
 	add_child(ViewmodelParts.pivot("EjectPoint", Vector3(0.028, 0.020, -0.130)))
 
+	# Aufnahmen. Kein Griff und kein Vordergriff: Beides ist bei einer
+	# Vorderschaftrepetierflinte fest mit der Waffe verbunden - der
+	# Vorderschaft IST das bewegliche Teil.
+	# Schiene auf dem Gehaeuse, dort wo sonst die Kerbe sitzt.
+	add_child(ViewmodelParts.pivot("MountSight", Vector3(0.0, 0.046, -0.060)))
+	# Gewinde am Laufende.
+	add_child(ViewmodelParts.pivot("MountMuzzle", Vector3(0.0, BORE_Y, -0.610)))
+
 
 func _build_receiver() -> void:
 	var blued: Material = _mats["blued"]

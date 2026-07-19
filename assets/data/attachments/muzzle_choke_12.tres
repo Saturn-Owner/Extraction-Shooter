@@ -1,11 +1,13 @@
 [gd_resource type="Resource" script_class="AttachmentData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_b6v1y"]
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_1p6wh"]
+[ext_resource type="Script" path="res://scripts/attachments/choke12_viewmodel.gd" id="2_jb2m0"]
 
 [resource]
-script = ExtResource("1_b6v1y")
+script = ExtResource("1_1p6wh")
 slot = 1
 interface_tag = &"choke_12"
+viewmodel_part = ExtResource("2_jb2m0")
 ergonomics_delta = -1
 accuracy_moa_mult = 0.72
 id = &"muzzle_choke_12"

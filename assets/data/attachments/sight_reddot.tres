@@ -1,10 +1,12 @@
 [gd_resource type="Resource" script_class="AttachmentData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_kdpvw"]
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_o68u4"]
+[ext_resource type="Script" path="res://scripts/attachments/red_dot_viewmodel.gd" id="2_r8p5q"]
 
 [resource]
-script = ExtResource("1_kdpvw")
+script = ExtResource("1_o68u4")
 interface_tag = &"picatinny"
+viewmodel_part = ExtResource("2_r8p5q")
 ergonomics_delta = 3
 ads_time_mult = 0.88
 id = &"sight_reddot"

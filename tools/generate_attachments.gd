@@ -2,7 +2,7 @@
 ##
 ##   godot --headless --path . --script res://tools/generate_attachments.gd
 ##
-## ACHTUNG — EINMAL-WERKZEUG, wie generate_arsenal.gd:
+## ACHTUNG - EINMAL-WERKZEUG, wie generate_arsenal.gd:
 ## Nach dem Erzeugen sind die .tres die Wahrheit, nicht diese Tabelle. Wer hier
 ## nochmal draufdrueckt, ueberschreibt alles, was inzwischen nachbalanciert
 ## wurde. Zum Aendern also die .tres bearbeiten.
@@ -10,7 +10,7 @@
 ## ---------------------------------------------------------------------------
 ## BALANCING-GRUNDGEDANKE
 ##
-## Jedes Teil kostet etwas. Es gibt bewusst kein Teil, das nur Vorteile hat —
+## Jedes Teil kostet etwas. Es gibt bewusst kein Teil, das nur Vorteile hat -
 ## sonst waere die Werkbank keine Entscheidung, sondern eine Einkaufsliste.
 ##
 ##   Schalldaempfer  leise und ruhig, dafuer sperrig und langsam am Auge
@@ -24,58 +24,70 @@
 extends SceneTree
 
 const DIR := "res://assets/data/attachments"
+const MODEL_DIR := "res://scripts/attachments"
 
 const SIGHT := AttachmentData.Slot.SIGHT
 const MUZZLE := AttachmentData.Slot.MUZZLE
 const GRIP := AttachmentData.Slot.GRIP
 const FOREGRIP := AttachmentData.Slot.FOREGRIP
 
-## id, Name, Steckplatz, Schnittstelle, Gewicht, Preis, Rasterbreite/-hoehe,
-## danach die Abweichungen vom Neutralwert.
+## id, Modelldatei, Name, Steckplatz, Schnittstelle, Gewicht, Preis,
+## Rastermasse, danach die Abweichungen vom Neutralwert.
 const ATTACHMENTS := [
 	# --- Visiere -------------------------------------------------------------
-	{id = "sight_reddot", name = "Rotpunktvisier", slot = SIGHT, tag = "picatinny",
+	{id = "sight_reddot", model = "red_dot_viewmodel", name = "Rotpunktvisier",
+		slot = SIGHT, tag = "picatinny",
 		w = 0.18, price = 11500, gw = 2, gh = 1, ergo = 3, ads_time = 0.88,
 		desc = "Beide Augen auf, Punkt drauf, fertig. Kein Zoom - dafuer bist du schneller im Ziel als mit jedem Fernrohr."},
-	{id = "sight_scope4x", name = "Zielfernrohr 4x", slot = SIGHT, tag = "picatinny",
+	{id = "sight_scope4x", model = "scope4x_viewmodel", name = "Zielfernrohr 4x",
+		slot = SIGHT, tag = "picatinny",
 		w = 0.42, price = 28000, gw = 2, gh = 1, ergo = -7, ads_time = 1.35,
 		fov = 22.0, moa = 0.88, ads_move = 0.85,
 		desc = "Holt weit entfernte Ziele heran. Auf kurze Distanz ist es eine Klobrille - du siehst nur noch einen Ausschnitt."},
-	{id = "sight_micro_dot", name = "Mini-Rotpunkt", slot = SIGHT, tag = "pistol_dot",
+	{id = "sight_micro_dot", model = "micro_dot_viewmodel", name = "Mini-Rotpunkt",
+		slot = SIGHT, tag = "pistol_dot",
 		w = 0.06, price = 9400, gw = 1, gh = 1, ergo = 4, ads_time = 0.85,
 		desc = "Winziger Punkt auf dem Schlitten. Nimmt der Pistole ihre groesste Schwaeche: die kurze Visierlinie."},
 
 	# --- Muendung ------------------------------------------------------------
-	{id = "muzzle_comp_556", name = "Kompensator 5,56", slot = MUZZLE, tag = "thread_556",
+	{id = "muzzle_comp_556", model = "compensator556_viewmodel", name = "Kompensator 5,56",
+		slot = MUZZLE, tag = "thread_556",
 		w = 0.11, price = 7800, gw = 1, gh = 1, ergo = -2,
 		rec_v = 0.80, rec_h = 0.90, loud = 1.20,
 		desc = "Leitet Gase nach oben ab und drueckt die Muendung runter. Der Nachbar hoert dich dafuer doppelt so gut."},
-	{id = "muzzle_suppressor_556", name = "Schalldaempfer 5,56", slot = MUZZLE, tag = "thread_556",
+	{id = "muzzle_suppressor_556", model = "suppressor556_viewmodel", name = "Schalldaempfer 5,56",
+		slot = MUZZLE, tag = "thread_556",
 		w = 0.46, price = 34000, gw = 2, gh = 1, ergo = -9,
 		rec_v = 0.88, rec_h = 0.94, loud = 0.32, v0 = 0.03, ads_time = 1.12,
 		desc = "Macht dich schwer zu orten. Lang, schwer und kopflastig - die Waffe kommt spuerbar traeger ans Auge."},
-	{id = "muzzle_suppressor_9mm", name = "Schalldaempfer 9 mm", slot = MUZZLE, tag = "thread_9mm",
+	{id = "muzzle_suppressor_9mm", model = "suppressor9mm_viewmodel", name = "Schalldaempfer 9 mm",
+		slot = MUZZLE, tag = "thread_9mm",
 		w = 0.28, price = 21000, gw = 2, gh = 1, ergo = -7,
 		rec_v = 0.90, loud = 0.28, v0 = 0.02, ads_time = 1.10,
 		desc = "Unterschallmunition vorausgesetzt, hoert man davon fast nichts. An der Pistole faellt das Gewicht sofort auf."},
-	{id = "muzzle_choke_12", name = "Wuergebohrung", slot = MUZZLE, tag = "choke_12",
+	{id = "muzzle_choke_12", model = "choke12_viewmodel", name = "Wuergebohrung",
+		slot = MUZZLE, tag = "choke_12",
 		w = 0.09, price = 5200, gw = 1, gh = 1, ergo = -1, moa = 0.72,
 		desc = "Verengt den Lauf am Ende und haelt die Schrotgarbe laenger zusammen. Auf Distanz der Unterschied zwischen Treffer und Streuung."},
 
 	# --- Griffe --------------------------------------------------------------
-	{id = "grip_rubber", name = "Gummigriff", slot = GRIP, tag = "ar15_grip",
+	{id = "grip_rubber", model = "rubber_grip_viewmodel", name = "Gummigriff",
+		slot = GRIP, tag = "ar15_grip",
 		w = 0.08, price = 3400, gw = 1, gh = 1, ergo = 5, rec_v = 0.95,
 		desc = "Weiche Gummiauflage. Schluckt einen Teil des Stosses und rutscht auch mit nassen Haenden nicht."},
-	{id = "grip_target", name = "Zielgriff", slot = GRIP, tag = "ar15_grip",
+	{id = "grip_target", model = "target_grip_viewmodel", name = "Zielgriff",
+		slot = GRIP, tag = "ar15_grip",
 		w = 0.10, price = 6100, gw = 1, gh = 1, ergo = 8, ads_time = 0.92,
 		desc = "Steiler Winkel, ausgeformte Handauflage. Die Waffe liegt ruhiger und kommt schneller hoch."},
 
 	# --- Vordergriffe --------------------------------------------------------
-	{id = "foregrip_vertical", name = "Vordergriff senkrecht", slot = FOREGRIP, tag = "mlok",
+	{id = "foregrip_vertical", model = "vertical_foregrip_viewmodel", name = "Vordergriff senkrecht",
+		slot = FOREGRIP, tag = "mlok",
 		w = 0.13, price = 4800, gw = 1, gh = 2, ergo = -3,
 		rec_v = 0.86, ads_move = 0.95,
 		desc = "Fest zupacken und die Muendung runterziehen. Gegen Hochschlag das Beste, was es gibt - dafuer sperrig."},
-	{id = "foregrip_angled", name = "Winkelgriff", slot = FOREGRIP, tag = "mlok",
+	{id = "foregrip_angled", model = "angled_foregrip_viewmodel", name = "Winkelgriff",
+		slot = FOREGRIP, tag = "mlok",
 		w = 0.09, price = 4200, gw = 1, gh = 1, ergo = 2,
 		rec_h = 0.84, ads_time = 0.94,
 		desc = "Flach angeschraegt statt senkrecht. Haelt die Waffe seitlich ruhig, ohne im Weg zu sein."},
@@ -136,6 +148,13 @@ func _write_attachment(e: Dictionary) -> bool:
 	a.base_price = e.price
 	a.max_stack = 1
 
+	var model_path := "%s/%s.gd" % [MODEL_DIR, e.model]
+	var model_script := ResourceLoader.load(model_path) as Script
+	if model_script == null:
+		push_error("[%s] Modell nicht gefunden: %s" % [e.id, model_path])
+		return false
+	a.viewmodel_part = model_script
+
 	a.ergonomics_delta = e.get("ergo", 0)
 	a.recoil_vertical_mult = e.get("rec_v", 1.0)
 	a.recoil_horizontal_mult = e.get("rec_h", 1.0)
@@ -178,8 +197,8 @@ func _patch_weapon(file_name: String, mount_specs: Array) -> bool:
 		mount.interface_tag = StringName(spec.tag)
 		mount.anchor = StringName(spec.anchor)
 		var hides: Array[StringName] = []
-		for name in spec.hides:
-			hides.append(StringName(name))
+		for node_name in spec.hides:
+			hides.append(StringName(node_name))
 		mount.hides = hides
 		mounts.append(mount)
 

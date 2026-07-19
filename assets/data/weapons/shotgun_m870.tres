@@ -4,13 +4,13 @@
 [ext_resource type="Script" path="res://scripts/data/weapon_mount.gd" id="1_t56ja"]
 [ext_resource type="Script" path="res://scripts/weapons/m870_viewmodel.gd" id="2_view"]
 
-[sub_resource type="Resource" id="Resource_8rxx6"]
+[sub_resource type="Resource" id="Resource_t56ja"]
 script = ExtResource("1_t56ja")
 interface_tag = &"picatinny"
 anchor = &"MountSight"
 hides = Array[StringName]([&"RearSight", &"FrontSight"])
 
-[sub_resource type="Resource" id="Resource_rqfs7"]
+[sub_resource type="Resource" id="Resource_8rxx6"]
 script = ExtResource("1_t56ja")
 slot = 1
 interface_tag = &"choke_12"
@@ -28,7 +28,7 @@ recoil_horizontal = 74.0
 ergonomics = 48
 accuracy_moa = 9.0
 viewmodel = ExtResource("2_view")
-mounts = Array[ExtResource("1_t56ja")]([SubResource("Resource_8rxx6"), SubResource("Resource_rqfs7")])
+mounts = Array[ExtResource("1_t56ja")]([SubResource("Resource_t56ja"), SubResource("Resource_8rxx6")])
 id = &"weapon_shotgun_m870"
 display_name = "M870"
 description = "Vorderschaftrepetierer. Ein Treffer auf kurze Distanz beendet fast jede Auseinandersetzung."

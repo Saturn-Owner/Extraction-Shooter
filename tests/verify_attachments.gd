@@ -25,6 +25,10 @@ func _initialize() -> void:
 	_test_registry_stays_untouched()
 	_test_build_survives_serialisation()
 	_test_attached_weapons_do_not_stack()
+	_test_mount_anchors_exist()
+	_test_attachments_become_visible()
+	_test_sight_line_follows_the_optic()
+	_test_muzzle_follows_the_suppressor()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -303,6 +307,136 @@ func _test_attached_weapons_do_not_stack() -> void:
 	a.attachments[int(AttachmentData.Slot.SIGHT)] = &"sight_reddot"
 
 	_check(not a.can_merge_with(b), "bestückt und unbestückt lassen sich nicht zusammenlegen")
+
+
+## Baut ein Waffenmodell mit Bestückung, ohne Szenenbaum.
+func _build_model(weapon: WeaponData, build: WeaponBuild) -> WeaponViewmodel:
+	var model := weapon.create_viewmodel()
+	model.weapon_data = weapon
+	model.attachments = build.attachments.duplicate()
+	model.build()
+	return model
+
+
+## Jeder Ankername muss im gebauten Modell wirklich existieren.
+##
+## Ein Tippfehler wäre sonst ein stiller Fehlschlag: Das Anbauteil
+## verschwindet einfach, ohne Fehlermeldung im Spiel. Genau die Art Fehler,
+## die man stundenlang an der falschen Stelle sucht.
+func _test_mount_anchors_exist() -> void:
+	_section("Aufnahme-Knoten existieren")
+
+	for weapon in _weapons():
+		if weapon.mounts.is_empty():
+			continue
+		var model := _build_model(weapon, WeaponBuild.new())
+		for mount in weapon.mounts:
+			var anchor := model.get_node_or_null(String(mount.anchor))
+			_check(anchor != null, "%s: Anker '%s' für %s vorhanden"
+				% [weapon.display_name, mount.anchor, AttachmentData.slot_name(mount.slot)])
+		model.free()
+
+
+func _test_attachments_become_visible() -> void:
+	_section("Anbauteile erscheinen am Modell")
+
+	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+
+	var bare := _build_model(ar15, WeaponBuild.new())
+	var iron_rear := bare.get_node_or_null("RearSight") as Node3D
+	_check(iron_rear != null and iron_rear.visible, "ohne Optik ist die Kimme sichtbar")
+	_check(bare.mounted.is_empty(), "ohne Bestückung hängt nichts an den Aufnahmen")
+	bare.free()
+
+	var build := WeaponBuild.new()
+	build.set_attachment(AttachmentData.Slot.SIGHT, &"sight_reddot")
+	build.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_suppressor_556")
+	build.set_attachment(AttachmentData.Slot.GRIP, &"grip_target")
+	build.set_attachment(AttachmentData.Slot.FOREGRIP, &"foregrip_vertical")
+	var kitted := _build_model(ar15, build)
+
+	_check(kitted.mounted.size() == 4, "alle vier Teile sind montiert (%d)" % kitted.mounted.size())
+
+	# Was ersetzt wurde, ist weg — aber nicht gelöscht.
+	for hidden_name in ["RearSight", "FrontSight", "FlashHider", "GripAssembly"]:
+		var node := kitted.get_node_or_null(hidden_name) as Node3D
+		_check(node != null and not node.visible,
+			"%s ist vorhanden, aber ausgeblendet" % hidden_name)
+
+	# Und die beweglichen Teile sind trotz Umbau noch auffindbar.
+	_check(kitted.action != null and kitted.trigger != null and kitted.magazine != null,
+		"die beweglichen Teile werden weiterhin gefunden")
+	kitted.free()
+
+
+## Zielt der Spieler durch das, wodurch er schaut?
+##
+## Das ist die fehleranfälligste Rechnung im ganzen Vorhaben: weapon_view.gd
+## senkt die Waffe beim Zielen um sight_height ab. Stimmt der Wert nicht, sitzt
+## der Rotpunkt sichtbar neben der Bildmitte — und die Waffe schiesst dorthin,
+## wo der Punkt NICHT ist.
+func _test_sight_line_follows_the_optic() -> void:
+	_section("Die Visierlinie folgt der Optik")
+
+	for entry in [
+		{weapon = &"weapon_rifle_ar15", optic = &"sight_reddot"},
+		{weapon = &"weapon_rifle_ar15", optic = &"sight_scope4x"},
+		{weapon = &"weapon_pistol_g17", optic = &"sight_micro_dot"},
+		{weapon = &"weapon_shotgun_m870", optic = &"sight_reddot"},
+	]:
+		var weapon := ItemRegistry.get_item(entry.weapon) as WeaponData
+		var build := WeaponBuild.new()
+		build.set_attachment(AttachmentData.Slot.SIGHT, entry.optic)
+		var model := _build_model(weapon, build)
+
+		var mount := weapon.find_mount(AttachmentData.Slot.SIGHT)
+		var anchor := model.get_node_or_null(String(mount.anchor)) as Node3D
+		var part: AttachmentViewmodel = model.mounted.get(int(AttachmentData.Slot.SIGHT))
+
+		if anchor == null or part == null or part.aim_point == null:
+			_check(false, "%s + %s: Optik und Zielpunkt gefunden" % [weapon.display_name, entry.optic])
+			model.free()
+			continue
+
+		var expected := anchor.position.y + part.aim_point.position.y
+		_check(is_equal_approx(model.sight_height, expected),
+			"%s + %s: Zielhöhe stimmt (%.4f)" % [weapon.display_name, entry.optic, model.sight_height])
+		_check(model.sight_height > model.iron_sight_height,
+			"%s + %s: die Optik sitzt höher als die Notvisierung (%.4f > %.4f)"
+				% [weapon.display_name, entry.optic, model.sight_height, model.iron_sight_height])
+		_check(is_zero_approx(anchor.position.x) and is_zero_approx(part.aim_point.position.x),
+			"%s + %s: der Zielpunkt steht mittig" % [weapon.display_name, entry.optic])
+
+		model.free()
+
+	# Ohne Optik bleibt alles wie vorher — das ist der Rückfall, auf den sich
+	# verify_weapon_handling verlässt.
+	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var bare := _build_model(ar15, WeaponBuild.new())
+	_check(is_equal_approx(bare.sight_height, bare.iron_sight_height),
+		"ohne Optik gilt weiterhin die eingebaute Visierhöhe")
+	bare.free()
+
+
+func _test_muzzle_follows_the_suppressor() -> void:
+	_section("Die Mündung wandert mit dem Dämpfer")
+
+	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var build := WeaponBuild.new()
+	build.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_suppressor_556")
+	var model := _build_model(ar15, build)
+
+	_check(model.muzzle_z < model.bare_muzzle_z,
+		"die Mündung sitzt weiter vorn (%.3f statt %.3f)" % [model.muzzle_z, model.bare_muzzle_z])
+	_check(model.muzzle_point != null and is_equal_approx(model.muzzle_point.position.z, model.muzzle_z),
+		"der Mündungspunkt sitzt an der neuen Mündung")
+	model.free()
+
+	# Ohne Aufsatz bleibt die Zusicherung aus verify_weapon_handling gültig.
+	var bare := _build_model(ar15, WeaponBuild.new())
+	_check(is_equal_approx(bare.muzzle_z, bare.bare_muzzle_z),
+		"ohne Aufsatz bleibt die Mündung, wo sie war")
+	bare.free()
 
 
 ## Alle gespeicherten Eigenschaften einer Ressource als Vergleichswert.

@@ -1,11 +1,13 @@
 [gd_resource type="Resource" script_class="AttachmentData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_iuraw"]
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_r8h7n"]
+[ext_resource type="Script" path="res://scripts/attachments/suppressor556_viewmodel.gd" id="2_vaagh"]
 
 [resource]
-script = ExtResource("1_iuraw")
+script = ExtResource("1_r8h7n")
 slot = 1
 interface_tag = &"thread_556"
+viewmodel_part = ExtResource("2_vaagh")
 recoil_vertical_mult = 0.88
 recoil_horizontal_mult = 0.94
 ergonomics_delta = -9

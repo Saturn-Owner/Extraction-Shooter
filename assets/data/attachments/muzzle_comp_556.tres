@@ -1,11 +1,13 @@
 [gd_resource type="Resource" script_class="AttachmentData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_2a8g1"]
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_2s175"]
+[ext_resource type="Script" path="res://scripts/attachments/compensator556_viewmodel.gd" id="2_m6ay1"]
 
 [resource]
-script = ExtResource("1_2a8g1")
+script = ExtResource("1_2s175")
 slot = 1
 interface_tag = &"thread_556"
+viewmodel_part = ExtResource("2_m6ay1")
 recoil_vertical_mult = 0.8
 recoil_horizontal_mult = 0.9
 ergonomics_delta = -2

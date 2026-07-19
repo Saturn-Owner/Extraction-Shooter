@@ -52,6 +52,13 @@ func _build_parts() -> void:
 	add_child(ViewmodelParts.pivot("MuzzlePoint", Vector3(0.0, BORE_Y, muzzle_z)))
 	add_child(ViewmodelParts.pivot("EjectPoint", Vector3(0.016, 0.026, -0.120)))
 
+	# Aufnahmen. Die Pistole hat bewusst nur zwei: Ihr Griff ist Teil des
+	# Griffstuecks und laesst sich nicht tauschen, und ein Vordergriff waere
+	# an einer Waffe ohne Vorderschaft sinnlos.
+	# Ausfraesung im Schlitten, hinten oben.
+	add_child(ViewmodelParts.pivot("MountSight", Vector3(0.0, 0.036, -0.030)))
+	add_child(ViewmodelParts.pivot("MountMuzzle", Vector3(0.0, BORE_Y, -0.196)))
+
 
 ## Polymergriffstueck mit Abzugsbuegel.
 func _build_frame() -> void:

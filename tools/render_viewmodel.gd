@@ -53,6 +53,9 @@ const VIEWS := [
 
 var _output_dir := ""
 var _filter := ""
+
+## Ob die Waffen voll bestueckt gerendert werden.
+var _kitted := false
 var _frames := 0
 var _job_index := 0
 
@@ -70,6 +73,9 @@ func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	_output_dir = args[0] if args.size() > 0 else OS.get_user_data_dir()
 	_filter = args[1] if args.size() > 1 else ""
+	_kitted = args.has("bestueckt")
+	if _kitted and _filter == "bestueckt":
+		_filter = ""
 
 	ItemRegistry.ensure_loaded()
 	_collect_weapons()
@@ -162,6 +168,20 @@ func _build_scene() -> void:
 	_scene.add_child(_camera)
 
 
+## Alles anbauen, was an diese Waffe passt — je Steckplatz das erste passende
+## Teil. Zum Begutachten reicht das: Man sieht auf einen Blick, ob irgendwo
+## etwas durchsticht oder in der Luft haengt.
+func _full_kit(weapon: WeaponData) -> Dictionary:
+	var kit := {}
+	for item in ItemRegistry.get_by_category(ItemData.Category.ATTACHMENT):
+		var attachment := item as AttachmentData
+		if attachment == null or not weapon.accepts_attachment(attachment):
+			continue
+		if not kit.has(int(attachment.slot)):
+			kit[int(attachment.slot)] = attachment.id
+	return kit
+
+
 func _add_light(direction: Vector3, color: Color, energy: float, shadows: bool) -> void:
 	var light := DirectionalLight3D.new()
 	light.light_color = color
@@ -183,8 +203,17 @@ func _apply_job(index: int) -> void:
 	if weapon_index != _model_weapon:
 		if _model != null:
 			_model.queue_free()
-		_model = _weapons[weapon_index].create_viewmodel()
+		var weapon_data := _weapons[weapon_index]
+		_model = weapon_data.create_viewmodel()
+		# Bestueckung MUSS vor add_child() stehen: _ready() baut das Modell,
+		# und danach gesetzte Anbauteile kaemen zu spaet.
+		_model.weapon_data = weapon_data
+		if _kitted:
+			_model.attachments = _full_kit(weapon_data)
 		_scene.add_child(_model)
+		# Ausdruecklich bauen: _ready() laeuft erst im naechsten Frame, der
+		# Bildausschnitt wird aber sofort aus den Meshes berechnet. Der
+		# _built-Schutz im Viewmodel verhindert, dass dabei doppelt gebaut wird.
 		_model.build()
 		_model_weapon = weapon_index
 

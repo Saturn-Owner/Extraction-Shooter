@@ -1,11 +1,13 @@
 [gd_resource type="Resource" script_class="AttachmentData" format=3]
 
-[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_48f5k"]
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_ga6d8"]
+[ext_resource type="Script" path="res://scripts/attachments/suppressor9mm_viewmodel.gd" id="2_6xkfv"]
 
 [resource]
-script = ExtResource("1_48f5k")
+script = ExtResource("1_ga6d8")
 slot = 1
 interface_tag = &"thread_9mm"
+viewmodel_part = ExtResource("2_6xkfv")
 recoil_vertical_mult = 0.9
 ergonomics_delta = -7
 ads_time_mult = 1.1

@@ -4,13 +4,13 @@
 [ext_resource type="Script" path="res://scripts/data/weapon_mount.gd" id="1_vnths"]
 [ext_resource type="Script" path="res://scripts/weapons/glock17_viewmodel.gd" id="2_view"]
 
-[sub_resource type="Resource" id="Resource_8dprp"]
+[sub_resource type="Resource" id="Resource_vnths"]
 script = ExtResource("1_vnths")
 interface_tag = &"pistol_dot"
 anchor = &"MountSight"
 hides = Array[StringName]([&"RearSight", &"FrontSight"])
 
-[sub_resource type="Resource" id="Resource_pyxj5"]
+[sub_resource type="Resource" id="Resource_8dprp"]
 script = ExtResource("1_vnths")
 slot = 1
 interface_tag = &"thread_9mm"
@@ -28,7 +28,7 @@ recoil_horizontal = 24.0
 ergonomics = 86
 accuracy_moa = 4.2
 viewmodel = ExtResource("2_view")
-mounts = Array[ExtResource("1_vnths")]([SubResource("Resource_8dprp"), SubResource("Resource_pyxj5")])
+mounts = Array[ExtResource("1_vnths")]([SubResource("Resource_vnths"), SubResource("Resource_8dprp")])
 id = &"weapon_pistol_g17"
 display_name = "G17"
 description = "Schlichte Dienstpistole. Leicht, zuverlaessig, immer besser als nichts."

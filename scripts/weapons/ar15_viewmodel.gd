@@ -44,6 +44,24 @@ func _build_parts() -> void:
 
 	add_child(ViewmodelParts.pivot("MuzzlePoint", Vector3(0.0, BORE_Y, muzzle_z)))
 	add_child(ViewmodelParts.pivot("EjectPoint", Vector3(0.030, 0.026, -0.098)))
+	_build_mounts()
+
+
+## Aufnahmen fuer Anbauteile.
+##
+## Bewusst ungedrehte, direkte Kinder des Modells: weapon_viewmodel.gd rechnet
+## Visierhoehe und Muendung durch schlichtes Addieren der Positionen aus. Mit
+## verschachtelten oder gedrehten Aufnahmen muesste dort ueber Transformationen
+## gerechnet werden — mehr Aufwand fuer nichts.
+func _build_mounts() -> void:
+	# Auf der Schiene, knapp ueber deren Zaehnen.
+	add_child(ViewmodelParts.pivot("MountSight", Vector3(0.0, RAIL_Y + 0.007, -0.100)))
+	# Am Laufgewinde, dort wo sonst die Muendungsbremse sitzt.
+	add_child(ViewmodelParts.pivot("MountMuzzle", Vector3(0.0, BORE_Y, -0.520)))
+	# Exakt dort, wo der eingebaute Griff haengt.
+	add_child(ViewmodelParts.pivot("MountGrip", Vector3(0.0, -0.082, -0.030)))
+	# Unterseite des Handschutzes.
+	add_child(ViewmodelParts.pivot("MountForegrip", Vector3(0.0, BORE_Y - 0.026, -0.330)))
 
 
 ## Oberes Gehaeuse mit Picatinny-Schiene, Auswurffenster und Huelsenabweiser.
