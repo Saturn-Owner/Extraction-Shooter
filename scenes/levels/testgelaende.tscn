@@ -1,7 +1,8 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1_player"]
 [ext_resource type="Script" path="res://scripts/levels/test_ground.gd" id="2_test_ground"]
+[ext_resource type="PackedScene" path="res://scenes/combat/target_dummy.tscn" id="3_target"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_winter"]
 sky_top_color = Color(0.52, 0.58, 0.66, 1)
@@ -116,6 +117,35 @@ mesh = SubResource("Mesh_crate")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Kisten/Kiste4"]
 shape = SubResource("Shape_crate")
+
+[node name="Ziele" type="Node3D" parent="."]
+
+[node name="Ziel25m" parent="Ziele" instance=ExtResource("3_target")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -25)
+label_text = "25 m  ohne Platte"
+
+[node name="Ziel25mPanzer" parent="Ziele" instance=ExtResource("3_target")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -25)
+plate_id = &"plate_class4_front"
+label_text = "25 m  Klasse 4"
+
+[node name="Ziel100m" parent="Ziele" instance=ExtResource("3_target")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -100)
+label_text = "100 m  ohne Platte"
+
+[node name="Ziel100mPanzer" parent="Ziele" instance=ExtResource("3_target")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -100)
+plate_id = &"plate_class4_front"
+label_text = "100 m  Klasse 4"
+
+[node name="Ziel300m" parent="Ziele" instance=ExtResource("3_target")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, -300)
+label_text = "300 m  ohne Platte"
+
+[node name="Ziel300mPanzer" parent="Ziele" instance=ExtResource("3_target")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -300)
+plate_id = &"plate_class4_front"
+label_text = "300 m  Klasse 4"
 
 [node name="Player" parent="." instance=ExtResource("1_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)

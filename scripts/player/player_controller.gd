@@ -103,13 +103,69 @@ var _pitch: float = 0.0
 var _time_since_sprint: float = 0.0
 var _was_exhausted: bool = false
 
+## Rückstoß, der noch auf die Kamera wirkt, und was davon zurückfedert.
+var _recoil_pitch: float = 0.0
+var _recoil_yaw: float = 0.0
+
+## Wie schnell die Waffe nach dem Rückstoß wieder ins Ziel kommt.
+@export_group("Rückstoß")
+@export var recoil_recovery_speed: float = 6.0
+
 @onready var _camera_pivot: Node3D = $CameraPivot
 @onready var _collision: CollisionShape3D = $CollisionShape3D
+@onready var weapon: Weapon = $CameraPivot/Weapon
 
 
 func _ready() -> void:
 	stamina = max_stamina
 	_capture_mouse(true)
+	if weapon != null:
+		weapon.recoil_kick.connect(_on_recoil_kick)
+
+
+## Rückstoß hebt die Kamera an. Der Aufschlag ist sofort, die Erholung
+## langsam — dadurch muss der Spieler bei Dauerfeuer gegenhalten.
+func _on_recoil_kick(vertical: float, horizontal: float) -> void:
+	_recoil_pitch += vertical
+	_recoil_yaw += horizontal
+
+
+func _update_recoil(delta: float) -> void:
+	if is_zero_approx(_recoil_pitch) and is_zero_approx(_recoil_yaw):
+		return
+
+	var recovered_pitch := move_toward(_recoil_pitch, 0.0, recoil_recovery_speed * delta * maxf(1.0, absf(_recoil_pitch)))
+	var recovered_yaw := move_toward(_recoil_yaw, 0.0, recoil_recovery_speed * delta * maxf(1.0, absf(_recoil_yaw)))
+
+	# Nur die Differenz anwenden, sonst driftet die Blickrichtung weg.
+	_pitch += _recoil_pitch - recovered_pitch
+	rotate_y(deg_to_rad(-(_recoil_yaw - recovered_yaw)))
+
+	_recoil_pitch = recovered_pitch
+	_recoil_yaw = recovered_yaw
+	_pitch = clampf(_pitch, -pitch_limit_degrees, pitch_limit_degrees)
+	_camera_pivot.rotation_degrees.x = _pitch
+
+
+func _handle_weapon_input() -> void:
+	if weapon == null:
+		return
+
+	if Input.is_action_just_pressed("fire_mode"):
+		weapon.cycle_fire_mode()
+	if Input.is_action_just_pressed("reload"):
+		weapon.reload()
+	if Input.is_action_just_released("fire"):
+		weapon.release_trigger()
+
+	# Sprinten und Schiessen schliessen sich aus — die Waffe ist weggeklappt.
+	if is_sprinting:
+		return
+
+	weapon.try_fire(
+		Input.is_action_pressed("fire"),
+		Input.is_action_just_pressed("fire")
+	)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -136,6 +192,8 @@ func _physics_process(delta: float) -> void:
 	_update_crouch(delta)
 	_update_stamina(delta)
 	_update_movement(delta)
+	_update_recoil(delta)
+	_handle_weapon_input()
 	move_and_slide()
 
 
