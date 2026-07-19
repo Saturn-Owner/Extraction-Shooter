@@ -3,19 +3,24 @@
 ## ---------------------------------------------------------------------------
 ## DURCHSUCHEN GESCHIEHT PRO GEGENSTAND (wie in Arena Breakout)
 ##
-## Man öffnet die Kiste und sieht sofort das Raster — aber leer. Die
-## Gegenstände tauchen dann einzeln auf, jeder mit eigener Dauer:
+## Man öffnet die Kiste und sieht sofort, WO etwas liegt: schwarze Umrisse
+## in der richtigen Größe. Was es ist, zeigt sich erst nach und nach, jeder
+## Gegenstand mit eigener Dauer:
 ##
 ##   9mm-Patrone      ~0.7 s
 ##   M995             ~1.3 s
 ##   Schutzplatte     ~3.3 s
 ##   Sturmgewehr      ~4.4 s
 ##
-## Das ist deutlich besser als eine feste Zeit pro Kiste, weil es eine
-## Entscheidung erzeugt: Man sieht, dass noch etwas Grosses kommt, und muss
-## abwägen, ob man so lange stehen bleibt. Eine Militärkiste mit einem
+## Durchsucht wird in Lesereihenfolge: links nach rechts, dann zeilenweise
+## nach unten. Wer nicht warten will, klickt einen anderen Umriss an — der
+## wird dann vorgezogen, danach geht es normal weiter.
+##
+## Das erzeugt die eigentliche Entscheidung: Man sieht einen grossen Umriss
+## und muss abwaegen, ob sich das Bleiben lohnt. Eine Militärkiste mit einem
 ## Gewehr darin hält einen fast fünf Sekunden fest — genau dann, wenn man
-## am verwundbarsten ist.
+## am verwundbarsten ist. Die Groesse verraet dabei, wie lange es dauert,
+## aber nicht, ob es sich lohnt.
 ##
 ## Der Inhalt wird beim ersten Öffnen gewürfelt, nicht beim Laden des Levels:
 ## Wer die Kiste nie öffnet, kostet keine Rechenzeit. Im Multiplayer würfelt
@@ -51,9 +56,12 @@ var is_fully_searched: bool = false
 ## instance_id -> true, sobald der Gegenstand sichtbar ist.
 var _revealed: Dictionary = {}
 
-## Reihenfolge, in der aufgedeckt wird. Kleine Dinge zuerst, damit man
-## schnell etwas sieht und nicht sekundenlang auf ein leeres Raster starrt.
+## Reihenfolge, in der aufgedeckt wird: Lesereihenfolge, vorne der aktuelle.
 var _reveal_queue: Array[ItemStack] = []
+
+## instance_id -> bereits verstrichene Suchzeit. Damit kostet weder eine
+## Pause noch ein Wechsel den bisherigen Fortschritt.
+var _elapsed: Dictionary = {}
 
 var _reveal_timer: float = 0.0
 var _current_reveal_time: float = 0.0
@@ -94,6 +102,7 @@ func open() -> void:
 func pause_search() -> void:
 	if not _is_searching:
 		return
+	_remember_progress()
 	_is_searching = false
 	search_paused.emit()
 
@@ -108,6 +117,7 @@ func _process(delta: float) -> void:
 
 	var stack: ItemStack = _reveal_queue.pop_front()
 	_revealed[stack.instance_id] = true
+	_elapsed.erase(stack.instance_id)
 	item_revealed.emit(stack, _reveal_queue.size())
 
 	if _reveal_queue.is_empty():
@@ -125,7 +135,8 @@ func _start_next_reveal() -> void:
 	var next: ItemStack = _reveal_queue[0]
 	var data := next.get_data()
 	_current_reveal_time = (data.get_search_time() if data != null else 1.0) * search_time_multiplier
-	_reveal_timer = 0.0
+	# Dort weitermachen, wo dieser Gegenstand zuletzt stand.
+	_reveal_timer = float(_elapsed.get(next.instance_id, 0.0))
 
 
 ## Fortschritt am aktuell gesuchten Gegenstand, 0 bis 1.
@@ -144,6 +155,12 @@ func get_remaining_count() -> int:
 
 func is_searching() -> bool:
 	return _is_searching
+
+
+## Welcher Gegenstand gerade durchsucht wird — fuer die Hervorhebung im
+## Raster. Der Spieler soll sehen, welcher schwarze Umriss an der Reihe ist.
+func get_current_target() -> ItemStack:
+	return _reveal_queue[0] if not _reveal_queue.is_empty() else null
 
 
 ## Ob dieser Gegenstand schon sichtbar ist.
@@ -177,21 +194,62 @@ func _generate_contents() -> void:
 			break
 
 
-## Kleine Gegenstände zuerst aufdecken. So sieht der Spieler sofort etwas,
-## und die lange Wartezeit auf das Sturmgewehr kommt am Ende — dann, wenn
-## er sich bewusst entscheiden muss, ob er bleibt.
+## In Lesereihenfolge durchsuchen: links nach rechts, dann zeilenweise nach
+## unten. Das ist vorhersehbar — der Spieler sieht die schwarzen Umrisse und
+## weiss, wann welcher an der Reihe ist. Genau das macht die Entscheidung
+## moeglich, stattdessen gezielt auf einen anderen zu klicken.
 func _build_reveal_queue() -> void:
 	_reveal_queue.clear()
 	for stack in contents.get_all_stacks():
 		_reveal_queue.append(stack)
+	_sort_reading_order(_reveal_queue)
 
-	_reveal_queue.sort_custom(func(a: ItemStack, b: ItemStack) -> bool:
-		var da := a.get_data()
-		var db := b.get_data()
-		var ta := da.get_search_time() if da != null else 1.0
-		var tb := db.get_search_time() if db != null else 1.0
-		return ta < tb
+
+func _sort_reading_order(list: Array[ItemStack]) -> void:
+	list.sort_custom(func(a: ItemStack, b: ItemStack) -> bool:
+		var pa := contents.get_position(a.instance_id)
+		var pb := contents.get_position(b.instance_id)
+		if pa.y != pb.y:
+			return pa.y < pb.y
+		return pa.x < pb.x
 	)
+
+
+## Zieht einen Gegenstand vor: Er wird als naechstes durchsucht, danach geht
+## es in der normalen Reihenfolge weiter.
+##
+## Der Sinn: Man sieht einen grossen Umriss und will wissen, ob sich das
+## Bleiben lohnt — ohne vorher drei Patronenschachteln abzuwarten.
+##
+## Der Fortschritt am bisherigen Gegenstand bleibt erhalten. Neugier soll
+## nichts kosten; wer zurueckwechselt, faengt nicht wieder bei null an.
+func prioritize(instance_id: int) -> bool:
+	if is_revealed(instance_id):
+		return false
+
+	var index := -1
+	for i in _reveal_queue.size():
+		if _reveal_queue[i].instance_id == instance_id:
+			index = i
+			break
+
+	if index <= 0:
+		# Nicht gefunden oder ohnehin schon an der Reihe.
+		return false
+
+	_remember_progress()
+	var stack: ItemStack = _reveal_queue[index]
+	_reveal_queue.remove_at(index)
+	_reveal_queue.insert(0, stack)
+	_start_next_reveal()
+	return true
+
+
+## Merkt sich, wie weit der aktuelle Gegenstand schon durchsucht ist.
+func _remember_progress() -> void:
+	if _reveal_queue.is_empty():
+		return
+	_elapsed[_reveal_queue[0].instance_id] = _reveal_timer
 
 
 ## Nimmt einen Gegenstand heraus und legt ihn ins Zielinventar.
@@ -267,6 +325,7 @@ func reset() -> void:
 	_is_searching = false
 	_revealed.clear()
 	_reveal_queue.clear()
+	_elapsed.clear()
 	_reveal_timer = 0.0
 	_current_reveal_time = 0.0
 	contents.resize(grid_width, grid_height)

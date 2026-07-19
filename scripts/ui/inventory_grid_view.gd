@@ -5,9 +5,9 @@
 ## aufgebaut werden müssten.
 ##
 ## VERBINDUNG ZUM CONTAINER:
-## Ist `container` gesetzt, werden nur AUFGEDECKTE Gegenstände gezeichnet.
-## Alles andere existiert für den Spieler noch nicht — das ist die Grundlage
-## des schrittweisen Durchsuchens.
+## Ist `container` gesetzt, werden noch nicht durchsuchte Gegenstände als
+## schwarze Umrisse gezeichnet: Der Spieler sieht, WO etwas liegt und wie
+## gross es ist, aber nicht, was es ist. Ein Klick darauf zieht es vor.
 ##
 ## ZIEHEN UND ABLEGEN läuft über das übergeordnete Fenster, damit man
 ## zwischen zwei Rastern ziehen kann. Diese Klasse meldet nur, was passiert.
@@ -15,6 +15,9 @@ class_name InventoryGridView
 extends Control
 
 signal item_pressed(stack: ItemStack, view: InventoryGridView)
+
+## Klick auf einen noch nicht durchsuchten Umriss — der soll vorgezogen werden.
+signal hidden_item_pressed(stack: ItemStack, view: InventoryGridView)
 signal item_double_clicked(stack: ItemStack, view: InventoryGridView)
 signal cell_released(grid_position: Vector2i, view: InventoryGridView)
 
@@ -29,6 +32,14 @@ const COLOR_HOVER_OK := Color(0.35, 0.75, 0.42, 0.45)
 const COLOR_HOVER_BAD := Color(0.80, 0.30, 0.25, 0.45)
 const COLOR_TEXT := Color(0.88, 0.90, 0.92)
 const COLOR_COUNT := Color(1.0, 0.92, 0.6)
+
+## Noch nicht durchsuchte Gegenstände: schwarze Umrisse. Der Spieler sieht
+## Groesse und Lage, aber nicht, was es ist.
+const COLOR_HIDDEN := Color(0.03, 0.03, 0.04, 0.97)
+const COLOR_HIDDEN_BORDER := Color(0.22, 0.23, 0.26)
+
+## Der Umriss, der gerade durchsucht wird.
+const COLOR_HIDDEN_ACTIVE_BORDER := Color(0.85, 0.78, 0.45)
 
 ## Farbe je Kategorie — auf einen Blick erkennbar, was wo liegt.
 const CATEGORY_COLORS := {
@@ -100,13 +111,24 @@ func cell_to_position(cell: Vector2i) -> Vector2:
 	return Vector2(CELL_GAP + cell.x * step, CELL_GAP + cell.y * step)
 
 
-## Alle Gegenstände, die gezeichnet werden dürfen.
+## Alle Gegenstände, die als erkannt gezeichnet werden dürfen.
 func _visible_stacks() -> Array[ItemStack]:
 	if grid == null:
 		return []
 	if container != null:
 		return container.get_revealed_stacks()
 	return grid.get_all_stacks()
+
+
+## Noch nicht durchsuchte Gegenstände — werden als schwarze Umrisse gezeigt.
+func _hidden_stacks() -> Array[ItemStack]:
+	var result: Array[ItemStack] = []
+	if grid == null or container == null:
+		return result
+	for stack in grid.get_all_stacks():
+		if not container.is_revealed(stack.instance_id):
+			result.append(stack)
+	return result
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -135,9 +157,11 @@ func _gui_input(event: InputEvent) -> void:
 		var stack := grid.get_stack_at(cell.x, cell.y)
 		if stack == null:
 			return
-		# Nicht aufgedeckte Gegenstände sind für den Spieler unsichtbar
-		# und dürfen auch nicht anfassbar sein.
+		# Nicht durchsuchte Gegenstände lassen sich nicht anfassen — aber ein
+		# Klick zieht sie vor. Man sieht den grossen Umriss und will wissen,
+		# was es ist, ohne erst die Patronenschachteln abzuwarten.
 		if container != null and not container.is_revealed(stack.instance_id):
+			hidden_item_pressed.emit(stack, self)
 			return
 
 		# Doppelklick: schnell hinüberschicken, ohne zu ziehen.
@@ -160,8 +184,33 @@ func _draw() -> void:
 
 	_draw_cells()
 	_draw_drag_preview()
+	for stack in _hidden_stacks():
+		_draw_hidden_stack(stack)
 	for stack in _visible_stacks():
 		_draw_stack(stack)
+
+
+## Ein noch nicht durchsuchter Gegenstand: schwarze Flaeche in seiner echten
+## Groesse. Die Groesse zu zeigen ist Absicht — sie verraet, wie lange das
+## Durchsuchen dauert, aber nicht, ob es sich lohnt.
+func _draw_hidden_stack(stack: ItemStack) -> void:
+	var pos_cell := grid.get_position(stack.instance_id)
+	if pos_cell.x < 0:
+		return
+
+	var size := stack.get_size()
+	var rect := Rect2(cell_to_position(pos_cell), Vector2(
+		size.x * (CELL_SIZE + CELL_GAP) - CELL_GAP,
+		size.y * (CELL_SIZE + CELL_GAP) - CELL_GAP
+	))
+
+	draw_rect(rect, COLOR_HIDDEN)
+
+	var is_current := container != null and container.get_current_target() == stack
+	if is_current and container.is_searching():
+		draw_rect(rect, COLOR_HIDDEN_ACTIVE_BORDER, false, 2.0)
+	else:
+		draw_rect(rect, COLOR_HIDDEN_BORDER, false, 1.0)
 
 
 func _draw_cells() -> void:

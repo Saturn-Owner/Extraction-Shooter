@@ -59,6 +59,7 @@ func _ready() -> void:
 	for view in [_container_view, _player_view]:
 		view.item_pressed.connect(_on_item_pressed)
 		view.item_double_clicked.connect(_on_item_double_clicked)
+		view.hidden_item_pressed.connect(_on_hidden_item_pressed)
 
 	_split_prompt.confirmed.connect(_on_split_confirmed)
 	_split_prompt.cancelled.connect(_on_split_cancelled)
@@ -102,6 +103,15 @@ func _on_item_revealed(_stack: ItemStack, _remaining: int) -> void:
 	_update_status()
 
 
+## Klick auf einen schwarzen Umriss: den zuerst durchsuchen.
+func _on_hidden_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
+	if container == null or view != _container_view:
+		return
+	if container.prioritize(stack.instance_id):
+		_container_view.queue_redraw()
+		_update_status()
+
+
 func _process(_delta: float) -> void:
 	if not visible:
 		return
@@ -121,9 +131,11 @@ func _update_status() -> void:
 
 	if container.is_searching():
 		var remaining := container.get_remaining_count()
-		_status.text = "Durchsuche... noch %d Fund%s" % [remaining, "" if remaining == 1 else "e"]
+		_status.text = "Durchsuche... noch %d  —  Klick zieht einen vor" % remaining
 		_progress.show()
 		_progress.value = container.get_current_progress() * 100.0
+		# Der gelbe Rahmen wandert mit; ohne das bliebe er am alten Umriss.
+		_container_view.queue_redraw()
 	elif container.is_fully_searched:
 		_status.text = "vollstaendig durchsucht"
 		_progress.hide()

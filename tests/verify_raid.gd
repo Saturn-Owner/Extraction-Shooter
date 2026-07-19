@@ -39,6 +39,8 @@ func _run_all() -> void:
 	_test_loot_distribution()
 	_test_search_times_scale()
 	await _test_container_search()
+	await _test_prioritize()
+	await _test_progress_is_kept()
 	await _test_hidden_items_are_untouchable()
 	await _test_drag_between_grids()
 	await _test_extraction_secures_loot()
@@ -199,35 +201,143 @@ func _test_container_search() -> void:
 	if total > 1:
 		_check(grew_gradually, "die Gegenstaende sind einzeln aufgetaucht, nicht alle auf einmal")
 
-	# Kleine Dinge zuerst — sonst starrt man sekundenlang auf ein leeres Raster.
 	container.free()
 
+	# Lesereihenfolge: links nach rechts, dann zeilenweise nach unten.
+	# Vorhersehbarkeit ist hier der Punkt — nur so kann der Spieler
+	# entscheiden, ob er wartet oder gezielt etwas vorzieht.
 	var ordered := LootContainer.new()
 	ordered.loot_table = _load_table("militaer")
 	ordered.search_time_multiplier = 0.4
 	root.add_child(ordered)
 	await process_frame
 	ordered.set_seed(31337)
+
+	var order: Array[Vector2i] = []
+	ordered.item_revealed.connect(func(stack: ItemStack, _rest: int) -> void:
+		order.append(ordered.contents.get_position(stack.instance_id))
+	)
 	ordered.open()
 
-	var reveal_order: Array[float] = []
 	var guard := 0
 	while ordered.is_searching() and guard < 900:
 		await process_frame
 		guard += 1
-		for stack in ordered.get_revealed_stacks():
-			var data := stack.get_data()
-			var t := data.get_search_time() if data != null else 0.0
-			if not reveal_order.has(t):
-				reveal_order.append(t)
 
-	var ascending := true
-	for i in range(1, reveal_order.size()):
-		if reveal_order[i] < reveal_order[i - 1]:
-			ascending = false
-	_check(ascending, "schnell findbare Gegenstaende tauchen zuerst auf")
+	var reading_order := true
+	for i in range(1, order.size()):
+		var vorher := order[i - 1]
+		var jetzt := order[i]
+		if jetzt.y < vorher.y or (jetzt.y == vorher.y and jetzt.x < vorher.x):
+			reading_order = false
+	_check(order.size() > 1, "mehrere Gegenstaende zum Pruefen der Reihenfolge (%d)" % order.size())
+	_check(reading_order, "durchsucht wird in Lesereihenfolge")
 
 	ordered.free()
+
+
+## Ein Klick auf einen noch schwarzen Umriss zieht ihn vor.
+##
+## Der Reiz daran: Man sieht einen grossen Umriss und will wissen, ob sich
+## das Bleiben lohnt, ohne erst drei Patronenschachteln abzuwarten.
+func _test_prioritize() -> void:
+	_section("Gegenstand vorziehen")
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("militaer")
+	container.search_time_multiplier = 0.4
+	root.add_child(container)
+	await process_frame
+	container.set_seed(4242)
+	container.open()
+
+	var stacks := container.contents.get_all_stacks()
+	if stacks.size() < 3:
+		_check(false, "genug Inhalt zum Vorziehen (%d)" % stacks.size())
+		container.free()
+		return
+
+	var first := container.get_current_target()
+	var later: ItemStack = null
+	for stack in stacks:
+		if stack != first and not container.is_revealed(stack.instance_id):
+			later = stack
+	_check(later != null and later != first, "ein spaeterer Gegenstand ist waehlbar")
+
+	_check(not container.prioritize(first.instance_id),
+		"der bereits laufende laesst sich nicht vorziehen")
+
+	_check(container.prioritize(later.instance_id), "spaeterer Gegenstand wird vorgezogen")
+	_check(container.get_current_target() == later, "und ist jetzt an der Reihe")
+
+	# Er muss auch wirklich als erster erscheinen.
+	var revealed_first: ItemStack = null
+	var guard := 0
+	while container.is_searching() and guard < 900:
+		await process_frame
+		guard += 1
+		var seen := container.get_revealed_stacks()
+		if revealed_first == null and not seen.is_empty():
+			revealed_first = seen[0]
+
+	_check(revealed_first == later, "der vorgezogene Gegenstand erscheint zuerst")
+	_check(container.is_fully_searched, "danach laeuft es normal weiter bis zum Ende")
+
+	# Ein bereits gefundener Gegenstand laesst sich nicht nochmal vorziehen.
+	_check(not container.prioritize(later.instance_id),
+		"aufgedeckte Gegenstaende lassen sich nicht vorziehen")
+
+	container.free()
+
+
+## Wer wechselt oder pausiert, darf den Fortschritt nicht verlieren —
+## sonst bestraft das Spiel Neugier und Vorsicht.
+func _test_progress_is_kept() -> void:
+	_section("Fortschritt bleibt erhalten")
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("militaer")
+	root.add_child(container)
+	await process_frame
+	container.set_seed(99)
+	container.open()
+
+	var stacks := container.contents.get_all_stacks()
+	if stacks.size() < 2:
+		_check(false, "genug Inhalt (%d)" % stacks.size())
+		container.free()
+		return
+
+	# Etwas Fortschritt am ersten Gegenstand sammeln.
+	var first := container.get_current_target()
+	var guard := 0
+	while container.get_current_progress() <= 0.0 and guard < 300:
+		await process_frame
+		guard += 1
+	var progress_before := container.get_current_progress()
+	_check(progress_before > 0.0, "am ersten Gegenstand wurde Fortschritt gesammelt")
+
+	# Auf einen anderen wechseln und zurueck.
+	var other: ItemStack = null
+	for stack in stacks:
+		if stack != first and not container.is_revealed(stack.instance_id):
+			other = stack
+			break
+
+	if other == null:
+		_check(false, "ein zweiter Gegenstand ist verfuegbar")
+		container.free()
+		return
+
+	container.prioritize(other.instance_id)
+	_check(container.get_current_progress() < progress_before,
+		"der neue Gegenstand faengt bei seinem eigenen Stand an")
+
+	container.prioritize(first.instance_id)
+	_check(container.get_current_progress() >= progress_before * 0.9,
+		"zurueckgewechselt ist der alte Fortschritt noch da")
+
+	container.free()
 
 
 ## Nicht aufgedeckte Gegenstaende duerfen nicht greifbar sein — sonst
