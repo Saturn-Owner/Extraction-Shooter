@@ -72,13 +72,24 @@ signal exhausted()
 @export_group("Traglast")
 
 ## Gewicht, ab dem der Spieler langsamer wird.
-@export var comfortable_weight_kg: float = 18.0
+## Bewusst niedrig: Man soll schon eine halbe Ausrüstung spüren, nicht erst
+## einen vollen Rucksack. Ein Gewehr allein wiegt bereits 3.1 kg.
+@export var comfortable_weight_kg: float = 6.0
 
 ## Gewicht, ab dem kaum noch Bewegung möglich ist.
-@export var max_weight_kg: float = 48.0
+@export var max_weight_kg: float = 40.0
 
 ## Wie stark Überladung bremst (1.0 = bis zum Stillstand bei max_weight_kg).
 @export_range(0.0, 1.0) var weight_slowdown: float = 0.55
+
+## Tempo-Bonus mit komplett leerem Inventar.
+## Ohne diesen Bonus gäbe es nur Strafe und nie Belohnung — leicht zu reisen
+## soll sich aktiv gut anfühlen, nicht bloss "nicht schlecht".
+@export_range(0.0, 0.5) var unencumbered_bonus: float = 0.18
+
+## Wie früh die Bremse zubeisst. Kleiner als 1.0 = die ersten Kilos über der
+## Komfortgrenze wirken schon deutlich, statt dass erst die letzten wehtun.
+@export_range(0.3, 2.0) var weight_curve: float = 0.7
 
 ## Aktuell getragenes Gewicht. Wird später vom Inventar gesetzt:
 ##   player.carried_weight_kg = inventory.get_total_weight()
@@ -159,14 +170,26 @@ func _update_stamina(delta: float) -> void:
 		_was_exhausted = false
 
 
-## Wie stark die Traglast bremst. 1.0 = volles Tempo, 0.45 = stark verlangsamt.
+## Wie stark die Traglast das Tempo verändert.
+##
+##   ueber 1.0 = leicht unterwegs, schneller als normal
+##   genau 1.0 = an der Komfortgrenze
+##   unter 1.0 = überladen, langsamer
+##
+## Beispielwerte mit den Standardeinstellungen:
+##   0 kg -> 1.18    6 kg -> 1.00    12 kg -> 0.84    24 kg -> 0.66    40 kg -> 0.45
 func get_weight_factor() -> float:
 	if carried_weight_kg <= comfortable_weight_kg:
-		return 1.0
+		# Bonus läuft von voll (leeres Inventar) auf null (Komfortgrenze) aus.
+		var light_ratio := carried_weight_kg / maxf(0.01, comfortable_weight_kg)
+		return 1.0 + unencumbered_bonus * (1.0 - clampf(light_ratio, 0.0, 1.0))
+
 	var over := carried_weight_kg - comfortable_weight_kg
 	var span := maxf(1.0, max_weight_kg - comfortable_weight_kg)
 	var ratio := clampf(over / span, 0.0, 1.0)
-	return 1.0 - ratio * weight_slowdown
+	# Kurve < 1.0 zieht kleine Werte nach oben: die ersten Kilos wirken stärker.
+	var curved := pow(ratio, weight_curve)
+	return 1.0 - curved * weight_slowdown
 
 
 ## Ob gerade gesprintet werden darf.

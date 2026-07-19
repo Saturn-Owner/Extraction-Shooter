@@ -27,8 +27,9 @@ var _spawn: Vector3
 
 func _ready() -> void:
 	_spawn = _player.global_position
-	# Startgewicht: leeres Inventar plus etwas Ausrüstung am Körper.
-	_player.carried_weight_kg = 6.0
+	# Bewusst leer starten, damit man den Tempo-Bonus sofort spürt
+	# und den Unterschied zum beladenen Laufen direkt vergleichen kann.
+	_player.carried_weight_kg = 0.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -37,9 +38,13 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	match (event as InputEventKey).physical_keycode:
 		KEY_1:
-			_player.carried_weight_kg = minf(_player.carried_weight_kg + 4.0, 80.0)
+			_player.carried_weight_kg = minf(_player.carried_weight_kg + 1.0, 80.0)
 		KEY_2:
-			_player.carried_weight_kg = maxf(_player.carried_weight_kg - 4.0, 0.0)
+			_player.carried_weight_kg = maxf(_player.carried_weight_kg - 1.0, 0.0)
+		KEY_3:
+			_player.carried_weight_kg = minf(_player.carried_weight_kg + 5.0, 80.0)
+		KEY_4:
+			_player.carried_weight_kg = maxf(_player.carried_weight_kg - 5.0, 0.0)
 		KEY_R:
 			_player.global_position = _spawn
 			_player.velocity = Vector3.ZERO
@@ -54,12 +59,21 @@ func _process(_delta: float) -> void:
 	elif _player.is_sprinting:
 		haltung = "sprintend"
 
+	var factor := _player.get_weight_factor()
+	var last_hint := "leicht, +Tempo"
+	if factor < 0.999:
+		last_hint = "beladen, -Tempo"
+	elif factor <= 1.001:
+		last_hint = "Komfortgrenze"
+
 	_label.text = "\n".join([
 		"Tempo:      %.2f / %.2f m/s" % [horizontal.length(), _player.get_current_max_speed()],
 		"Haltung:    %s" % haltung,
 		"Ausdauer:   %.0f / %.0f" % [_player.stamina, _player.max_stamina],
-		"Traglast:   %.1f kg  (Faktor %.2f)" % [_player.carried_weight_kg, _player.get_weight_factor()],
+		"Traglast:   %.1f kg  (Grenze %.0f)" % [_player.carried_weight_kg, _player.comfortable_weight_kg],
+		"Faktor:     %.2f  (%s)" % [factor, last_hint],
 		"Boden:      %s" % ("ja" if _player.is_on_floor() else "nein"),
 		"",
-		"1/2 = Gewicht  |  R = Reset  |  Esc = Maus",
+		"1/2 = +-1 kg   3/4 = +-5 kg",
+		"R = Reset   Esc = Maus",
 	])

@@ -101,14 +101,30 @@ func _test_weight_curve() -> void:
 	var p := PlayerController.new()
 
 	p.carried_weight_kg = 0.0
-	_check(is_equal_approx(p.get_weight_factor(), 1.0), "leer = volles Tempo")
+	var empty_factor := p.get_weight_factor()
+	_check(empty_factor > 1.0, "leeres Inventar gibt einen Tempo-Bonus (%.2f)" % empty_factor)
 
 	p.carried_weight_kg = p.comfortable_weight_kg
-	_check(is_equal_approx(p.get_weight_factor(), 1.0), "bis zur Komfortgrenze kein Abzug")
+	_check(is_equal_approx(p.get_weight_factor(), 1.0),
+		"an der Komfortgrenze (%.0f kg) genau Normaltempo" % p.comfortable_weight_kg)
 
-	var last := 1.0
+	# Kein Sprung an der Komfortgrenze — sonst ruckelt das Tempo beim Aufheben
+	# eines einzelnen Gegenstands sichtbar.
+	p.carried_weight_kg = p.comfortable_weight_kg - 0.1
+	var just_below := p.get_weight_factor()
+	p.carried_weight_kg = p.comfortable_weight_kg + 0.1
+	var just_above := p.get_weight_factor()
+	_check(absf(just_below - just_above) < 0.03, "stetiger Übergang an der Komfortgrenze")
+
+	# Das eigentliche Feedback: 6 kg drueber muss man deutlich merken.
+	p.carried_weight_kg = p.comfortable_weight_kg + 6.0
+	var noticeable := p.get_weight_factor()
+	_check(noticeable < 0.9,
+		"6 kg über der Grenze sind spürbar (Faktor %.2f)" % noticeable)
+
+	var last := 99.0
 	var monotonic := true
-	for kg in [20.0, 26.0, 32.0, 40.0, 48.0, 60.0]:
+	for kg in [0.0, 3.0, 6.0, 12.0, 20.0, 30.0, 40.0, 60.0]:
 		p.carried_weight_kg = kg
 		var f := p.get_weight_factor()
 		if f > last:
