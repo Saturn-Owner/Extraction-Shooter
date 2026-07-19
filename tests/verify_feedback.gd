@@ -189,6 +189,8 @@ func _test_firing_in_level() -> void:
 	weapon.fill_magazine()
 	_check(weapon.rounds_in_magazine > 0, "Magazin ist gefuellt (%d)" % weapon.rounds_in_magazine)
 
+	_test_shot_hits_the_crosshair(player, weapon)
+
 	var before := weapon.rounds_in_magazine
 	var projectiles_before := _count_projectiles(level)
 
@@ -274,3 +276,47 @@ func _test_real_recordings() -> void:
 	# Ein fehlendes Nachladegeraeusch muss folgenlos bleiben.
 	_check(WeaponAudio.get_sound(ar15, "gibt_es_nicht") == null,
 		"ein unbekanntes Geraeusch liefert null statt zu knallen")
+
+
+## Der Schuss muss dorthin gehen, wo der Spieler HINSIEHT.
+##
+## Vorher startete die Kugel an einem festen Punkt neben der Kamera und flog
+## PARALLEL zur Blickrichtung. Sie ging damit immer um den Versatz der
+## Muendung daneben - rund 18 cm nach rechts und 12 cm nach unten, auf jede
+## Entfernung gleich. Getroffen hat man damit fast nichts, und im Spiel sah
+## es aus, als streue die Waffe.
+##
+## Geprueft wird deshalb der WINKEL zwischen Schussrichtung und Blickachse.
+## Ein Test auf gleiche Startpunkte waere falsch: Die Kugel SOLL aus dem Lauf
+## kommen und nicht aus dem Auge.
+func _test_shot_hits_the_crosshair(player: PlayerController, weapon: Weapon) -> void:
+	_section("Der Schuss geht aufs Fadenkreuz")
+
+	var camera := player.get_node_or_null("CameraPivot/Camera3D") as Camera3D
+	_check(camera != null, "Kamera gefunden")
+	if camera == null:
+		return
+
+	var aim_point := weapon.get_aim_point()
+	var origin := weapon.get_shot_origin()
+
+	_check(origin.distance_to(camera.global_position) > 0.05,
+		"die Kugel startet an der Muendung, nicht im Auge (%.2f m entfernt)"
+			% origin.distance_to(camera.global_position))
+
+	var look := -camera.global_basis.z
+	var to_aim := (aim_point - camera.global_position).normalized()
+	_check(look.dot(to_aim) > 0.9999,
+		"der Zielpunkt liegt genau auf der Blickachse")
+
+	# Der entscheidende Wert: Wie weit verfehlt die Kugel den Zielpunkt?
+	var shot_dir := (aim_point - origin).normalized()
+	var distance := origin.distance_to(aim_point)
+	var miss := (origin + shot_dir * distance).distance_to(aim_point)
+	_check(miss < 0.01, "die Kugel laeuft auf den Zielpunkt zu (%.4f m Abweichung)" % miss)
+
+	# Und gegen den alten Fehler: Parallel zur Blickachse waere zu wenig.
+	# Auf Entfernung muss die Schussrichtung zur Blickachse hin einschwenken.
+	var parallel_miss := (origin + look * distance).distance_to(aim_point)
+	_check(parallel_miss > miss,
+		"parallel geschossen wuerde um %.2f m danebengehen" % parallel_miss)

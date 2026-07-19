@@ -138,6 +138,9 @@ func _ready() -> void:
 		# Die Waffe holt sich ihre Patronen selbst, wenn das Nachladen
 		# durchgelaufen ist — aber immer nur ueber diesen einen Weg.
 		weapon.ammo_supplier = _supply_ammo
+		# Gezielt wird mit der Kamera, geschossen aus der Muendung. Ohne diese
+		# Zeile fliegt die Kugel parallel an der Bildmitte vorbei.
+		weapon.set_aim_source(_camera)
 		if weapon_view != null:
 			weapon_view.attach_weapon(weapon)
 			weapon.set_visual_muzzle(weapon_view.get_muzzle_point())

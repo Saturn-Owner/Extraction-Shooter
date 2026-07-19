@@ -107,6 +107,13 @@ var _unjam_time_left: float = 0.0
 ## Ohne Modell faellt alles auf den Muzzle-Knoten zurueck.
 var _visual_muzzle: Node3D
 
+## Die Kamera. Sie entscheidet, worauf gezielt wird — siehe get_aim_point().
+var _aim_source: Node3D
+
+## Wie weit der Zielstrahl reicht, wenn er auf nichts trifft.
+## Grosszuegig: Auf dem Testgelaende stehen Ziele auf 300 m.
+const AIM_DISTANCE := 2000.0
+
 ## Schuss-Sound der aktuellen Waffe. Kommt aus einer echten Audiodatei,
 ## falls unter assets/audio/weapons/ eine passende liegt — sonst synthetisch.
 var _shot_sound: AudioStream
@@ -227,8 +234,8 @@ func _shoot() -> bool:
 	condition = maxf(0.0, condition - data.wear_per_shot)
 
 	var speed := data.get_muzzle_velocity(loaded_ammo)
-	var origin := _muzzle.global_position if _muzzle != null else global_position
-	var base_dir := -(_muzzle.global_basis.z if _muzzle != null else global_basis.z)
+	var origin := get_shot_origin()
+	var base_dir := (get_aim_point() - origin).normalized()
 
 	# Schrot verschiesst mehrere Projektile mit Streuung.
 	for i in range(maxi(1, loaded_ammo.pellet_count)):
@@ -400,6 +407,64 @@ func equip_without_ammo(new_data: WeaponData) -> void:
 ## Muendungspunkt des sichtbaren Modells anmelden.
 func set_visual_muzzle(node: Node3D) -> void:
 	_visual_muzzle = node
+
+
+## Die Kamera anmelden. Sie bestimmt, WOHIN geschossen wird.
+func set_aim_source(node: Node3D) -> void:
+	_aim_source = node
+
+
+## Woher die Kugel losfliegt: aus der Muendung des sichtbaren Modells.
+##
+## Nur fuer die Optik — die Flugrichtung kommt von woanders, siehe unten.
+func get_shot_origin() -> Vector3:
+	if _visual_muzzle != null:
+		return _visual_muzzle.global_position
+	if _muzzle != null:
+		return _muzzle.global_position
+	return global_position
+
+
+## Der Punkt, auf den die Kugel zulaeuft: das, worauf der Spieler zielt.
+##
+## ---------------------------------------------------------------------------
+## WARUM NICHT EINFACH GERADEAUS AUS DEM LAUF
+##
+## Vorher startete die Kugel an einem festen Punkt neben der Kamera und flog
+## PARALLEL zur Blickrichtung. Damit ging jeder Schuss um den Versatz der
+## Muendung daneben — rund 18 cm nach rechts und 12 cm nach unten, und zwar
+## auf jede Entfernung gleich. Auf 30 m ist das ein Meter Vorbeischuss.
+##
+## Richtig ist: Gezielt wird mit der KAMERA, geschossen aus der MUENDUNG. Die
+## Kamera schickt einen Strahl auf das, was in der Bildmitte steht, und die
+## Kugel laeuft von der Muendung auf genau diesen Punkt zu. Dadurch kommt sie
+## sichtbar aus dem Lauf UND trifft dort, wo der Spieler hinsieht.
+func get_aim_point() -> Vector3:
+	if _aim_source == null:
+		# Ohne Kamera bleibt nur die Laufrichtung. Gilt fuer Gegner und Tests.
+		var fallback := _visual_muzzle if _visual_muzzle != null else _muzzle
+		if fallback == null:
+			return global_position - global_basis.z * AIM_DISTANCE
+		return fallback.global_position - fallback.global_basis.z * AIM_DISTANCE
+
+	var from := _aim_source.global_position
+	var direction := -_aim_source.global_basis.z
+	var to := from + direction * AIM_DISTANCE
+
+	var world := get_world_3d()
+	if world == null:
+		return to
+
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.collision_mask = projectile_mask
+	query.collide_with_areas = false
+	if owner is CollisionObject3D:
+		query.exclude = [(owner as CollisionObject3D).get_rid()]
+
+	var hit := world.direct_space_state.intersect_ray(query)
+	# Trifft der Strahl nichts, wird auf einen fernen Punkt gezielt. Das ist
+	# richtig so: Die Kugel soll dann geradeaus in die Ferne fliegen.
+	return hit.get("position", to)
 
 
 ## Ob die Waffe gerade beschaeftigt ist und nicht schiessen kann.
