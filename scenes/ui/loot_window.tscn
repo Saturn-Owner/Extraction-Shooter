@@ -80,7 +80,7 @@ text = "Ausruestung"
 theme_override_font_sizes/font_size = 20
 
 [node name="Hinweis" type="Label" parent="Layout/Columns/Right"]
-text = "Ziehen zum Verschieben  |  Doppelklick schickt hinueber"
+text = "Ziehen zum Verschieben  |  R dreht beim Ziehen  |  Doppelklick schickt hinueber"
 theme_override_colors/font_color = Color(0.62, 0.66, 0.7, 1)
 
 [node name="PlayerView" type="Control" parent="Layout/Columns/Right"]

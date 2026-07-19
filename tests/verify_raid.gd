@@ -44,6 +44,7 @@ func _run_all() -> void:
 	await _test_hidden_items_are_untouchable()
 	await _test_drag_between_grids()
 	await _test_starting_kit()
+	await _test_rotate_while_dragging()
 	await _test_extraction_secures_loot()
 	await _test_death_loses_loot()
 	await _test_locked_exit()
@@ -516,6 +517,92 @@ func _test_starting_kit() -> void:
 		"die Waffe hat einen Schussklang")
 
 	level.free()
+
+
+## Drehen beim Ziehen.
+##
+## Der heikle Teil ist NICHT das Drehen, sondern das Abbrechen: Der
+## Gegenstand liegt waehrend des Ziehens noch auf seinem alten Platz. Bleibt
+## er nach einem Abbruch gedreht, belegt er Felder, die das Raster gar nicht
+## fuer ihn vorgesehen hat — ab dann stimmt die Belegung nicht mehr.
+func _test_rotate_while_dragging() -> void:
+	_section("Drehen beim Ziehen")
+
+	var packed: PackedScene = load("res://scenes/ui/loot_window.tscn")
+	var node: Node = packed.instantiate()
+	_check(node is LootWindow, "loot_window.gd laedt fehlerfrei")
+	if not (node is LootWindow):
+		node.free()
+		return
+
+	var window: LootWindow = node
+	root.add_child(window)
+	await process_frame
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("werkstatt")
+	root.add_child(container)
+	await process_frame
+	container.set_seed(11)
+
+	var player := _make_player()
+	await process_frame
+	window.open_for(container, player.inventory)
+
+	# Der Hilfsspieler startet mit leerem Inventar — die Startausruestung
+	# vergibt das Level, nicht die Spielerszene. Also selbst etwas hineinlegen:
+	# ein Gewehr, weil 5x2 den Unterschied beim Drehen deutlich macht.
+	var stack := ItemStack.create(&"weapon_rifle_ar15")
+	_check(player.inventory.grid.add_item(stack), "Gewehr liegt im Inventar")
+
+	var data := stack.get_data()
+	_check(data != null and data.can_rotate, "und laesst sich drehen")
+	if data == null or not data.can_rotate:
+		window.free()
+		container.free()
+		player.free()
+		return
+
+	var player_view: InventoryGridView = window.get_node("Layout/Columns/Right/PlayerView")
+	var container_view: InventoryGridView = window.get_node("Layout/Columns/Left/ContainerView")
+	var size_before := stack.get_size()
+
+	# Anfassen, drehen, ins Leere loslassen -> alles bleibt wie vorher.
+	player_view.item_pressed.emit(stack, player_view)
+	window._rotate_dragged()
+	_check(stack.get_size() == Vector2i(size_before.y, size_before.x),
+		"gedreht sind Breite und Hoehe vertauscht (%s -> %s)" % [size_before, stack.get_size()])
+
+	window.drop_at(null, Vector2i(-1, -1))
+	_check(stack.get_size() == size_before,
+		"abgebrochen liegt er wieder wie vorher (%s)" % stack.get_size())
+	_check(player.inventory.grid.get_stack(stack.instance_id) != null,
+		"und liegt weiterhin im Inventar")
+
+	# Quer passt das Gewehr NICHT in die Kiste: 5x2 gedreht ist 2x5, die
+	# Kiste ist nur 4 Felder hoch. Das ist richtig so — geprueft wird es
+	# deshalb im Inventar, das hoch genug ist.
+	player_view.item_pressed.emit(stack, player_view)
+	window._rotate_dragged()
+	var rotated_size := stack.get_size()
+	window.drop_at(container_view, Vector2i(0, 0))
+	_check(container.contents.get_stack(stack.instance_id) == null,
+		"quer passt es nicht in die flache Kiste")
+	_check(stack.get_size() == size_before,
+		"und liegt danach wieder wie vorher (%s)" % stack.get_size())
+
+	# Im Inventar ist Platz — dort muss die Drehung bleiben.
+	player_view.item_pressed.emit(stack, player_view)
+	window._rotate_dragged()
+	window.drop_at(player_view, Vector2i(1, 1))
+	_check(stack.get_size() == rotated_size,
+		"im Inventar abgelegt behaelt es die neue Lage (%s)" % stack.get_size())
+	_check(player.inventory.grid.get_position(stack.instance_id) == Vector2i(1, 1),
+		"und liegt an der neuen Stelle")
+
+	window.free()
+	container.free()
+	player.free()
 
 
 func _make_player() -> PlayerController:

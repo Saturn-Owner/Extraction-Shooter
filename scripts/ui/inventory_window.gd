@@ -26,6 +26,9 @@ var _drag_ctrl: bool = false
 var _split_stack: ItemStack = null
 var _split_cell: Vector2i = Vector2i(-1, -1)
 
+## Wie der Gegenstand lag, bevor er angefasst wurde — siehe LootWindow.
+var _drag_original_rotated: bool = false
+
 @onready var _view: InventoryGridView = $Layout/Inhalt/GridView
 @onready var _stats: Label = $Layout/Inhalt/Stats
 @onready var _ghost: DragGhost = $DragGhost
@@ -117,6 +120,7 @@ func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 
 	_drag_stack = stack
 	_drag_ctrl = Input.is_key_pressed(KEY_CTRL)
+	_drag_original_rotated = stack.rotated
 	_tooltip.clear()
 
 	var origin := view.grid.get_position(stack.instance_id)
@@ -163,14 +167,20 @@ func drop_at(cell: Vector2i) -> void:
 		return
 
 	# Auf einen passenden Stapel drauflegen, statt am belegten Feld zu scheitern.
+	var moved := false
 	var existing := _view.grid.get_stack_at(cell.x, cell.y)
 	if existing != null and existing.can_merge_with(_drag_stack):
 		existing.merge_from(_drag_stack)
 		if _drag_stack.quantity <= 0:
 			_view.grid.remove_item(_drag_stack.instance_id)
 		_view.grid.changed.emit()
+		moved = true
 	else:
-		_view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
+		moved = _view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
+
+	# Nur ein wirklich umgezogener Gegenstand behaelt seine neue Lage.
+	if moved:
+		_drag_original_rotated = _drag_stack.rotated
 
 	_cancel_drag()
 
@@ -214,19 +224,37 @@ func _on_item_double_clicked(stack: ItemStack, _view: InventoryGridView) -> void
 	_update_stats()
 
 
+## R dreht den Gegenstand, der gerade am Zeiger haengt.
+##
+## Frueher drehte R den Gegenstand AN ORT UND STELLE. Das scheiterte fast
+## immer, weil quer genau dort selten Platz ist. Jetzt dreht sich nur die
+## Anzeige am Zeiger, und geprueft wird erst beim Ablegen.
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not visible or _drag_stack == null:
 		return
 	var key := event as InputEventKey
 	if key == null or not key.is_pressed() or key.is_echo():
 		return
-	if key.physical_keycode == KEY_R:
-		_view.grid.rotate_item(_drag_stack.instance_id)
-		_view.queue_redraw()
-		get_viewport().set_input_as_handled()
+	if key.physical_keycode != KEY_R:
+		return
+
+	var data := _drag_stack.get_data()
+	if data == null or not data.can_rotate:
+		return
+
+	_drag_stack.rotated = not _drag_stack.rotated
+	_drag_offset = Vector2i(_drag_offset.y, _drag_offset.x)
+	_ghost.grab_offset = Vector2(_ghost.grab_offset.y, _ghost.grab_offset.x)
+	_update_drag_target()
+	get_viewport().set_input_as_handled()
 
 
 func _cancel_drag() -> void:
+	# Nicht abgelegt: Er liegt noch auf seinem alten Platz und muss wieder
+	# so herum liegen wie vorher.
+	if _drag_stack != null and _drag_stack.rotated != _drag_original_rotated:
+		_drag_stack.rotated = _drag_original_rotated
+
 	_drag_stack = null
 	_drag_offset = Vector2i.ZERO
 	_drag_target_cell = Vector2i(-1, -1)

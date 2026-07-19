@@ -18,6 +18,13 @@ signal opened()
 const PANEL_BG := Color(0.09, 0.10, 0.11, 0.96)
 const PANEL_BORDER := Color(0.35, 0.38, 0.42)
 
+## Fundgeräusche vorübergehend abgeschaltet — wird später wieder aufgegriffen.
+##
+## Die Dateien unter assets/audio/loot/ bleiben liegen, ebenso die Auswahl
+## und die Herkunftsangaben. Nur das Abspielen entfällt. Zum Wiedereinschalten
+## reicht es, hier true zu setzen; es geht nichts verloren.
+const FIND_SOUNDS_ENABLED := false
+
 var container: LootContainer = null
 var player_inventory: PlayerInventory = null
 
@@ -33,6 +40,13 @@ var _drag_target_cell: Vector2i = Vector2i(-1, -1)
 
 ## Ob beim Anfassen Strg gedrueckt war — dann wird nach der Menge gefragt.
 var _drag_ctrl: bool = false
+
+## Wie der Gegenstand lag, BEVOR er angefasst wurde.
+##
+## Beim Ziehen darf man mit R drehen. Der Gegenstand liegt dabei aber noch
+## im Ursprungsraster — wird das Ziehen abgebrochen, muss er wieder so
+## liegen wie vorher, sonst passt er nicht mehr auf seinen eigenen Platz.
+var _drag_original_rotated: bool = false
 
 ## Was nach dem Loslassen noch auf die Mengenabfrage wartet.
 var _split_stack: ItemStack = null
@@ -113,6 +127,8 @@ func _on_item_revealed(stack: ItemStack, _remaining: int) -> void:
 ## sich schwer. Krimskrams bleibt still, sonst waere jede Kiste ein
 ## Dauergeklapper.
 func _play_find_sound(stack: ItemStack) -> void:
+	if not FIND_SOUNDS_ENABLED:
+		return
 	if stack == null or _find_sound == null:
 		return
 	var data := stack.get_data()
@@ -192,6 +208,7 @@ func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 	_drag_stack = stack
 	_drag_source = view
 	_drag_ctrl = Input.is_key_pressed(KEY_CTRL)
+	_drag_original_rotated = stack.rotated
 	_tooltip.clear()
 
 	# Anfasspunkt merken, damit der Gegenstand nicht zur Ecke springt.
@@ -207,6 +224,41 @@ func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 		v.drag_source = view
 		v.preview_cell = Vector2i(-1, -1)
 		v.queue_redraw()
+
+
+## R dreht den Gegenstand, der gerade am Zeiger haengt.
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not visible or _drag_stack == null:
+		return
+	var key := event as InputEventKey
+	if key == null or not key.is_pressed() or key.is_echo():
+		return
+	if key.physical_keycode != KEY_R:
+		return
+
+	_rotate_dragged()
+	get_viewport().set_input_as_handled()
+
+
+## Dreht den gezogenen Gegenstand um 90 Grad.
+##
+## Gedreht wird nur die Anzeige am Zeiger — im Ursprungsraster bleibt er
+## unangetastet, bis er wirklich abgelegt wird. Sonst muesste er sich schon
+## waehrend des Ziehens auf seinem alten Platz drehen lassen, und bei einem
+## Gewehr im vollen Rucksack ginge das fast nie.
+func _rotate_dragged() -> void:
+	var data := _drag_stack.get_data()
+	if data == null or not data.can_rotate:
+		return
+
+	_drag_stack.rotated = not _drag_stack.rotated
+
+	# Der Anfasspunkt dreht sich mit, sonst springt der Gegenstand unter
+	# dem Zeiger weg.
+	_drag_offset = Vector2i(_drag_offset.y, _drag_offset.x)
+	_ghost.grab_offset = Vector2(_ghost.grab_offset.y, _ghost.grab_offset.x)
+
+	_update_drag_target()
 
 
 ## Sucht jeden Frame das Raster unter dem Zeiger und rechnet aus, wo der
@@ -244,17 +296,21 @@ func drop_at(target: InventoryGridView, cell: Vector2i) -> void:
 		_begin_split(target, cell)
 		return
 
-	if target == _drag_source:
-		_move_within(target, cell)
-	else:
-		_move_between(target, cell)
+	var moved := _move_within(target, cell) if target == _drag_source \
+		else _move_between(target, cell)
+
+	# Nur wenn der Gegenstand wirklich umgezogen ist, gilt die Drehung.
+	# Sonst nimmt _cancel_drag() sie zurueck — er liegt ja noch auf seinem
+	# alten Platz, und dort passt er quer womoeglich gar nicht hin.
+	if moved:
+		_drag_original_rotated = _drag_stack.rotated
 
 	_cancel_drag()
 
 
 ## Innerhalb desselben Rasters verschieben — oder auf einen passenden
-## Stapel drauflegen.
-func _move_within(view: InventoryGridView, cell: Vector2i) -> void:
+## Stapel drauflegen. Gibt zurueck, ob sich etwas geaendert hat.
+func _move_within(view: InventoryGridView, cell: Vector2i) -> bool:
 	var existing := view.grid.get_stack_at(cell.x, cell.y)
 	if existing != null and existing.can_merge_with(_drag_stack):
 		existing.merge_from(_drag_stack)
@@ -263,26 +319,26 @@ func _move_within(view: InventoryGridView, cell: Vector2i) -> void:
 			view.grid.remove_item(_drag_stack.instance_id)
 		view.grid.changed.emit()
 		_notify_changed()
-		return
+		return true
 
-	view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
+	return view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
 
 
 ## Von einem Raster ins andere. Erst prüfen, dann verschieben — sonst kann
 ## der Gegenstand zwischen beiden verloren gehen.
-func _move_between(target: InventoryGridView, cell: Vector2i) -> void:
+func _move_between(target: InventoryGridView, cell: Vector2i) -> bool:
 	var source_grid := _drag_source.grid
 	var target_grid := target.grid
 
 	if not target_grid.can_place_or_merge(_drag_stack, cell.x, cell.y):
-		return
+		return false
 
 	if not _can_take_from_source(_drag_stack):
-		return
+		return false
 
 	var removed := source_grid.remove_item(_drag_stack.instance_id)
 	if removed == null:
-		return
+		return false
 
 	var leftover := target_grid.place_or_merge(removed, cell.x, cell.y)
 	if leftover != null:
@@ -290,13 +346,14 @@ func _move_between(target: InventoryGridView, cell: Vector2i) -> void:
 		# mehr auf den Zielstapel passte, gehoert wieder zurueck.
 		source_grid.add_item(leftover)
 		if leftover == removed:
-			return
+			return false
 
 	# Was der Spieler selbst hineinlegt, muss er auch sehen können.
 	if target == _container_view and container != null:
 		container.mark_revealed(removed)
 
 	_notify_changed()
+	return true
 
 
 ## Aus der Kiste darf nur genommen werden, was aufgedeckt ist.
@@ -392,6 +449,11 @@ func _on_item_double_clicked(stack: ItemStack, view: InventoryGridView) -> void:
 
 
 func _cancel_drag() -> void:
+	# Nicht abgelegt heisst: Er liegt noch auf seinem alten Platz, und dort
+	# passt er gedreht womoeglich gar nicht hin.
+	if _drag_stack != null and _drag_stack.rotated != _drag_original_rotated:
+		_drag_stack.rotated = _drag_original_rotated
+
 	_drag_stack = null
 	_drag_source = null
 	_drag_target = null
