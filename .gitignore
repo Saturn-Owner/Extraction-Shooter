@@ -19,3 +19,6 @@ Desktop.ini
 .vscode/
 .idea/
 *.tmp
+
+# Lokale Claude-Code-Einstellungen (pro Rechner unterschiedlich)
+.claude/
