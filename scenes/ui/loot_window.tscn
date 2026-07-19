@@ -1,0 +1,99 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/loot_window.gd" id="1_loot_window"]
+[ext_resource type="Script" path="res://scripts/ui/inventory_grid_view.gd" id="2_grid_view"]
+
+[sub_resource type="StyleBoxFlat" id="Style_panel"]
+bg_color = Color(0.07, 0.08, 0.09, 0.97)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.33, 0.37, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+content_margin_left = 18.0
+content_margin_top = 14.0
+content_margin_right = 18.0
+content_margin_bottom = 14.0
+
+[node name="LootWindow" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 1
+script = ExtResource("1_loot_window")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.55)
+mouse_filter = 2
+
+[node name="Layout" type="PanelContainer" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -560.0
+offset_top = -300.0
+offset_right = 560.0
+offset_bottom = 300.0
+theme_override_styles/panel = SubResource("Style_panel")
+
+[node name="Columns" type="HBoxContainer" parent="Layout"]
+theme_override_constants/separation = 40
+
+[node name="Left" type="VBoxContainer" parent="Layout/Columns"]
+theme_override_constants/separation = 8
+
+[node name="ContainerTitle" type="Label" parent="Layout/Columns/Left"]
+text = "Kiste"
+theme_override_font_sizes/font_size = 20
+
+[node name="Status" type="Label" parent="Layout/Columns/Left"]
+text = "..."
+theme_override_colors/font_color = Color(0.7, 0.74, 0.78, 1)
+
+[node name="SearchProgress" type="ProgressBar" parent="Layout/Columns/Left"]
+custom_minimum_size = Vector2(0, 8)
+max_value = 100.0
+show_percentage = false
+
+[node name="ContainerView" type="Control" parent="Layout/Columns/Left"]
+custom_minimum_size = Vector2(330, 230)
+mouse_filter = 1
+script = ExtResource("2_grid_view")
+
+[node name="Right" type="VBoxContainer" parent="Layout/Columns"]
+theme_override_constants/separation = 8
+
+[node name="PlayerTitle" type="Label" parent="Layout/Columns/Right"]
+text = "Ausruestung"
+theme_override_font_sizes/font_size = 20
+
+[node name="Hinweis" type="Label" parent="Layout/Columns/Right"]
+text = "Ziehen zum Verschieben  |  Doppelklick schickt hinueber"
+theme_override_colors/font_color = Color(0.62, 0.66, 0.7, 1)
+
+[node name="PlayerView" type="Control" parent="Layout/Columns/Right"]
+custom_minimum_size = Vector2(560, 440)
+mouse_filter = 1
+script = ExtResource("2_grid_view")
+
+[node name="Fusszeile" type="Label" parent="."]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -60.0
+offset_right = 300.0
+offset_bottom = -30.0
+text = "[Tab] alles nehmen     [F] / [Esc] schliessen"
+horizontal_alignment = 1

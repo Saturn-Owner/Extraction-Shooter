@@ -87,6 +87,35 @@ func is_container() -> bool:
 	return container_width > 0 and container_height > 0
 
 
+## Wie lange es dauert, diesen Gegenstand in einer Kiste zu finden.
+##
+## Bewusst berechnet statt pro Item gepflegt — bei hunderten Gegenständen
+## würde niemand diese Werte aktuell halten, und sie wären inkonsistent.
+##
+## Zwei Einflüsse:
+##   GRÖSSE     Ein Sturmgewehr ist sperrig und braucht länger als eine
+##              einzelne Patrone.
+##   SELTENHEIT Teure Dinge liegen nicht obenauf. Der Preis ist dabei ein
+##              guter Näherungswert für Seltenheit, weil er ohnehin schon
+##              gepflegt wird.
+##
+## Beispiele mit den aktuellen Daten:
+##   9mm FMJ (1x1, 42)        ~0.7 s
+##   M995 (1x1, 780)          ~1.3 s
+##   Schutzplatte (2x3, 18500) ~3.3 s
+##   AR-15 (5x2, 24000)       ~4.4 s
+func get_search_time() -> float:
+	var size_part := float(get_grid_area()) * 0.25
+
+	# Zehnerlogarithmus des Preises, damit teure Ausreisser die Zeit nicht
+	# ins Absurde treiben. Ab etwa 30 Spielwaehrung beginnt der Zuschlag.
+	var rarity_part := 0.0
+	if base_price > 0:
+		rarity_part = clampf(log(float(base_price)) / log(10.0) - 1.5, 0.0, 3.0) * 0.5
+
+	return clampf(0.4 + size_part + rarity_part, 0.4, 7.0)
+
+
 ## Kleine Selbstprüfung. Gibt eine Liste von Problemen zurück,
 ## damit wir Datenfehler früh finden statt erst im Spiel.
 func validate() -> Array[String]:

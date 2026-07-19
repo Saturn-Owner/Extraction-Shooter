@@ -1,25 +1,34 @@
 ## Ein durchsuchbarer Behälter: Kiste, Spind, Rucksack einer Leiche.
 ##
-## Der Inhalt wird beim ersten Öffnen gewürfelt, nicht beim Laden des Levels.
-## Zwei Gründe:
-##   - Wer den Container nie öffnet, kostet keine Rechenzeit
-##   - Im Multiplayer würfelt später der Server erst dann, wenn wirklich
-##     jemand hinschaut — vorher gibt es nichts, was ein Client auslesen
-##     könnte, um sich die besten Kisten anzeigen zu lassen
+## ---------------------------------------------------------------------------
+## DURCHSUCHEN GESCHIEHT PRO GEGENSTAND (wie in Arena Breakout)
 ##
-## Das Durchsuchen dauert. Das ist Absicht: Ein Container, der sich sofort
-## öffnet, macht das Looten risikofrei. Die Sekunden, in denen man
-## bewegungsunfähig davorsteht, sind der Preis für die Beute.
+## Man öffnet die Kiste und sieht sofort das Raster — aber leer. Die
+## Gegenstände tauchen dann einzeln auf, jeder mit eigener Dauer:
+##
+##   9mm-Patrone      ~0.7 s
+##   M995             ~1.3 s
+##   Schutzplatte     ~3.3 s
+##   Sturmgewehr      ~4.4 s
+##
+## Das ist deutlich besser als eine feste Zeit pro Kiste, weil es eine
+## Entscheidung erzeugt: Man sieht, dass noch etwas Grosses kommt, und muss
+## abwägen, ob man so lange stehen bleibt. Eine Militärkiste mit einem
+## Gewehr darin hält einen fast fünf Sekunden fest — genau dann, wenn man
+## am verwundbarsten ist.
+##
+## Der Inhalt wird beim ersten Öffnen gewürfelt, nicht beim Laden des Levels:
+## Wer die Kiste nie öffnet, kostet keine Rechenzeit. Im Multiplayer würfelt
+## später der Server erst dann, wenn jemand hinschaut — vorher gibt es
+## nichts, was ein Client auslesen könnte.
 class_name LootContainer
 extends StaticBody3D
 
-signal search_started(duration: float)
-signal search_finished()
-signal search_cancelled()
+signal opened()
+signal item_revealed(stack: ItemStack, remaining: int)
+signal fully_searched()
+signal search_paused()
 signal contents_changed()
-
-## Wie lange das Durchsuchen dauert.
-@export var search_time: float = 2.5
 
 ## Welche Loot-Tabelle gezogen wird.
 @export var loot_table: LootTableData
@@ -31,11 +40,24 @@ signal contents_changed()
 ## Beschriftung für die Anzeige.
 @export var display_name: String = "Kiste"
 
-var contents: InventoryGrid
-var is_searched: bool = false
-var is_being_searched: bool = false
+## Zuschlag auf jede Durchsuchzeit. Eine verschlossene Militärkiste darf
+## zäher sein als eine offene Schublade.
+@export_range(0.5, 3.0) var search_time_multiplier: float = 1.0
 
-var _search_progress: float = 0.0
+var contents: InventoryGrid
+var is_open: bool = false
+var is_fully_searched: bool = false
+
+## instance_id -> true, sobald der Gegenstand sichtbar ist.
+var _revealed: Dictionary = {}
+
+## Reihenfolge, in der aufgedeckt wird. Kleine Dinge zuerst, damit man
+## schnell etwas sieht und nicht sekundenlang auf ein leeres Raster starrt.
+var _reveal_queue: Array[ItemStack] = []
+
+var _reveal_timer: float = 0.0
+var _current_reveal_time: float = 0.0
+var _is_searching: bool = false
 var _rng := RandomNumberGenerator.new()
 
 
@@ -52,48 +74,91 @@ func set_seed(value: int) -> void:
 	_rng.seed = value
 
 
-## Beginnt das Durchsuchen. Läuft über mehrere Frames.
-func begin_search() -> bool:
-	if is_being_searched:
-		return false
-	if is_searched:
-		# Schon durchsucht: sofort offen, kein zweites Warten.
-		return true
+## Öffnet die Kiste. Beim ersten Mal wird der Inhalt gewürfelt.
+## Das Raster ist sofort sichtbar, die Gegenstände tauchen nach und nach auf.
+func open() -> void:
+	if not is_open:
+		is_open = true
+		_generate_contents()
+		_build_reveal_queue()
+		opened.emit()
 
-	is_being_searched = true
-	_search_progress = 0.0
-	search_started.emit(search_time)
-	return true
+	_is_searching = not _reveal_queue.is_empty()
+	if _is_searching and _current_reveal_time <= 0.0:
+		_start_next_reveal()
 
 
-## Bricht das Durchsuchen ab — etwa wenn der Spieler weggeht oder schiesst.
-func cancel_search() -> void:
-	if not is_being_searched:
+## Der Spieler geht weg oder schliesst das Fenster.
+## Der Fortschritt am aktuellen Gegenstand bleibt erhalten — man muss nicht
+## von vorn anfangen, nur weil man kurz in Deckung gegangen ist.
+func pause_search() -> void:
+	if not _is_searching:
 		return
-	is_being_searched = false
-	_search_progress = 0.0
-	search_cancelled.emit()
+	_is_searching = false
+	search_paused.emit()
 
 
 func _process(delta: float) -> void:
-	if not is_being_searched:
+	if not _is_searching or _reveal_queue.is_empty():
 		return
 
-	_search_progress += delta
-	if _search_progress < search_time:
+	_reveal_timer += delta
+	if _reveal_timer < _current_reveal_time:
 		return
 
-	is_being_searched = false
-	is_searched = true
-	_generate_contents()
-	search_finished.emit()
+	var stack: ItemStack = _reveal_queue.pop_front()
+	_revealed[stack.instance_id] = true
+	item_revealed.emit(stack, _reveal_queue.size())
+
+	if _reveal_queue.is_empty():
+		_is_searching = false
+		is_fully_searched = true
+		_current_reveal_time = 0.0
+		fully_searched.emit()
+	else:
+		_start_next_reveal()
 
 
-## Fortschritt von 0 bis 1 — für den Balken in der Anzeige.
-func get_search_progress() -> float:
-	if not is_being_searched:
-		return 1.0 if is_searched else 0.0
-	return clampf(_search_progress / maxf(0.01, search_time), 0.0, 1.0)
+func _start_next_reveal() -> void:
+	if _reveal_queue.is_empty():
+		return
+	var next: ItemStack = _reveal_queue[0]
+	var data := next.get_data()
+	_current_reveal_time = (data.get_search_time() if data != null else 1.0) * search_time_multiplier
+	_reveal_timer = 0.0
+
+
+## Fortschritt am aktuell gesuchten Gegenstand, 0 bis 1.
+func get_current_progress() -> float:
+	if not _is_searching or _current_reveal_time <= 0.0:
+		return 0.0
+	return clampf(_reveal_timer / _current_reveal_time, 0.0, 1.0)
+
+
+## Was gerade gesucht wird — für die Fortschrittsanzeige.
+## Bewusst OHNE den Namen: Man soll nicht vorab wissen, was kommt, sonst
+## wäre die Entscheidung "warte ich das ab?" trivial.
+func get_remaining_count() -> int:
+	return _reveal_queue.size()
+
+
+func is_searching() -> bool:
+	return _is_searching
+
+
+## Ob dieser Gegenstand schon sichtbar ist.
+func is_revealed(instance_id: int) -> bool:
+	return _revealed.get(instance_id, false)
+
+
+## Nur die bereits aufgedeckten Gegenstände. Alles andere existiert für den
+## Spieler noch nicht.
+func get_revealed_stacks() -> Array[ItemStack]:
+	var result: Array[ItemStack] = []
+	for stack in contents.get_all_stacks():
+		if is_revealed(stack.instance_id):
+			result.append(stack)
+	return result
 
 
 func _generate_contents() -> void:
@@ -107,49 +172,101 @@ func _generate_contents() -> void:
 			continue
 		if not contents.add_item(stack):
 			# Container voll — der Rest fällt weg. Kein Fehler, sondern eine
-			# Folge der Tabellengroesse. Sichtbar machen, damit es beim
-			# Balancing auffaellt.
+			# Folge der Tabellengroesse. Sichtbar machen fuers Balancing.
 			push_warning("[LootContainer] %s: kein Platz mehr fuer %s" % [display_name, drop.id])
 			break
 
 
+## Kleine Gegenstände zuerst aufdecken. So sieht der Spieler sofort etwas,
+## und die lange Wartezeit auf das Sturmgewehr kommt am Ende — dann, wenn
+## er sich bewusst entscheiden muss, ob er bleibt.
+func _build_reveal_queue() -> void:
+	_reveal_queue.clear()
+	for stack in contents.get_all_stacks():
+		_reveal_queue.append(stack)
+
+	_reveal_queue.sort_custom(func(a: ItemStack, b: ItemStack) -> bool:
+		var da := a.get_data()
+		var db := b.get_data()
+		var ta := da.get_search_time() if da != null else 1.0
+		var tb := db.get_search_time() if db != null else 1.0
+		return ta < tb
+	)
+
+
 ## Nimmt einen Gegenstand heraus und legt ihn ins Zielinventar.
-## Passt er dort nicht, bleibt er im Container liegen — nichts geht verloren.
+## Nicht aufgedeckte Gegenstände lassen sich nicht nehmen.
+##
+## Passt er im Ziel nicht, bleibt er liegen — nichts geht verloren.
 func take_item(instance_id: int, into: InventoryGrid) -> bool:
+	if not is_revealed(instance_id):
+		return false
+
 	var stack := contents.get_stack(instance_id)
 	if stack == null or into == null:
 		return false
 
-	# Erst versuchen, ob im Ziel überhaupt Platz ist. Erst dann entnehmen.
-	# Andersherum könnte der Gegenstand zwischen beiden Rastern verschwinden.
-	var test_position := into.find_free_position(stack)
+	# Erst prüfen, ob im Ziel Platz ist. Erst dann entnehmen — andersherum
+	# könnte der Gegenstand zwischen beiden Rastern verschwinden.
+	var free_spot := into.find_free_position(stack)
 	var can_stack := false
 	for existing in into.get_all_stacks():
 		if existing.can_merge_with(stack):
 			can_stack = true
 			break
 
-	if test_position.x < 0 and not can_stack:
+	if free_spot.x < 0 and not can_stack:
 		return false
 
 	contents.remove_item(instance_id)
 	if not into.add_item(stack):
-		# Sollte nach der Prüfung nicht passieren — zur Sicherheit zurücklegen.
 		contents.add_item(stack)
 		return false
+
+	_revealed.erase(instance_id)
 	return true
 
 
-## Nimmt alles mit, was passt. Gibt zurück, wie viele Gegenstände übrig blieben.
+## Legt einen Gegenstand in die Kiste — für Ablegen per Ziehen.
+func put_item(stack: ItemStack, x: int, y: int) -> bool:
+	if stack == null:
+		return false
+	if not contents.place(stack, x, y):
+		return false
+	mark_revealed(stack)
+	return true
+
+
+## Markiert einen Gegenstand als sichtbar.
+## Nötig, wenn der Spieler etwas in die Kiste legt: Was er selbst
+## hineingelegt hat, muss er auch sehen können.
+func mark_revealed(stack: ItemStack) -> void:
+	if stack != null:
+		_revealed[stack.instance_id] = true
+
+
+## Nimmt alles Aufgedeckte mit, was passt.
+## Gibt zurück, wie viele Gegenstände liegen blieben.
 func take_all(into: InventoryGrid) -> int:
 	if into == null:
 		return contents.get_item_count()
 
-	# Kopie durchlaufen, weil take_item den Container verändert.
-	for stack in contents.get_all_stacks():
+	for stack in get_revealed_stacks():
 		take_item(stack.instance_id, into)
 	return contents.get_item_count()
 
 
 func is_empty() -> bool:
 	return contents.get_item_count() == 0
+
+
+## Für einen neuen Raid zurücksetzen.
+func reset() -> void:
+	is_open = false
+	is_fully_searched = false
+	_is_searching = false
+	_revealed.clear()
+	_reveal_queue.clear()
+	_reveal_timer = 0.0
+	_current_reveal_time = 0.0
+	contents.resize(grid_width, grid_height)

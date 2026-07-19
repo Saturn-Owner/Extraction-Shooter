@@ -245,10 +245,6 @@ func _handle_weapon_input() -> void:
 	if is_sprinting:
 		return
 
-	# Schiessen bricht ein laufendes Durchsuchen ab. Man kann nicht
-	# gleichzeitig eine Kiste durchwühlen und sich verteidigen.
-	if Input.is_action_just_pressed("fire") and interaction != null:
-		interaction.stop_search()
 
 	weapon.try_fire(
 		Input.is_action_pressed("fire"),
@@ -282,9 +278,6 @@ func _physics_process(delta: float) -> void:
 	_update_movement(delta)
 	_update_recoil(delta)
 	_handle_weapon_input()
-
-	if interaction != null and Input.is_action_just_pressed("interact"):
-		interaction.interact()
 
 	move_and_slide()
 

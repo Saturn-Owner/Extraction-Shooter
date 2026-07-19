@@ -3,25 +3,21 @@
 ## Das ist die erste Szene, die kein Testgelände mehr ist, sondern die
 ## Kernschleife des Genres zeigt: rein, looten, raus — oder sterben.
 ##
-## HINWEIS ZUR OBERFLÄCHE:
-## Die Loot-Anzeige ist bewusst eine schlichte Textliste mit Zifferntasten.
-## Ein richtiges Raster mit Ziehen und Ablegen braucht jemanden, der sieht,
-## wie es aussieht und sich bedient — das kann Claude nicht beurteilen.
-## Die Logik dahinter ist aber vollständig und bleibt unverändert, wenn
-## später eine richtige Oberfläche darüberkommt.
-##
 ## Steuerung zusätzlich zu Bewegung und Waffe:
-##   F         Kiste durchsuchen / öffnen
-##   1-9       Gegenstand aus der offenen Kiste nehmen
-##   Tab       alles nehmen, was passt
+##   F         Kiste öffnen / Fenster schliessen
+##   Tab       alles Aufgedeckte nehmen
+##   Esc       Fenster schliessen
 ##   K         Selbsttötung (zum Testen des Verlusts)
 ##   Enter     neuen Raid starten
+##
+## Im Loot-Fenster: Ziehen verschiebt, Doppelklick schickt hinüber.
 extends Node3D
 
 @onready var _player: PlayerController = $Player
 @onready var _raid: RaidManager = $RaidManager
 @onready var _label: Label = $HUD/InfoPanel/InfoLabel
 @onready var _prompt: Label = $HUD/PromptLabel
+@onready var _loot_window: LootWindow = $HUD/LootWindow
 
 ## Was der Spieler in den ersten Raid mitnimmt.
 const STARTING_KIT := [
@@ -30,7 +26,6 @@ const STARTING_KIT := [
 ]
 
 var _spawn: Vector3
-var _open_container: LootContainer = null
 var _message := ""
 var _message_timer := 0.0
 
@@ -39,11 +34,7 @@ func _ready() -> void:
 	_spawn = _player.global_position
 	_raid.setup(_player)
 	_raid.raid_ended.connect(_on_raid_ended)
-
-	for container in get_tree().get_nodes_in_group("loot_container"):
-		var loot := container as LootContainer
-		if loot != null:
-			loot.search_finished.connect(_on_search_finished.bind(loot))
+	_loot_window.closed.connect(_on_loot_window_closed)
 
 	_give_starting_kit()
 	_raid.start_raid()
@@ -57,17 +48,17 @@ func _give_starting_kit() -> void:
 		_player.equip_from_inventory(weapons[0])
 
 
-func _on_search_finished(container: LootContainer) -> void:
-	_open_container = container
-	_show_message("%s durchsucht: %d Gegenstaende" % [container.display_name, container.contents.get_item_count()])
+func _on_loot_window_closed() -> void:
+	_show_message("")
 
 
 func _on_raid_ended(survived: bool, secured: int) -> void:
+	if _loot_window.is_open():
+		_loot_window.close()
 	if survived:
 		_show_message("EXTRAHIERT — %d Gegenstaende ins Lager gebracht. [Enter] fuer neuen Raid" % secured, 30.0)
 	else:
 		_show_message("GESTORBEN — alles Mitgefuehrte verloren. [Enter] fuer neuen Raid", 30.0)
-	_open_container = null
 
 
 func _show_message(text: String, duration: float = 4.0) -> void:
@@ -79,21 +70,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.is_pressed() or event.is_echo():
 		return
 
-	var key := (event as InputEventKey).physical_keycode
-
-	# Gegenstand aus der offenen Kiste nehmen.
-	if key >= KEY_1 and key <= KEY_9 and _open_container != null:
-		_take_from_container(key - KEY_1)
-		return
-
-	match key:
+	match (event as InputEventKey).physical_keycode:
+		KEY_F:
+			_toggle_loot_window()
 		KEY_TAB:
-			if _open_container != null:
-				var left := _open_container.take_all(_player.inventory.grid)
-				if left > 0:
-					_show_message("Inventar voll — %d Gegenstaende bleiben liegen" % left)
-				else:
-					_show_message("alles eingesammelt")
+			if _loot_window.is_open():
+				var left := _loot_window.take_all()
+				_show_message("alles eingesammelt" if left == 0
+					else "Inventar voll — %d Gegenstaende bleiben liegen" % left)
 		KEY_K:
 			if _raid.state == RaidManager.State.LAEUFT:
 				_raid.die()
@@ -101,22 +85,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _raid.state == RaidManager.State.BEENDET:
 				_restart_raid()
 		KEY_ESCAPE:
-			_open_container = null
+			if _loot_window.is_open():
+				_loot_window.close()
 
 
-func _take_from_container(index: int) -> void:
-	if _open_container == null:
+## F öffnet die Kiste, vor der man steht — oder schliesst das Fenster.
+func _toggle_loot_window() -> void:
+	if _loot_window.is_open():
+		_loot_window.close()
 		return
-	var stacks := _open_container.contents.get_all_stacks()
-	if index < 0 or index >= stacks.size():
-		return
 
-	var stack := stacks[index]
-	var item_name := stack.get_data().display_name if stack.get_data() != null else "?"
-	if _open_container.take_item(stack.instance_id, _player.inventory.grid):
-		_show_message("%s genommen" % item_name)
-	else:
-		_show_message("kein Platz fuer %s" % item_name)
+	var target := _player.interaction.current_target if _player.interaction != null else null
+	if target is LootContainer:
+		_loot_window.open_for(target as LootContainer, _player.inventory)
 
 
 func _restart_raid() -> void:
@@ -132,10 +113,8 @@ func _restart_raid() -> void:
 	for container in get_tree().get_nodes_in_group("loot_container"):
 		var loot := container as LootContainer
 		if loot != null:
-			loot.is_searched = false
-			loot.contents.resize(loot.grid_width, loot.grid_height)
+			loot.reset()
 
-	_open_container = null
 	_raid.start_raid()
 	_show_message("Neuer Raid gestartet")
 
@@ -153,14 +132,10 @@ func _process(delta: float) -> void:
 func _update_prompt() -> void:
 	var lines: Array[String] = []
 
-	if _player.interaction != null:
-		var searching := _player.interaction.searching_container
-		if searching != null:
-			lines.append("Durchsuche... %d%%" % int(searching.get_search_progress() * 100.0))
-		else:
-			var text := _player.interaction.get_prompt()
-			if text != "":
-				lines.append(text)
+	if _player.interaction != null and not _loot_window.is_open():
+		var text := _player.interaction.get_prompt()
+		if text != "":
+			lines.append(text)
 
 	# Fortschritt am Ausgang.
 	for zone in get_tree().get_nodes_in_group("extraction_zone"):
@@ -190,23 +165,7 @@ func _update_info() -> void:
 
 	lines.append("Dabei:     %d Gegenstaende" % _player.inventory.grid.get_item_count())
 	lines.append("Lager:     %d Gegenstaende" % _raid.stash.get_item_count())
-
-	if _open_container != null:
-		lines.append("")
-		lines.append("--- %s ---" % _open_container.display_name)
-		var stacks := _open_container.contents.get_all_stacks()
-		if stacks.is_empty():
-			lines.append("  leer")
-		else:
-			for i in range(mini(stacks.size(), 9)):
-				var stack := stacks[i]
-				var data := stack.get_data()
-				var name := data.display_name if data != null else "?"
-				var amount := " x%d" % stack.quantity if stack.quantity > 1 else ""
-				lines.append("  [%d] %s%s" % [i + 1, name, amount])
-			lines.append("  [Tab] alles nehmen")
-
 	lines.append("")
-	lines.append("F durchsuchen  Tab alles  K sterben  Enter neu")
+	lines.append("F oeffnen  Tab alles  K sterben  Enter neu")
 
 	_label.text = "\n".join(lines)

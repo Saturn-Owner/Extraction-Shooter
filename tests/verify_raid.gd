@@ -37,7 +37,9 @@ func _run_all() -> void:
 	await process_frame
 	_test_loot_tables_are_valid()
 	_test_loot_distribution()
+	_test_search_times_scale()
 	await _test_container_search()
+	await _test_hidden_items_are_untouchable()
 	await _test_extraction_secures_loot()
 	await _test_death_loses_loot()
 	await _test_locked_exit()
@@ -127,48 +129,137 @@ func _test_loot_distribution() -> void:
 			% [counts["militaer"]["rare"], counts["wohnung"]["rare"]])
 
 
+## Die Durchsuchzeit muss sich pro Gegenstand unterscheiden — das ist der
+## Kern des Arena-Breakout-Modells.
+func _test_search_times_scale() -> void:
+	_section("Durchsuchzeit pro Gegenstand")
+
+	var ammo := ItemRegistry.get_item(&"ammo_9x19_fmj")
+	var rare_ammo := ItemRegistry.get_item(&"ammo_556x45_m995")
+	var plate := ItemRegistry.get_item(&"plate_class4_front")
+	var rifle := ItemRegistry.get_item(&"weapon_rifle_ar15")
+
+	if ammo == null or rare_ammo == null or plate == null or rifle == null:
+		_check(false, "Vergleichsgegenstaende gefunden")
+		return
+
+	var t_ammo := ammo.get_search_time()
+	var t_rare := rare_ammo.get_search_time()
+	var t_plate := plate.get_search_time()
+	var t_rifle := rifle.get_search_time()
+
+	print("  9mm %.2fs | M995 %.2fs | Platte %.2fs | AR-15 %.2fs"
+		% [t_ammo, t_rare, t_plate, t_rifle])
+
+	_check(t_rare > t_ammo, "seltene Munition dauert laenger als billige (gleiche Groesse)")
+	_check(t_rifle > t_plate, "das Gewehr dauert am laengsten")
+	_check(t_plate > t_rare, "die grosse Platte dauert laenger als eine Patrone")
+	_check(t_ammo >= 0.4, "auch das Kleinste braucht spuerbar Zeit (%.2fs)" % t_ammo)
+	_check(t_rifle <= 7.0, "nichts dauert unertraeglich lang (%.2fs)" % t_rifle)
+
+
 func _test_container_search() -> void:
-	_section("Container durchsuchen")
+	_section("Container schrittweise durchsuchen")
 
 	var container := LootContainer.new()
 	container.loot_table = _load_table("militaer")
-	container.search_time = 0.05
+	# Stark beschleunigt, damit der Test nicht 20 Sekunden braucht.
+	container.search_time_multiplier = 0.5
 	root.add_child(container)
 	await process_frame
 	container.set_seed(777)
 
-	_check(not container.is_searched, "Container startet undurchsucht")
+	_check(not container.is_open, "Container startet geschlossen")
 	_check(container.is_empty(), "und ohne Inhalt — erst beim Oeffnen gewuerfelt")
 
-	_check(container.begin_search(), "Durchsuchen startet")
-	_check(container.is_being_searched, "laeuft")
+	container.open()
+	_check(container.is_open, "Container ist offen")
+	_check(not container.is_empty(), "Inhalt wurde gewuerfelt (%d Gegenstaende)" % container.contents.get_item_count())
+	_check(container.get_revealed_stacks().is_empty(),
+		"aber noch NICHTS ist sichtbar — Gegenstaende tauchen einzeln auf")
 
-	# Abbrechen darf keinen Inhalt erzeugen.
-	container.cancel_search()
-	_check(not container.is_being_searched, "Abbrechen stoppt das Durchsuchen")
-	_check(container.is_empty(), "abgebrochenes Durchsuchen erzeugt keinen Loot")
+	var total := container.contents.get_item_count()
+	_check(container.get_remaining_count() == total, "alle %d Funde stehen noch aus" % total)
 
-	container.begin_search()
+	# Aufdecken abwarten.
 	var waited := 0
-	while container.is_being_searched and waited < 60:
+	var previous_revealed := 0
+	var grew_gradually := false
+	while container.is_searching() and waited < 900:
 		await process_frame
+		var now_revealed := container.get_revealed_stacks().size()
+		if now_revealed > previous_revealed and now_revealed < total:
+			grew_gradually = true
+		previous_revealed = now_revealed
 		waited += 1
 
-	_check(container.is_searched, "Durchsuchen wird fertig")
-	_check(not container.is_empty(), "Container hat jetzt Inhalt (%d Gegenstaende)" % container.contents.get_item_count())
+	_check(container.is_fully_searched, "Durchsuchen wird fertig")
+	_check(container.get_revealed_stacks().size() == total, "am Ende ist alles sichtbar")
+	if total > 1:
+		_check(grew_gradually, "die Gegenstaende sind einzeln aufgetaucht, nicht alle auf einmal")
 
-	# Entnehmen in ein volles Inventar darf nichts vernichten.
-	var tiny := InventoryGrid.new(1, 1)
-	var before := container.contents.get_item_count()
+	# Kleine Dinge zuerst — sonst starrt man sekundenlang auf ein leeres Raster.
+	container.free()
+
+	var ordered := LootContainer.new()
+	ordered.loot_table = _load_table("militaer")
+	ordered.search_time_multiplier = 0.4
+	root.add_child(ordered)
+	await process_frame
+	ordered.set_seed(31337)
+	ordered.open()
+
+	var reveal_order: Array[float] = []
+	var guard := 0
+	while ordered.is_searching() and guard < 900:
+		await process_frame
+		guard += 1
+		for stack in ordered.get_revealed_stacks():
+			var data := stack.get_data()
+			var t := data.get_search_time() if data != null else 0.0
+			if not reveal_order.has(t):
+				reveal_order.append(t)
+
+	var ascending := true
+	for i in range(1, reveal_order.size()):
+		if reveal_order[i] < reveal_order[i - 1]:
+			ascending = false
+	_check(ascending, "schnell findbare Gegenstaende tauchen zuerst auf")
+
+	ordered.free()
+
+
+## Nicht aufgedeckte Gegenstaende duerfen nicht greifbar sein — sonst
+## koennte man die Kiste anklicken und sofort alles leerraeumen.
+func _test_hidden_items_are_untouchable() -> void:
+	_section("Verdeckte Gegenstaende")
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("werkstatt")
+	root.add_child(container)
+	await process_frame
+	container.set_seed(2024)
+	container.open()
+
 	var stacks := container.contents.get_all_stacks()
-	var big := stacks[0]
-	for s in stacks:
-		if s.get_size().x * s.get_size().y > big.get_size().x * big.get_size().y:
-			big = s
+	if stacks.is_empty():
+		_check(false, "Container hat Inhalt")
+		container.free()
+		return
 
-	if big.get_size().x > 1 or big.get_size().y > 1:
-		_check(not container.take_item(big.instance_id, tiny), "zu grosser Gegenstand passt nicht ins Minirad")
-		_check(container.contents.get_item_count() == before, "und bleibt im Container liegen")
+	var target := InventoryGrid.new(10, 10)
+	var hidden := stacks[0]
+	_check(not container.is_revealed(hidden.instance_id), "Gegenstand ist noch verdeckt")
+	_check(not container.take_item(hidden.instance_id, target), "verdeckter Gegenstand laesst sich nicht nehmen")
+	_check(target.get_item_count() == 0, "und landet nicht im Inventar")
+
+	_check(container.take_all(target) == container.contents.get_item_count(),
+		"'alles nehmen' nimmt nur Aufgedecktes — also nichts")
+
+	# Nach dem Aufdecken muss es gehen.
+	container.mark_revealed(hidden)
+	_check(container.take_item(hidden.instance_id, target), "aufgedeckt laesst er sich nehmen")
+	_check(target.get_item_count() == 1, "und liegt im Inventar")
 
 	container.free()
 
