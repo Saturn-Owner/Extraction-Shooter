@@ -48,6 +48,39 @@ fallen genau dann auf, wenn es teuer wird.
 URL, Lizenz. Ohne diesen Nachweis lässt sich später nicht mehr belegen,
 dass wir sie benutzen dürfen.
 
+## MP3 zerlegen
+
+Die Werkzeuge unter `tools/` lesen nur WAV. Für MP3 gibt es aber bereits
+ein `ffmpeg` auf dem Rechner, das CapCut mitbringt:
+
+```
+C:\Users\<Benutzer>\AppData\Local\CapCut\Apps\<Version>\ffmpeg.exe
+```
+
+Umwandeln und dabei gleich auf Mono bringen:
+
+```
+ffmpeg -i eingabe.mp3 -ac 1 -ar 44100 -c:a pcm_s16le ausgabe.wav
+```
+
+Einen Ausschnitt herausschneiden (`-ss` Startzeit, `-t` Dauer):
+
+```
+ffmpeg -ss 0.48 -t 0.30 -i ganz.wav -c:a pcm_s16le stueck.wav
+```
+
+Danach normalisieren — leise Ausschnitte sind sonst im Spiel unhörbar.
+Erst den Pegel messen, dann die Differenz als Verstärkung anwenden:
+
+```
+ffmpeg -i stueck.wav -af volumedetect -f null NUL
+ffmpeg -i stueck.wav -af "volume=+12dB" -c:a pcm_s16le fertig.wav
+```
+
+**Vorsicht bei sehr leisen Stellen:** Wer +17 dB draufgibt, hebt das
+Rauschen genauso mit an. Wenn es zischt, lieber eine lautere Stelle in
+der Aufnahme suchen.
+
 ## Brauchbare Quellen
 
 - **freesound.org** — riesig, Filter auf CC0 stellen. Download braucht ein

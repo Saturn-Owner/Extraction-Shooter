@@ -14,6 +14,7 @@ Dateien vor einer Veröffentlichung wieder raus.
 | `food.wav` | `essen finden variante 1.wav` | ? | ? |
 | `food_canned_meat.wav` | `essen finden variante 2 plastic verpackung.wav` | ? | ? |
 | `misc.wav` | `misc item finden zb schrauben.wav` | ? | ? |
+| `med_painkillers.wav` | MP3 mit Sammelaufnahme, Ausschnitt 0,48–0,78 s | ? | ? |
 
 ## OpenGameArt (CC0)
 
