@@ -25,7 +25,6 @@ func _run_all() -> void:
 	await process_frame
 
 	_test_audio_generation()
-	_test_crosshair()
 	await _test_effects_spawn()
 	await _test_firing_in_level()
 
@@ -53,23 +52,29 @@ func _finish() -> void:
 func _test_audio_generation() -> void:
 	_section("Synthetische Sounds")
 
-	var shot := WeaponAudio.make_gunshot(0.6, 0.28)
+	var shot := WeaponAudio.make_gunshot(0.6)
 	_check(shot != null, "Schussgeraeusch wird erzeugt")
 	_check(shot != null and shot.data.size() > 1000, "enthaelt Audiodaten (%d Bytes)" % (shot.data.size() if shot else 0))
 	_check(shot != null and shot.mix_rate == WeaponAudio.SAMPLE_RATE, "korrekte Abtastrate")
 
-	# Nicht nur Stille: mindestens ein Wert deutlich ungleich null.
-	var loudest := 0
-	if shot != null:
-		for i in range(0, mini(shot.data.size(), 4000), 2):
-			var value := shot.data[i] | (shot.data[i + 1] << 8)
-			if value > 32767:
-				value -= 65536
-			loudest = maxi(loudest, absi(value))
-	_check(loudest > 3000, "Signal ist hoerbar laut (Spitze %d)" % loudest)
-
+	_check(_peak_of(shot) > 3000, "Signal ist hoerbar laut (Spitze %d)" % _peak_of(shot))
 	_check(WeaponAudio.make_dry_fire() != null, "Leerschuss-Klick wird erzeugt")
-	_check(WeaponAudio.make_reload() != null, "Nachladegeraeusch wird erzeugt")
+
+	# Der Leerschuss darf nicht lauter sein als der Schuss selbst.
+	_check(_peak_of(WeaponAudio.make_dry_fire()) < _peak_of(shot),
+		"Leerschuss ist leiser als der Schuss")
+
+	# Der Anfang muss hart einsetzen — ein Schuss ohne Transient klingt
+	# nach Zischen statt nach Waffe.
+	var attack := _peak_in_range(shot, 0, 400)
+	var later := _peak_in_range(shot, 8000, 12000)
+	_check(attack > later, "harter Anschlag am Anfang (%d vs %d spaeter)" % [attack, later])
+
+	# Grosse Kaliber muessen laenger nachklingen.
+	var quiet := WeaponAudio.make_gunshot(0.3)
+	var loud := WeaponAudio.make_gunshot(1.0)
+	_check(loud.data.size() > quiet.data.size(),
+		"grosses Kaliber klingt laenger nach (%d vs %d Bytes)" % [loud.data.size(), quiet.data.size()])
 
 	# Grosse Waffen muessen wuchtiger klingen als kleine.
 	var pistol := ItemRegistry.get_item(&"weapon_pistol_g17") as WeaponData
@@ -79,47 +84,32 @@ func _test_audio_generation() -> void:
 		var p2 := WeaponAudio.get_power_for_weapon(sniper)
 		_check(p2 > p1, "AXMC klingt wuchtiger als G17 (%.2f vs %.2f)" % [p2, p1])
 
+		# Der Zwischenspeicher muss pro Waffe unterscheiden, sonst klingen
+		# alle Waffen gleich.
+		WeaponAudio.clear_cache()
+		var s1 := WeaponAudio.get_gunshot(pistol)
+		var s2 := WeaponAudio.get_gunshot(sniper)
+		_check(s1 != s2, "jede Waffe bekommt ihren eigenen Sound")
+		_check(WeaponAudio.get_gunshot(pistol) == s1, "gleicher Waffe wird der Sound wiederverwendet")
 
-func _test_crosshair() -> void:
-	_section("Fadenkreuz")
 
-	var crosshair := Crosshair.new()
-	crosshair.size = Vector2(1600, 900)
-	root.add_child(crosshair)
+func _peak_of(stream: AudioStreamWAV) -> int:
+	if stream == null:
+		return 0
+	return _peak_in_range(stream, 0, stream.data.size() / 2)
 
-	_check(is_zero_approx(crosshair._bloom), "startet geschlossen")
 
-	crosshair.add_bloom(10.0)
-	_check(crosshair._bloom > 0.0, "geht bei Schuss auf")
-
-	var before := crosshair._bloom
-	crosshair._process(0.1)
-	_check(crosshair._bloom < before, "schliesst sich wieder")
-
-	# Nicht unbegrenzt aufgehen, sonst ist das Fadenkreuz vom Bildschirm.
-	for i in range(50):
-		crosshair.add_bloom(20.0)
-	_check(crosshair._bloom <= crosshair.max_bloom, "geht nicht unbegrenzt auf")
-
-	# Trefferfarbe muss sich nach dem Ergebnis richten.
-	var stopped := Ballistics.HitResult.new()
-	stopped.was_armored = true
-	stopped.penetrated = false
-	crosshair.show_hit(stopped)
-	_check(crosshair._hit_color == Crosshair.COLOR_ARMOR_STOPPED, "gestoppt = gelb")
-
-	var penetrated := Ballistics.HitResult.new()
-	penetrated.was_armored = true
-	penetrated.penetrated = true
-	crosshair.show_hit(penetrated)
-	_check(crosshair._hit_color == Crosshair.COLOR_PENETRATED, "durchschlagen = orange")
-
-	var flesh := Ballistics.HitResult.new()
-	flesh.was_armored = false
-	crosshair.show_hit(flesh)
-	_check(crosshair._hit_color == Crosshair.COLOR_FLESH, "ungeschuetzt = rot")
-
-	crosshair.free()
+func _peak_in_range(stream: AudioStreamWAV, first: int, last: int) -> int:
+	if stream == null:
+		return 0
+	var peak := 0
+	var frames := stream.data.size() / 2
+	for f in range(maxi(0, first), mini(last, frames)):
+		var value := stream.data[f * 2] | (stream.data[f * 2 + 1] << 8)
+		if value > 32767:
+			value -= 65536
+		peak = maxi(peak, absi(value))
+	return peak
 
 
 func _test_effects_spawn() -> void:
@@ -172,8 +162,6 @@ func _test_firing_in_level() -> void:
 	if player == null:
 		_finish()
 		return
-
-	_check(player.crosshair != null, "Fadenkreuz ist mit dem Spieler verbunden")
 
 	var weapon := player.weapon
 	_check(weapon != null, "Waffe gefunden")

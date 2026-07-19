@@ -32,10 +32,10 @@ var _cooldown: float = 0.0
 var _burst_remaining: int = 0
 var _shots_since_release: int = 0
 
-## Synthetische Platzhalter-Sounds, einmal pro Waffe berechnet.
-var _shot_sound: AudioStreamWAV
-var _dry_sound: AudioStreamWAV
-var _reload_sound: AudioStreamWAV
+## Schuss-Sound der aktuellen Waffe. Kommt aus einer echten Audiodatei,
+## falls unter assets/audio/weapons/ eine passende liegt — sonst synthetisch.
+var _shot_sound: AudioStream
+var _dry_sound: AudioStream
 
 @onready var _muzzle: Node3D = $Muzzle
 @onready var _audio: AudioStreamPlayer3D = $Muzzle/AudioStreamPlayer3D
@@ -45,7 +45,6 @@ func _ready() -> void:
 	ItemRegistry.ensure_loaded()
 	setup(weapon_id, ammo_id)
 	_dry_sound = WeaponAudio.make_dry_fire()
-	_reload_sound = WeaponAudio.make_reload()
 
 
 ## Waffe und Munition setzen. Laedt gleich ein volles Magazin.
@@ -71,9 +70,8 @@ func setup(p_weapon_id: StringName, p_ammo_id: StringName) -> bool:
 	rounds_in_magazine = data.magazine_size
 	current_fire_mode = data.fire_modes[0] if not data.fire_modes.is_empty() else WeaponData.FireMode.SINGLE
 
-	# Klangfarbe passt sich der Waffe an — eine Pistole knallt anders als
-	# ein Scharfschützengewehr, ohne dass jemand Werte pflegen muss.
-	_shot_sound = WeaponAudio.make_gunshot(WeaponAudio.get_power_for_weapon(data))
+	# Sucht zuerst eine echte Audiodatei für diese Waffe, sonst Synthese.
+	_shot_sound = WeaponAudio.get_gunshot(data)
 	return true
 
 
@@ -153,7 +151,7 @@ func _play_shot_feedback() -> void:
 	_play(_shot_sound, randf_range(0.94, 1.06))
 
 
-func _play(stream: AudioStreamWAV, pitch: float) -> void:
+func _play(stream: AudioStream, pitch: float) -> void:
 	if _audio == null or stream == null:
 		return
 	_audio.stream = stream
@@ -233,7 +231,8 @@ func reload() -> void:
 		return
 	rounds_in_magazine = data.magazine_size
 	_shots_since_release = 0
-	_play(_reload_sound, 1.0)
+	# Bewusst ohne Sound: Der synthetische Nachladeklang klang schlecht.
+	# Sobald echte Aufnahmen vorliegen, hier wieder einhaengen.
 	reloaded.emit(rounds_in_magazine)
 
 
