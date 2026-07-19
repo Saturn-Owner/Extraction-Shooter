@@ -25,7 +25,7 @@ Ein Extraction-Shooter, gebaut mit [Godot 4.7.1](https://godotengine.org/downloa
   ```
   git checkout -b feature/player-movement
   ```
-- Fertige Features per Pull Request auf GitHub mergen, damit der andere kurz drüberschauen kann.
+- Fertige Features per Pull Request auf GitHub mergen. Den Code-Review macht Claude, ein Mensch muss nicht gegenlesen.
 - Vor dem Arbeiten immer erst `git pull`, um Konflikte zu vermeiden.
 - **Wichtig bei Godot:** Nicht gleichzeitig an derselben `.tscn`-Szene arbeiten – Szenen-Dateien lassen sich schlecht mergen. Lieber absprechen, wer welche Szene anfasst.
 - Der Ordner `.godot/` wird nicht committet (steht in der `.gitignore`) – den generiert Godot lokal neu.

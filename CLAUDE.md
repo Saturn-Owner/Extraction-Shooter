@@ -111,7 +111,7 @@ Entwickler kann es nicht mehr öffnen. Stattdessen auf einer Kopie testen.
    git checkout -b feature/kurzer-name
    ```
    Branch-Namen sprechend wählen: `feature/spielerbewegung`, `feature/loot-system`, `fix/extraction-timer`.
-3. **Fertige Features als Pull Request** auf GitHub erstellen (`gh pr create`), der andere schaut kurz drüber und merged. Erst dann landet das Feature auf `main`.
+3. **Fertige Features als Pull Request** auf GitHub erstellen (`gh pr create`). Den Code-Review übernimmt Claude — ein Mensch muss nicht gegenlesen. Nach dem Review wird der PR gemerged, erst dann landet das Feature auf `main`.
 4. **Regelmäßig committen und pushen** — lieber viele kleine Commits als ein riesiger am Ende des Tages.
 5. **Erst mergen, wenn das Feature in Godot getestet wurde** und das Spiel startet. Kaputten Code nicht auf `main` schieben.
 
