@@ -67,7 +67,8 @@ func setup(p_weapon_id: StringName, p_ammo_id: StringName) -> bool:
 	loaded_ammo = a as AmmoData
 	weapon_id = p_weapon_id
 	ammo_id = p_ammo_id
-	rounds_in_magazine = data.magazine_size
+	# Waffe kommt leer — Munition muss aus dem Inventar geladen werden.
+	rounds_in_magazine = 0
 	current_fire_mode = data.fire_modes[0] if not data.fire_modes.is_empty() else WeaponData.FireMode.SINGLE
 
 	# Sucht zuerst eine echte Audiodatei für diese Waffe, sonst Synthese.
@@ -226,13 +227,39 @@ func release_trigger() -> void:
 	_shots_since_release = 0
 
 
-func reload() -> void:
+## Wie viele Patronen noch ins Magazin passen.
+func get_missing_rounds() -> int:
+	if data == null:
+		return 0
+	return maxi(0, data.magazine_size - rounds_in_magazine)
+
+
+## Laedt eine bestimmte Anzahl Patronen nach.
+##
+## Die Waffe erfindet keine Munition — wer sie aufruft, muss sie vorher
+## irgendwo entnommen haben. Dadurch bleibt diese Klasse unabhaengig vom
+## Inventar und damit einzeln testbar, und der Server kann spaeter dieselbe
+## Pruefung vornehmen.
+func load_rounds(count: int) -> int:
+	if data == null or count <= 0:
+		return 0
+	var loaded := mini(count, get_missing_rounds())
+	rounds_in_magazine += loaded
+	_shots_since_release = 0
+	# Bewusst ohne Sound: Der synthetische Nachladeklang klang schlecht.
+	# Sobald echte Aufnahmen vorliegen, hier wieder einhaengen.
+	if loaded > 0:
+		reloaded.emit(rounds_in_magazine)
+	return loaded
+
+
+## Fuellt das Magazin ohne Munitionsverbrauch.
+## Nur fuer Tests und den Schiessstand im Bunker gedacht.
+func fill_magazine() -> void:
 	if data == null:
 		return
 	rounds_in_magazine = data.magazine_size
 	_shots_since_release = 0
-	# Bewusst ohne Sound: Der synthetische Nachladeklang klang schlecht.
-	# Sobald echte Aufnahmen vorliegen, hier wieder einhaengen.
 	reloaded.emit(rounds_in_magazine)
 
 

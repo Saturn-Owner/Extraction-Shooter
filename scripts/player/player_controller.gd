@@ -114,6 +114,7 @@ var _recoil_yaw: float = 0.0
 @onready var _camera_pivot: Node3D = $CameraPivot
 @onready var _collision: CollisionShape3D = $CollisionShape3D
 @onready var weapon: Weapon = $CameraPivot/Weapon
+@onready var inventory: PlayerInventory = $Inventory
 
 
 func _ready() -> void:
@@ -121,6 +122,70 @@ func _ready() -> void:
 	_capture_mouse(true)
 	if weapon != null:
 		weapon.recoil_kick.connect(_on_recoil_kick)
+	if inventory != null:
+		inventory.changed.connect(_on_inventory_changed)
+		_on_inventory_changed()
+
+
+## Das Gewicht kommt jetzt aus dem Inventar statt von Hand gesetzt zu werden.
+## Ein voller Rucksack bremst dadurch wirklich.
+func _on_inventory_changed() -> void:
+	if inventory != null:
+		carried_weight_kg = inventory.get_total_weight()
+
+
+## Nimmt eine Waffe aus dem Inventar in die Hand und laedt sie mit der
+## ersten passenden Munition, die der Spieler dabei hat.
+func equip_from_inventory(stack: ItemStack) -> bool:
+	if inventory == null or weapon == null or stack == null:
+		return false
+	if not inventory.equip_weapon(stack):
+		return false
+
+	var weapon_data := stack.get_data() as WeaponData
+	var compatible := inventory.get_compatible_ammo(weapon_data)
+	var chosen: StringName = compatible[0] if not compatible.is_empty() else &""
+
+	if chosen == &"":
+		# Waffe ohne passende Munition: trotzdem in die Hand nehmen,
+		# aber sie bleibt leer. Das ist eine gueltige Notlage.
+		weapon.data = weapon_data
+		weapon.rounds_in_magazine = 0
+		return true
+
+	weapon.setup(stack.item_id, chosen)
+	try_reload()
+	return true
+
+
+## Nachladen: holt echte Patronen aus dem Inventar.
+## Ein halb gefuelltes Magazin ist ein gueltiges Ergebnis.
+func try_reload() -> int:
+	if weapon == null or inventory == null or weapon.data == null:
+		return 0
+	var needed := weapon.get_missing_rounds()
+	if needed <= 0:
+		return 0
+	var available := inventory.take_ammo(weapon.ammo_id, needed)
+	return weapon.load_rounds(available)
+
+
+## Wechselt die geladene Munitionssorte. Die noch im Magazin steckenden
+## Patronen wandern zurueck ins Inventar, statt zu verschwinden.
+func switch_ammo(new_ammo_id: StringName) -> bool:
+	if weapon == null or inventory == null or weapon.data == null:
+		return false
+	var candidate := ItemRegistry.get_item(new_ammo_id) as AmmoData
+	if candidate == null or not weapon.data.accepts_ammo(candidate):
+		return false
+
+	if weapon.rounds_in_magazine > 0 and weapon.ammo_id != new_ammo_id:
+		inventory.add(weapon.ammo_id, weapon.rounds_in_magazine)
+		weapon.rounds_in_magazine = 0
+
+	weapon.setup(weapon.weapon_id, new_ammo_id)
+	try_reload()
+	return true
 
 
 ## Rückstoß hebt die Kamera an. Der Aufschlag ist sofort, die Erholung
@@ -154,7 +219,7 @@ func _handle_weapon_input() -> void:
 	if Input.is_action_just_pressed("fire_mode"):
 		weapon.cycle_fire_mode()
 	if Input.is_action_just_pressed("reload"):
-		weapon.reload()
+		try_reload()
 	if Input.is_action_just_released("fire"):
 		weapon.release_trigger()
 

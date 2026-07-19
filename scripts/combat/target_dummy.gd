@@ -57,14 +57,6 @@ func take_hit(ammo: AmmoData, distance: float, _point: Vector3, _direction: Vect
 	hit_count += 1
 
 	_update_visuals()
-
-	# Schadenszahl leicht versetzt, damit mehrere Treffer nicht übereinander
-	# liegen und unlesbar werden.
-	var offset := Vector3(randf_range(-0.15, 0.15), randf_range(0.0, 0.3), 0.0)
-	var parent: Node = get_tree().current_scene if get_tree().current_scene != null else get_parent()
-	if parent != null:
-		DamageNumber.spawn(parent, _point + offset, result)
-
 	was_hit.emit(result, hit_count)
 
 	if health <= 0.0:

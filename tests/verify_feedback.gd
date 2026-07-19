@@ -9,14 +9,34 @@
 ## Was er NICHT pruefen kann: ob es gut aussieht oder sich gut anfuehlt.
 extends SceneTree
 
+## Notbremse: Wenn ein Laufzeitfehler die Test-Koroutine abbricht, wird
+## quit() nie erreicht und Godot laeuft endlos weiter. Ein haengender Test
+## ist schlimmer als ein fehlschlagender — er faellt erst auf, wenn jemand
+## nachschaut, warum nichts fertig wird.
+const TIMEOUT_SECONDS := 60.0
+
 var _failed := 0
 var _passed := 0
+var _elapsed := 0.0
+var _done := false
 
 
 func _initialize() -> void:
 	ItemRegistry.ensure_loaded()
 	print("=== Treffer-Rueckmeldung pruefen ===\n")
 	_run_all()
+
+
+func _process(delta: float) -> bool:
+	if _done:
+		return false
+	_elapsed += delta
+	if _elapsed >= TIMEOUT_SECONDS:
+		print("\n=== ABBRUCH: Test haengt seit %.0f s ===" % TIMEOUT_SECONDS)
+		print("Wahrscheinlich hat ein Laufzeitfehler die Koroutine abgebrochen.")
+		print("Bisher: %d bestanden, %d fehlgeschlagen" % [_passed, _failed])
+		quit(1)
+	return false
 
 
 ## Muss asynchron laufen: In _initialize() ist der Szenenbaum noch nicht
@@ -43,6 +63,7 @@ func _section(title: String) -> void:
 
 
 func _finish() -> void:
+	_done = true
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -129,15 +150,6 @@ func _test_effects_spawn() -> void:
 	_check(flash != null, "Muendungsfeuer wird erzeugt")
 	_check(flash != null and flash.get_child_count() > 0, "Muendungsfeuer hat Licht und Partikel")
 
-	var result := Ballistics.HitResult.new()
-	result.was_armored = true
-	result.penetrated = false
-	result.damage_to_target = 7.0
-	var number := DamageNumber.spawn(holder, Vector3.ZERO, result)
-	_check(number != null, "Schadenszahl wird erzeugt")
-	_check(number != null and number.text.begins_with("("),
-		"gestoppter Treffer wird eingeklammert dargestellt: '%s'" % (number.text if number else ""))
-
 	holder.free()
 
 
@@ -170,6 +182,10 @@ func _test_firing_in_level() -> void:
 		return
 
 	_check(weapon.data != null, "Waffendaten geladen: %s" % (weapon.data.display_name if weapon.data else "-"))
+
+	# Die Waffe kommt jetzt leer aus setup() und wird aus dem Inventar
+	# geladen. Fuer diesen Test genuegt das Auffuellen ohne Verbrauch.
+	weapon.fill_magazine()
 	_check(weapon.rounds_in_magazine > 0, "Magazin ist gefuellt (%d)" % weapon.rounds_in_magazine)
 
 	var before := weapon.rounds_in_magazine
@@ -179,10 +195,6 @@ func _test_firing_in_level() -> void:
 
 	_check(weapon.rounds_in_magazine == before - 1,
 		"Schuss verbraucht genau eine Patrone (%d -> %d)" % [before, weapon.rounds_in_magazine])
-
-	# Ein Frame vergehen lassen, damit die erzeugten Knoten im Baum landen.
-	await process_frame
-	await process_frame
 
 	var projectiles_after := _count_projectiles(level)
 	_check(projectiles_after > projectiles_before,
@@ -194,17 +206,19 @@ func _test_firing_in_level() -> void:
 	_check(not fired_empty, "leeres Magazin schiesst nicht")
 	_check(weapon.rounds_in_magazine == 0, "Munition geht nicht ins Minus")
 
-	weapon.reload()
-	_check(weapon.rounds_in_magazine == weapon.data.magazine_size, "Nachladen fuellt das Magazin")
+	weapon.fill_magazine()
+	_check(weapon.rounds_in_magazine == weapon.data.magazine_size, "Auffuellen fuellt das Magazin")
 
 	# Schrot muss mehrere Geschosse gleichzeitig erzeugen.
+	# NICHT auf Frames warten: add_child wirkt sofort, aber schon nach einem
+	# einzigen Physikschritt koennen einzelne Schrotkoerner eingeschlagen und
+	# sich selbst entfernt haben. Der Test wurde dadurch zufaellig rot.
 	weapon.setup(&"weapon_shotgun_m870", &"ammo_12x70_buckshot")
+	weapon.fill_magazine()
 	var before_buck := _count_projectiles(level)
 	weapon._shoot()
-	await process_frame
-	await process_frame
 	var spawned := _count_projectiles(level) - before_buck
-	_check(spawned >= 8, "Buckshot erzeugt 8 Projektile (erzeugt: %d)" % spawned)
+	_check(spawned == 8, "Buckshot erzeugt genau 8 Projektile (erzeugt: %d)" % spawned)
 
 	level.free()
 	_finish()

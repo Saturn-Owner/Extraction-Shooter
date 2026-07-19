@@ -1,7 +1,8 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/combat/weapon.gd" id="2_weapon"]
+[ext_resource type="Script" path="res://scripts/player/player_inventory.gd" id="3_inventory"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.35
@@ -15,6 +16,9 @@ script = ExtResource("1_player")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_body")
+
+[node name="Inventory" type="Node" parent="."]
+script = ExtResource("3_inventory")
 
 [node name="CameraPivot" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 0)
