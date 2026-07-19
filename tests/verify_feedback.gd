@@ -51,6 +51,7 @@ func _run_all() -> void:
 	_test_reload_sounds_are_wired()
 	await _test_sounds_do_not_cut_each_other()
 	await _test_empty_weapon_clicks_once()
+	_test_tracer_and_bullet_holes()
 	await _test_effects_spawn()
 	await _test_firing_in_level()
 
@@ -523,3 +524,63 @@ func _test_empty_weapon_clicks_once() -> void:
 	_check(clicks[0] == 2, "nach dem Loslassen klickt es wieder (%d)" % clicks[0])
 
 	weapon.queue_free()
+
+
+## Leuchtspur und Einschussloecher.
+##
+## Beides ist reine Rueckmeldung - aber genau deshalb faellt es nicht auf,
+## wenn es fehlt: Es knallt trotzdem, es trifft trotzdem. Man merkt nur, dass
+## sich das Schiessen "flach" anfuehlt, ohne sagen zu koennen warum.
+func _test_tracer_and_bullet_holes() -> void:
+	_section("Leuchtspur und Einschussloecher")
+
+	# --- Leuchtspur ---
+	var ammo := ItemRegistry.get_item(&"ammo_556x45_m855a1") as AmmoData
+	var projectile: Projectile = load("res://scenes/combat/projectile.tscn").instantiate()
+	root.add_child(projectile)
+	projectile.launch(ammo, Vector3.ZERO, Vector3.FORWARD, 900.0)
+
+	var streak := projectile.get_node_or_null("Leuchtspur") as MeshInstance3D
+	_check(streak != null, "das Geschoss hat eine Leuchtspur")
+	if streak != null:
+		var mesh := streak.mesh as BoxMesh
+		_check(mesh != null and mesh.size.z > 0.3, "die Spur hat Laenge (%.2f m)"
+			% (mesh.size.z if mesh else 0.0))
+		# Sie muss HINTER der Kugel haengen, nicht davor. -Z ist Flugrichtung.
+		_check(streak.position.z > 0.0, "die Spur haengt nach, statt vorauszulaufen")
+
+	# Ein langsames Geschoss zieht einen kuerzeren Strich.
+	var slow: Projectile = load("res://scenes/combat/projectile.tscn").instantiate()
+	root.add_child(slow)
+	slow.launch(ammo, Vector3.ZERO, Vector3.FORWARD, 300.0)
+	var slow_streak := slow.get_node_or_null("Leuchtspur") as MeshInstance3D
+	if streak != null and slow_streak != null:
+		_check((slow_streak.mesh as BoxMesh).size.z < (streak.mesh as BoxMesh).size.z,
+			"langsame Munition zieht eine kuerzere Spur")
+
+	projectile.queue_free()
+	slow.queue_free()
+
+	# --- Einschussloecher ---
+	BulletHole.clear_all()
+	var holder := Node3D.new()
+	root.add_child(holder)
+
+	var hole := BulletHole.spawn(holder, Vector3(1.0, 2.0, 3.0), Vector3.UP)
+	_check(hole != null, "ein Einschussloch entsteht")
+	_check(hole != null and hole.texture_albedo != null, "es hat eine Textur")
+
+	# Die Obergrenze ist der eigentliche Punkt: Ohne sie wird das Bild im
+	# Laufe eines Gefechts immer zaeher, und niemand kaeme auf die Loecher.
+	for i in range(BulletHole.MAX_HOLES + 25):
+		BulletHole.spawn(holder, Vector3(float(i) * 0.1, 0.0, 0.0), Vector3.UP)
+
+	var alive := 0
+	for child in holder.get_children():
+		if child is BulletHole and not (child as BulletHole).is_queued_for_deletion():
+			alive += 1
+	_check(alive <= BulletHole.MAX_HOLES,
+		"nie mehr als %d Loecher gleichzeitig (%d)" % [BulletHole.MAX_HOLES, alive])
+
+	BulletHole.clear_all()
+	holder.queue_free()

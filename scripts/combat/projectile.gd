@@ -26,6 +26,13 @@ const MAX_LIFETIME := 8.0
 ## Ab dieser Geschwindigkeit ist das Geschoss wirkungslos.
 const MIN_VELOCITY := 40.0
 
+## Dicke der Leuchtspur in Metern. Bewusst duenn - eine dicke Spur sieht aus
+## wie ein Laserstrahl, nicht wie eine Kugel.
+const TRACER_WIDTH := 0.012
+
+## Farbe der Leuchtspur. Blass und leicht warm, nicht signalrot.
+const TRACER_COLOR := Color(1.0, 0.78, 0.42, 0.35)
+
 var ammo: AmmoData
 var shooter: Node = null
 
@@ -46,6 +53,56 @@ func launch(p_ammo: AmmoData, from: Vector3, direction: Vector3, speed: float,
 	global_position = from
 	_start_position = from
 	_velocity = direction.normalized() * speed
+	_build_tracer(speed)
+
+
+## Leuchtspur. Sie zeigt, wohin die Kugel wirklich geht.
+##
+## ---------------------------------------------------------------------------
+## WARUM SIE SO KURZ UND SCHWACH IST
+##
+## Eine helle, lange Spur an jedem Geschoss waere ein Verrat: Jeder Schuss
+## wuerde die Stellung des Schuetzen quer ueber die Karte anzeigen. In einem
+## Extraction-Shooter ist genau das eine Entscheidung, die der Spieler ueber
+## seine Munition treffen soll - und nicht der Standard.
+##
+## Die Spur hier ist deshalb kurz und blass. Sie reicht, um die eigene
+## Flugbahn und den Vorhalt auf Distanz zu sehen, taugt aber nicht dazu,
+## einen Schuetzen auf 200 m zu orten.
+##
+## Die Laenge haengt an der Geschossgeschwindigkeit: Ein langsames
+## Pistolengeschoss zieht einen kuerzeren Strich als ein schnelles
+## Gewehrgeschoss, weil es pro Bild weniger Strecke macht.
+func _build_tracer(speed: float) -> void:
+	# Faktor so gewaehlt, dass ein Gewehrgeschoss (900 m/s) rund 1,6 m zieht
+	# und ein Pistolengeschoss (350 m/s) gut ein halbes Meter. Mit dem
+	# vorherigen Faktor lagen beide am oberen Anschlag und waren gleich lang -
+	# der Unterschied zwischen den Kalibern war damit unsichtbar.
+	var length := clampf(speed * 0.0018, 0.30, 1.80)
+
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(TRACER_WIDTH, TRACER_WIDTH, length)
+
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	material.albedo_color = TRACER_COLOR
+	material.disable_receive_shadows = true
+	# Nicht in den Tiefenpuffer schreiben, sonst schneidet die Spur sichtbare
+	# Kanten in alles, was dahinter liegt.
+	material.no_depth_test = false
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_DISABLED
+
+	var streak := MeshInstance3D.new()
+	streak.name = "Leuchtspur"
+	streak.mesh = mesh
+	streak.material_override = material
+	streak.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Nach hinten versetzt: Die Spur haengt der Kugel nach, sie laeuft ihr
+	# nicht voraus.
+	streak.position = Vector3(0.0, 0.0, length * 0.5)
+	add_child(streak)
 
 
 func _physics_process(delta: float) -> void:
@@ -119,6 +176,12 @@ func _spawn_impact(point: Vector3, normal: Vector3, result: Ballistics.HitResult
 		kind = ImpactEffect.Kind.FLESH
 
 	ImpactEffect.spawn(scene, point, normal, kind)
+
+	# Ein Loch bleibt nur, wo etwas Festes getroffen wurde. In Fleisch waere
+	# es falsch, und auf einer Platte hinterlaesst eine abgefangene Kugel
+	# eine Delle, kein Durchschussloch - beides zeigen schon die Funken.
+	if kind == ImpactEffect.Kind.WORLD:
+		BulletHole.spawn(scene, point, normal)
 
 
 ## Reicht den Treffer an das Ziel weiter, falls es Schaden nehmen kann.
