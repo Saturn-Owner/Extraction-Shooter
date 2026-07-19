@@ -46,6 +46,8 @@ func _run_all() -> void:
 
 	_test_audio_generation()
 	_test_real_recordings()
+	_test_suppressor_changes_the_sound_in_hand()
+	_test_recordings_start_immediately()
 	await _test_effects_spawn()
 	await _test_firing_in_level()
 
@@ -320,3 +322,72 @@ func _test_shot_hits_the_crosshair(player: PlayerController, weapon: Weapon) -> 
 	var parallel_miss := (origin + look * distance).distance_to(aim_point)
 	_check(parallel_miss > miss,
 		"parallel geschossen wuerde um %.2f m danebengehen" % parallel_miss)
+
+
+## Der Schalldaempfer muss den Klang IN DER HAND aendern, nicht nur in der
+## Nachschlagetabelle.
+##
+## Genau hier war der Fehler: rebuild() rechnete die Werte neu, liess aber
+## _shot_sound aus setup() stehen. Man schraubte an der Werkbank den Daempfer
+## an, sah ihn am Lauf und hoerte weiter den vollen Knall.
+func _test_suppressor_changes_the_sound_in_hand() -> void:
+	_section("Der Daempfer aendert den Klang in der Hand")
+
+	var weapon := Weapon.new()
+	weapon.setup(&"weapon_rifle_ar15", &"ammo_556x45_m855a1")
+	var loud := weapon._shot_sound
+	_check(loud != null, "ungedaempft liegt ein Schuss-Sound bereit")
+
+	weapon.build.set_attachment(AttachmentData.Slot.MUZZLE, &"ar15_muzzle_suppressor")
+	weapon.rebuild()
+
+	_check(weapon._shot_sound != null and weapon._shot_sound != loud,
+		"nach dem Anbau klingt die Waffe anders (%s)"
+			% (weapon._shot_sound.resource_path if weapon._shot_sound else "nichts"))
+
+	weapon.build.clear_slot(AttachmentData.Slot.MUZZLE)
+	weapon.rebuild()
+	_check(weapon._shot_sound == loud, "abgenommen klingt sie wieder wie vorher")
+
+	weapon.free()
+
+
+## Aufnahmen muessen sofort losgehen und duerfen nicht uebersteuern.
+##
+## Fuehrende Stille war ein echtes Problem: Zwei der gelieferten Dateien
+## hatten 0,3 bzw. 0,9 Sekunden davor. Der Schuss waere also erst deutlich
+## nach dem Mausklick zu hoeren gewesen.
+func _test_recordings_start_immediately() -> void:
+	_section("Aufnahmen fangen sofort an")
+
+	for path in [
+		"res://assets/audio/weapons/weapon_rifle_ar15.wav",
+		"res://assets/audio/weapons/ar15/schuss_gedaempft.wav",
+		"res://assets/audio/weapons/ar15/schuss_innen.wav",
+		"res://assets/audio/weapons/ar15/schuss_fern.wav",
+	]:
+		var stream := load(path) as AudioStreamWAV
+		if stream == null:
+			_check(false, "%s laedt" % path.get_file())
+			continue
+
+		var start := _first_loud_sample(stream)
+		_check(start >= 0 and start < 0.05,
+			"%s beginnt bei %.3f s" % [path.get_file(), start])
+
+
+## Wann wird die Aufnahme zum ersten Mal hoerbar laut?
+func _first_loud_sample(stream: AudioStreamWAV) -> float:
+	var bytes := stream.data
+	var frames := bytes.size() / 2
+	for i in range(mini(frames, stream.mix_rate)):
+		var lo := bytes[i * 2]
+		var hi := bytes[i * 2 + 1]
+		var value := (hi << 8) | lo
+		if value >= 32768:
+			value -= 65536
+		# 5 % vom Vollausschlag: deutlich ueber Grundrauschen, deutlich unter
+		# dem, was ein Schuss erreicht.
+		if absi(value) > 1638:
+			return float(i) / float(stream.mix_rate)
+	return -1.0

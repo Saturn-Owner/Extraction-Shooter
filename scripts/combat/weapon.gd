@@ -377,6 +377,10 @@ func rebuild() -> void:
 	if base_data == null:
 		return
 	data = WeaponBuild.apply(base_data, build)
+	# DEN KLANG MITZIEHEN. Ohne diese Zeile schraubt man an der Werkbank
+	# einen Schalldaempfer an, sieht ihn am Lauf — und hoert weiter den
+	# ungedaempften Knall, weil _shot_sound aus setup() stehenbleibt.
+	_shot_sound = WeaponAudio.get_gunshot(data)
 	weapon_changed.emit(data)
 
 
@@ -391,6 +395,7 @@ func equip_without_ammo(new_data: WeaponData) -> void:
 		return
 	base_data = new_data
 	data = WeaponBuild.apply(base_data, build)
+	_shot_sound = WeaponAudio.get_gunshot(data)
 	weapon_id = new_data.id
 	loaded_ammo = null
 	rounds_in_magazine = 0
