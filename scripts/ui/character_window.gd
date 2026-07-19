@@ -4,17 +4,22 @@
 ## AUFBAU (nach dem Vorbild aus Arena Breakout)
 ##
 ##   Reiter oben     Ausrüstung  |  Gesundheit
-##   Mitte           die Figur, links und rechts davon die Ausrüstungsplätze
+##   Mitte           die Figur, links und rechts davon die Ausrüstungsplätze,
+##                   daneben das Rasterinventar
 ##   unten           Trefferpunkte, Energie, Wasser, Gewicht, Wärme
+##
+## Es gibt genau EIN Fenster dafür, und es liegt auf Tab. Ausrüstung, Zustand
+## und Rucksack gehören zusammen — wer im Raid nachsieht, was er dabeihat,
+## will meist auch wissen, wie es ihm geht.
 ##
 ## Beide Reiter zeigen DIESELBE Figur, nur unterschiedlich eingefärbt:
 ## unter "Ausrüstung" neutral grau, unter "Gesundheit" nach Zustand von Grün
 ## bis Rot. Eine Zeichenroutine, zwei Bedeutungen — und der Spieler sieht
 ## sofort, dass es derselbe Körper ist.
 ##
-## Die Figur ist selbst gezeichnet, kein 3D-Modell: Sieben Flächen genügen,
-## um Kopf, Rumpf, Arme und Beine zu unterscheiden. Ein richtiges Modell
-## kommt, wenn es Charaktermodelle gibt.
+## Die Figur ist selbst gezeichnet, kein 3D-Modell: sieben Umrisse, die
+## aneinanderstossen und zusammen eine menschliche Silhouette ergeben. Ein
+## richtiges Modell kommt, wenn es Charaktermodelle gibt.
 class_name CharacterWindow
 extends Control
 
@@ -60,6 +65,20 @@ var player: PlayerController = null
 var _tab: Tab = Tab.AUSRUESTUNG
 var _selected: HealthSystem.Part = HealthSystem.Part.CHEST
 
+# --- Ziehen im Raster (vormals das eigene Inventarfenster) ------------------
+var _drag_stack: ItemStack = null
+var _drag_offset: Vector2i = Vector2i.ZERO
+var _drag_target_cell: Vector2i = Vector2i(-1, -1)
+
+## Ob beim Anfassen Strg gedrueckt war — dann wird nach der Menge gefragt.
+var _drag_ctrl: bool = false
+
+var _split_stack: ItemStack = null
+var _split_cell: Vector2i = Vector2i(-1, -1)
+
+## Wie der Gegenstand lag, bevor er angefasst wurde — siehe LootWindow.
+var _drag_original_rotated: bool = false
+
 ## Slot -> der Knopf, der ihn darstellt.
 var _slot_buttons: Dictionary = {}
 
@@ -75,6 +94,9 @@ var _slot_buttons: Dictionary = {}
 @onready var _inventory_title: Label = $Layout/Inhalt/Mitte/Inventar/Titel
 @onready var _stats: HBoxContainer = $Layout/Inhalt/Werte
 @onready var _effects: Label = $Layout/Inhalt/Auswirkung
+@onready var _ghost: DragGhost = $DragGhost
+@onready var _split_prompt: SplitPrompt = $SplitPrompt
+@onready var _tooltip: ItemTooltip = $ItemTooltip
 
 
 func _ready() -> void:
@@ -83,6 +105,15 @@ func _ready() -> void:
 	_figure.gui_input.connect(_on_figure_input)
 	_tab_equipment.pressed.connect(_switch_tab.bind(Tab.AUSRUESTUNG))
 	_tab_health.pressed.connect(_switch_tab.bind(Tab.GESUNDHEIT))
+
+	# cell_released bleibt ungenutzt — siehe LootWindow: das Loslassen geht
+	# immer an das Control, auf dem gedrueckt wurde.
+	_inventory_view.item_pressed.connect(_on_item_pressed)
+	_inventory_view.item_double_clicked.connect(_on_item_double_clicked)
+	_inventory_view.item_hovered.connect(_on_item_hovered)
+	_split_prompt.confirmed.connect(_on_split_confirmed)
+	_split_prompt.cancelled.connect(_on_split_cancelled)
+
 	_build_slots()
 	_switch_tab(Tab.AUSRUESTUNG)
 
@@ -99,6 +130,11 @@ func open_for(p_player: PlayerController) -> void:
 
 
 func close() -> void:
+	if _split_prompt != null and _split_prompt.is_open():
+		_split_prompt.cancel()
+	if _tooltip != null:
+		_tooltip.clear()
+	_cancel_drag()
 	hide()
 	closed.emit()
 
@@ -108,11 +144,25 @@ func is_open() -> bool:
 
 
 func _process(_delta: float) -> void:
-	if visible and player != null:
+	if not visible:
+		return
+
+	if _drag_stack != null:
+		_update_drag_target()
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			drop_at(_drag_target_cell)
+
+	if player != null:
 		_refresh()
 
 
 func _switch_tab(tab: Tab) -> void:
+	# Das Raster verschwindet gleich — ein Gegenstand darf nicht am Zeiger
+	# haengen bleiben, wenn das Feld darunter nicht mehr da ist.
+	_cancel_drag()
+	if _tooltip != null:
+		_tooltip.clear()
+
 	_tab = tab
 	_tab_equipment.button_pressed = tab == Tab.AUSRUESTUNG
 	_tab_health.button_pressed = tab == Tab.GESUNDHEIT
@@ -241,21 +291,68 @@ func _refresh_slots() -> void:
 # Die Figur
 # ---------------------------------------------------------------------------
 
-## Wo die Körperteile liegen, in Anteilen der Zeichenfläche.
-const BODY_RECTS := {
-	HealthSystem.Part.HEAD: Rect2(0.38, 0.02, 0.24, 0.13),
-	HealthSystem.Part.CHEST: Rect2(0.30, 0.17, 0.40, 0.22),
-	HealthSystem.Part.STOMACH: Rect2(0.32, 0.40, 0.36, 0.16),
-	HealthSystem.Part.LEFT_ARM: Rect2(0.11, 0.17, 0.17, 0.34),
-	HealthSystem.Part.RIGHT_ARM: Rect2(0.72, 0.17, 0.17, 0.34),
-	HealthSystem.Part.LEFT_LEG: Rect2(0.30, 0.58, 0.18, 0.40),
-	HealthSystem.Part.RIGHT_LEG: Rect2(0.52, 0.58, 0.18, 0.40),
+## Die Umrisse der Körperteile, in Anteilen der Zeichenfläche.
+##
+## Vorher waren das sieben Rechtecke — verständlich, aber es sah aus wie ein
+## Bauplan, nicht wie ein Mensch. Die Flächen stossen bewusst aneinander:
+## Zwischen Brust und Bauch soll keine Lücke klaffen, sonst zerfällt der
+## Körper optisch in Einzelteile.
+##
+## Links und rechts sind aus SICHT DES SPIELERS gemeint, also gespiegelt zum
+## Bild — die Figur schaut einen an. Ein Treffer am linken Arm leuchtet damit
+## rechts im Fenster auf, so wie im Spiegel.
+const BODY_SHAPES := {
+	HealthSystem.Part.HEAD: [
+		Vector2(0.445, 0.020), Vector2(0.555, 0.020), Vector2(0.585, 0.055),
+		Vector2(0.575, 0.105), Vector2(0.540, 0.130), Vector2(0.540, 0.152),
+		Vector2(0.460, 0.152), Vector2(0.460, 0.130), Vector2(0.425, 0.105),
+		Vector2(0.415, 0.055),
+	],
+	HealthSystem.Part.CHEST: [
+		Vector2(0.460, 0.150), Vector2(0.540, 0.150), Vector2(0.680, 0.200),
+		Vector2(0.700, 0.245), Vector2(0.672, 0.400), Vector2(0.328, 0.400),
+		Vector2(0.300, 0.245), Vector2(0.320, 0.200),
+	],
+	HealthSystem.Part.STOMACH: [
+		Vector2(0.328, 0.400), Vector2(0.672, 0.400), Vector2(0.660, 0.505),
+		Vector2(0.640, 0.560), Vector2(0.360, 0.560), Vector2(0.340, 0.505),
+	],
+	HealthSystem.Part.RIGHT_ARM: [
+		Vector2(0.320, 0.200), Vector2(0.300, 0.245), Vector2(0.328, 0.400),
+		Vector2(0.315, 0.470), Vector2(0.290, 0.560), Vector2(0.205, 0.545),
+		Vector2(0.215, 0.400), Vector2(0.230, 0.250),
+	],
+	HealthSystem.Part.LEFT_ARM: [
+		Vector2(0.680, 0.200), Vector2(0.770, 0.250), Vector2(0.785, 0.400),
+		Vector2(0.795, 0.545), Vector2(0.710, 0.560), Vector2(0.685, 0.470),
+		Vector2(0.672, 0.400), Vector2(0.700, 0.245),
+	],
+	HealthSystem.Part.RIGHT_LEG: [
+		Vector2(0.360, 0.560), Vector2(0.496, 0.560), Vector2(0.496, 0.760),
+		Vector2(0.470, 0.940), Vector2(0.475, 0.985), Vector2(0.375, 0.985),
+		Vector2(0.372, 0.940), Vector2(0.348, 0.760),
+	],
+	HealthSystem.Part.LEFT_LEG: [
+		Vector2(0.504, 0.560), Vector2(0.640, 0.560), Vector2(0.652, 0.760),
+		Vector2(0.628, 0.940), Vector2(0.625, 0.985), Vector2(0.525, 0.985),
+		Vector2(0.530, 0.940), Vector2(0.504, 0.760),
+	],
 }
 
 
-func _rect_for(part: HealthSystem.Part) -> Rect2:
-	var r: Rect2 = BODY_RECTS[part]
-	return Rect2(r.position * _figure.size, r.size * _figure.size)
+func _poly_for(part: HealthSystem.Part) -> PackedVector2Array:
+	var scaled := PackedVector2Array()
+	for point: Vector2 in BODY_SHAPES[part]:
+		scaled.append(point * _figure.size)
+	return scaled
+
+
+## Der Mittelpunkt einer Fläche — dorthin kommt die Zahl.
+func _center_of(poly: PackedVector2Array) -> Vector2:
+	var sum := Vector2.ZERO
+	for point: Vector2 in poly:
+		sum += point
+	return sum / maxf(1.0, float(poly.size()))
 
 
 func _draw_figure() -> void:
@@ -265,8 +362,8 @@ func _draw_figure() -> void:
 	var font := ThemeDB.fallback_font
 	var show_health := _tab == Tab.GESUNDHEIT
 
-	for part in BODY_RECTS:
-		var rect := _rect_for(part)
+	for part: HealthSystem.Part in BODY_SHAPES:
+		var poly := _poly_for(part)
 		var ratio := player.health.get_ratio(part)
 
 		# Unter "Ausruestung" neutral, unter "Gesundheit" nach Zustand.
@@ -275,18 +372,20 @@ func _draw_figure() -> void:
 		var fill := COLOR_NEUTRAL
 		if show_health or ratio <= 0.0:
 			fill = _color_for(ratio)
-		_figure.draw_rect(rect, fill)
+		_figure.draw_colored_polygon(poly, fill)
 
 		var selected: bool = show_health and part == _selected
-		_figure.draw_rect(rect, COLOR_SELECTED if selected else COLOR_OUTLINE,
-			false, 2.0 if selected else 1.0)
+		var outline := poly.duplicate()
+		outline.append(poly[0])
+		_figure.draw_polyline(outline, COLOR_SELECTED if selected else COLOR_OUTLINE,
+			2.0 if selected else 1.0, true)
 
 		if not show_health:
 			continue
 
 		var text := "%d" % roundi(player.health.get_hp(part))
 		var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-		var pos := rect.position + Vector2((rect.size.x - width) * 0.5, rect.size.y * 0.5 + 4.0)
+		var pos := _center_of(poly) + Vector2(-width * 0.5, 4.0)
 		_figure.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 			Color(0.95, 0.96, 0.97) if ratio > 0.0 else Color(0.62, 0.24, 0.20))
 
@@ -306,8 +405,8 @@ func _on_figure_input(event: InputEvent) -> void:
 	if button == null or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT:
 		return
 
-	for part in BODY_RECTS:
-		if _rect_for(part).has_point(button.position):
+	for part: HealthSystem.Part in BODY_SHAPES:
+		if Geometry2D.is_point_in_polygon(button.position, _poly_for(part)):
 			_selected = part
 			_figure.queue_redraw()
 			return
@@ -455,3 +554,174 @@ func _describe_condition() -> String:
 			notes.append("Erfrierungen:  Schaden an Armen und Beinen")
 
 	return "\n".join(notes)
+
+
+# ---------------------------------------------------------------------------
+# Das Raster: Ziehen, Drehen, Stapel teilen
+#
+# Das stand frueher in einem eigenen Inventarfenster auf Taste C. Es gibt
+# jetzt nur noch dieses eine Fenster auf Tab — zwei Fenster fuer denselben
+# Rucksack waren eine Frage zu viel beim Oeffnen.
+# ---------------------------------------------------------------------------
+
+func _on_item_hovered(stack: ItemStack, _source: InventoryGridView) -> void:
+	if stack == null or _drag_stack != null:
+		_tooltip.clear()
+		return
+	_tooltip.show_for(stack)
+
+
+func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
+	if _split_prompt.is_open():
+		return
+
+	_drag_stack = stack
+	_drag_ctrl = Input.is_key_pressed(KEY_CTRL)
+	_drag_original_rotated = stack.rotated
+	_tooltip.clear()
+
+	var origin := view.grid.get_position(stack.instance_id)
+	var local := view.get_local_mouse_position()
+	var grabbed := view.position_to_cell(local)
+	_drag_offset = grabbed - origin if grabbed.x >= 0 and origin.x >= 0 else Vector2i.ZERO
+	var pixel_offset := local - view.cell_to_position(origin) if origin.x >= 0 else Vector2.ZERO
+
+	_ghost.show_stack(stack, pixel_offset)
+	_inventory_view.drag_stack = stack
+	_inventory_view.drag_source = view
+	_inventory_view.preview_cell = Vector2i(-1, -1)
+	_inventory_view.queue_redraw()
+
+
+func _update_drag_target() -> void:
+	_drag_target_cell = Vector2i(-1, -1)
+	if _inventory_view.get_global_rect().has_point(get_global_mouse_position()):
+		var cell := _inventory_view.position_to_cell(_inventory_view.get_local_mouse_position())
+		if cell.x >= 0:
+			_drag_target_cell = cell - _drag_offset
+	_inventory_view.preview_cell = _drag_target_cell
+	_inventory_view.queue_redraw()
+
+
+func drop_at(cell: Vector2i) -> void:
+	if _drag_stack == null:
+		return
+	if cell.x < 0 or cell.y < 0:
+		_cancel_drag()
+		return
+
+	# Mit Strg wird nach der Menge gefragt, statt alles zu verschieben.
+	if _drag_ctrl and _drag_stack.quantity > 1:
+		_split_stack = _drag_stack
+		_split_cell = cell
+		var data := _split_stack.get_data()
+		_split_prompt.ask(
+			data.display_name if data != null else "Aufteilen",
+			_split_stack.quantity,
+			get_global_mouse_position()
+		)
+		_cancel_drag()
+		return
+
+	# Auf einen passenden Stapel drauflegen, statt am belegten Feld zu scheitern.
+	var moved := false
+	var existing := _inventory_view.grid.get_stack_at(cell.x, cell.y)
+	if existing != null and existing.can_merge_with(_drag_stack):
+		existing.merge_from(_drag_stack)
+		if _drag_stack.quantity <= 0:
+			_inventory_view.grid.remove_item(_drag_stack.instance_id)
+		_inventory_view.grid.changed.emit()
+		moved = true
+	else:
+		moved = _inventory_view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
+
+	# Nur ein wirklich umgezogener Gegenstand behaelt seine neue Lage.
+	if moved:
+		_drag_original_rotated = _drag_stack.rotated
+
+	_cancel_drag()
+
+
+func _on_split_confirmed(amount: int) -> void:
+	var stack := _split_stack
+	var cell := _split_cell
+	_split_stack = null
+	_split_cell = Vector2i(-1, -1)
+
+	if stack == null or amount >= stack.quantity:
+		return
+
+	var part := stack.split(amount)
+	if part == null:
+		return
+
+	var leftover := _inventory_view.grid.place_or_merge(part, cell.x, cell.y)
+	if leftover != null:
+		# Passte nicht: zurueck auf den Ursprungsstapel, nichts geht verloren.
+		stack.quantity += leftover.quantity
+		return
+
+	_inventory_view.queue_redraw()
+
+
+func _on_split_cancelled() -> void:
+	_split_stack = null
+	_split_cell = Vector2i(-1, -1)
+
+
+## Doppelklick nimmt eine Waffe in die Hand — sie wandert dabei auf den
+## freien Waffenplatz. Bei allem anderen passiert bewusst nichts: ein
+## versehentliches Wegwerfen im Raid waere fatal.
+func _on_item_double_clicked(stack: ItemStack, _source: InventoryGridView) -> void:
+	if player == null:
+		return
+	var data := stack.get_data()
+	if data == null or data.category != ItemData.Category.WEAPON:
+		return
+	player.equip_from_inventory(stack)
+	_refresh()
+
+
+## R dreht den Gegenstand, der gerade am Zeiger haengt.
+##
+## Frueher drehte R den Gegenstand AN ORT UND STELLE. Das scheiterte fast
+## immer, weil quer genau dort selten Platz ist. Jetzt dreht sich nur die
+## Anzeige am Zeiger, geprueft wird erst beim Ablegen.
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not visible or _drag_stack == null:
+		return
+	var key := event as InputEventKey
+	if key == null or not key.is_pressed() or key.is_echo():
+		return
+	if key.physical_keycode != KEY_R:
+		return
+
+	var data := _drag_stack.get_data()
+	if data == null or not data.can_rotate:
+		return
+
+	_drag_stack.rotated = not _drag_stack.rotated
+	_drag_offset = Vector2i(_drag_offset.y, _drag_offset.x)
+	_ghost.grab_offset = Vector2(_ghost.grab_offset.y, _ghost.grab_offset.x)
+	_update_drag_target()
+	get_viewport().set_input_as_handled()
+
+
+func _cancel_drag() -> void:
+	# Nicht abgelegt: Er liegt noch auf seinem alten Platz und muss wieder
+	# so herum liegen wie vorher.
+	if _drag_stack != null and _drag_stack.rotated != _drag_original_rotated:
+		_drag_stack.rotated = _drag_original_rotated
+
+	_drag_stack = null
+	_drag_offset = Vector2i.ZERO
+	_drag_target_cell = Vector2i(-1, -1)
+	_drag_ctrl = false
+	if _ghost != null:
+		_ghost.clear()
+	if _inventory_view != null:
+		_inventory_view.drag_stack = null
+		_inventory_view.drag_source = null
+		_inventory_view.preview_cell = Vector2i(-1, -1)
+		_inventory_view.queue_redraw()
+

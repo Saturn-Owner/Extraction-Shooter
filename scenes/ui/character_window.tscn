@@ -1,7 +1,10 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/character_window.gd" id="1_character"]
 [ext_resource type="Script" path="res://scripts/ui/inventory_grid_view.gd" id="2_grid_view"]
+[ext_resource type="Script" path="res://scripts/ui/drag_ghost.gd" id="3_drag_ghost"]
+[ext_resource type="PackedScene" path="res://scenes/ui/split_prompt.tscn" id="4_split_prompt"]
+[ext_resource type="PackedScene" path="res://scenes/ui/item_tooltip.tscn" id="5_item_tooltip"]
 
 [sub_resource type="StyleBoxFlat" id="Style_panel"]
 bg_color = Color(0.042, 0.046, 0.052, 0.985)
@@ -134,5 +137,16 @@ offset_left = -300.0
 offset_top = -46.0
 offset_right = 300.0
 offset_bottom = -22.0
-text = "[C] / [Esc] schliessen     Klick auf einen Platz legt ab"
+text = "[Tab] / [Esc] schliessen     Ziehen sortiert um     [R] dreht     [Strg] + Ziehen teilt"
 horizontal_alignment = 1
+
+[node name="DragGhost" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("3_drag_ghost")
+
+[node name="ItemTooltip" parent="." instance=ExtResource("5_item_tooltip")]
+
+[node name="SplitPrompt" parent="." instance=ExtResource("4_split_prompt")]

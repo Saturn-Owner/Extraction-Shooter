@@ -19,7 +19,7 @@ func _initialize() -> void:
 	_test_weight_curve()
 	_test_sprint_rules()
 	_test_ui_lock()
-	_test_inventory_window()
+	_test_windows()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -197,21 +197,28 @@ func _test_ui_lock() -> void:
 	p.free()
 
 
-## Das Inventarfenster muss die Knoten haben, die sein Skript erwartet —
-## sonst faellt es erst im Spiel mit einem Nullzugriff auf.
-func _test_inventory_window() -> void:
-	_section("Inventarfenster")
+## Es gibt nur noch EIN Fenster fuer Ausruestung, Gesundheit und Inventar,
+## und es haengt auf Tab. Das eigene Inventarfenster ist geloescht — dieser
+## Test haelt fest, dass es auch geloescht bleibt.
+func _test_windows() -> void:
+	_section("Fenster im Raid")
 
-	var packed: PackedScene = load("res://scenes/ui/inventory_window.tscn")
-	_check(packed != null, "inventory_window.tscn lädt")
+	_check(not ResourceLoader.exists("res://scenes/ui/inventory_window.tscn"),
+		"das alte Inventarfenster ist weg")
+
+	var packed: PackedScene = load("res://scenes/ui/character_window.tscn")
+	_check(packed != null, "character_window.tscn lädt")
 	if packed == null:
 		return
 
 	var window: Node = packed.instantiate()
-	_check(window is InventoryWindow, "Wurzel ist ein InventoryWindow")
-	_check(window.get_node_or_null("Layout/Inhalt/GridView") is InventoryGridView,
+	_check(window is CharacterWindow, "Wurzel ist ein CharacterWindow")
+	# Die Teile, die das Ziehen braucht — frueher lagen sie im Inventarfenster.
+	_check(window.get_node_or_null("Layout/Inhalt/Mitte/Inventar/Raster") is InventoryGridView,
 		"Rasteransicht vorhanden")
-	_check(window.get_node_or_null("Layout/Inhalt/Stats") is Label, "Werteanzeige vorhanden")
+	_check(window.get_node_or_null("DragGhost") is DragGhost, "Zeiger-Abbild vorhanden")
+	_check(window.get_node_or_null("SplitPrompt") is SplitPrompt, "Mengenabfrage vorhanden")
+	_check(window.get_node_or_null("ItemTooltip") is ItemTooltip, "Infoanzeige vorhanden")
 	window.free()
 
 	var level: PackedScene = load("res://scenes/levels/raid_eisstadt.tscn")
@@ -219,6 +226,8 @@ func _test_inventory_window() -> void:
 		_check(false, "raid_eisstadt.tscn lädt")
 		return
 	var raid: Node = level.instantiate()
-	_check(raid.get_node_or_null("HUD/InventoryWindow") != null,
-		"Inventarfenster hängt im HUD des Raids")
+	_check(raid.get_node_or_null("HUD/CharacterWindow") != null,
+		"das Charakterfenster hängt im HUD des Raids")
+	_check(raid.get_node_or_null("HUD/InventoryWindow") == null,
+		"und kein zweites Inventarfenster daneben")
 	raid.free()

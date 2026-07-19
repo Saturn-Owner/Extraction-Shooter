@@ -314,6 +314,18 @@ func _test_scene_wiring() -> void:
 			speed_before, player.get_current_max_speed()])
 	_check(player.get_condition_factor() > 0.0, "aber nie bis zum Stillstand")
 
+	# Die gezeichnete Figur: Jedes Koerperteil braucht einen Umriss, sonst
+	# fehlt im Fenster ein Bein — und zwar lautlos.
+	for part: HealthSystem.Part in HealthSystem.MAX_HP:
+		var shape: Array = CharacterWindow.BODY_SHAPES.get(part, [])
+		_check(shape.size() >= 3, "%s hat einen Umriss (%d Punkte)" % [
+			HealthSystem.get_part_name(part), shape.size()])
+		var inside := true
+		for point: Vector2 in shape:
+			if point.x < 0.0 or point.x > 1.0 or point.y < 0.0 or point.y > 1.0:
+				inside = false
+		_check(inside, "und liegt ganz in der Zeichenflaeche")
+
 	var window: PackedScene = load("res://scenes/ui/character_window.tscn")
 	_check(window != null, "character_window.tscn laedt")
 	if window != null:

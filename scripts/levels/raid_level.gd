@@ -5,7 +5,9 @@
 ##
 ## Steuerung zusätzlich zu Bewegung und Waffe:
 ##   F         Kiste öffnen / Fenster schliessen
-##   Tab       Inventar öffnen — oder, vor einer offenen Kiste, alles nehmen
+##   Tab       Charakter öffnen (Ausrüstung, Gesundheit, Inventar) — oder,
+##             vor einer offenen Kiste, alles nehmen
+##   1 / 2     Primär- / Sekundärwaffe ziehen
 ##   Esc       Fenster schliessen
 ##   K         Selbsttötung (zum Testen des Verlusts)
 ##   Enter     neuen Raid starten
@@ -18,7 +20,6 @@ extends Node3D
 @onready var _label: Label = $HUD/InfoPanel/InfoLabel
 @onready var _prompt: Label = $HUD/PromptLabel
 @onready var _loot_window: LootWindow = $HUD/LootWindow
-@onready var _inventory_window: InventoryWindow = $HUD/InventoryWindow
 @onready var _character_window: CharacterWindow = $HUD/CharacterWindow
 
 ## Was der Spieler in den ersten Raid mitnimmt.
@@ -49,7 +50,7 @@ func _ready() -> void:
 	# Jedes Fenster legt beim Öffnen die Steuerung still und gibt sie beim
 	# Schliessen wieder frei. Ein Ort dafür, damit kein Fenster den Spieler
 	# gelähmt zurücklassen kann.
-	for window in [_loot_window, _inventory_window, _character_window]:
+	for window in [_loot_window, _character_window]:
 		window.opened.connect(_on_window_opened)
 		window.closed.connect(_on_window_closed)
 
@@ -95,8 +96,7 @@ func _on_window_closed() -> void:
 
 
 func _any_window_open() -> bool:
-	return _loot_window.is_open() or _inventory_window.is_open() \
-		or _character_window.is_open()
+	return _loot_window.is_open() or _character_window.is_open()
 
 
 ## Tod durch Verletzung, Hunger, Durst oder Kaelte — das Ergebnis ist gleich.
@@ -110,8 +110,6 @@ func _on_player_died(part: HealthSystem.Part) -> void:
 func _on_raid_ended(survived: bool, secured: int) -> void:
 	if _loot_window.is_open():
 		_loot_window.close()
-	if _inventory_window.is_open():
-		_inventory_window.close()
 	if _character_window.is_open():
 		_character_window.close()
 	if survived:
@@ -140,9 +138,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_show_message("alles eingesammelt" if left == 0
 					else "Inventar voll — %d Gegenstaende bleiben liegen" % left)
 			else:
-				_toggle_inventory_window()
-		KEY_C:
-			_toggle_character_window()
+				_toggle_character_window()
 		KEY_1:
 			_select_weapon(ItemData.EquipSlot.PRIMARY)
 		KEY_2:
@@ -156,19 +152,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_ESCAPE:
 			if _loot_window.is_open():
 				_loot_window.close()
-			elif _inventory_window.is_open():
-				_inventory_window.close()
 			elif _character_window.is_open():
 				_character_window.close()
-
-
-func _toggle_inventory_window() -> void:
-	if _inventory_window.is_open():
-		_inventory_window.close()
-		return
-	if _character_window.is_open():
-		_character_window.close()
-	_inventory_window.open_for(_player)
 
 
 ## Waffenwechsel. Ist der Platz leer, passiert nichts — kein Wechsel auf
@@ -190,8 +175,6 @@ func _toggle_character_window() -> void:
 		_character_window.close()
 		return
 	# Nicht zwei Fenster uebereinander.
-	if _inventory_window.is_open():
-		_inventory_window.close()
 	if _loot_window.is_open():
 		_loot_window.close()
 	_character_window.open_for(_player)
@@ -204,8 +187,8 @@ func _toggle_loot_window() -> void:
 		return
 
 	# Nicht beide Fenster gleichzeitig.
-	if _inventory_window.is_open():
-		_inventory_window.close()
+	if _character_window.is_open():
+		_character_window.close()
 
 	var target := _player.interaction.current_target if _player.interaction != null else null
 	if target is LootContainer:
@@ -283,6 +266,6 @@ func _update_info() -> void:
 	lines.append("Dabei:     %d Gegenstaende" % _player.inventory.grid.get_item_count())
 	lines.append("Lager:     %d Gegenstaende" % _raid.stash.get_item_count())
 	lines.append("")
-	lines.append("F Kiste  Tab Inventar  C Koerper  K sterben  Enter neu")
+	lines.append("F Kiste  Tab Charakter  1/2 Waffe  K sterben  Enter neu")
 
 	_label.text = "\n".join(lines)
