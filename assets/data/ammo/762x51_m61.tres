@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_law8c"]
+
+[resource]
+script = ExtResource("1_law8c")
+caliber = &"7.62x51"
+damage = 70
+penetration_power = 64
+armor_damage_percent = 66.0
+fragmentation_chance = 0.04
+muzzle_velocity_ms = 850.0
+ballistic_coefficient = 0.39
+id = &"ammo_762x51_m61"
+display_name = "7.62x51 M61"
+description = "Panzerbrechend. Es gibt kaum eine Platte, die das zuverlaessig aufhaelt."
+category = 1
+can_rotate = false
+weight_kg = 0.025
+max_stack = 40
+base_price = 1180

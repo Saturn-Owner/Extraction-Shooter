@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_l43wx"]
+
+[resource]
+script = ExtResource("1_l43wx")
+caliber = &"5.45x39"
+damage = 46
+armor_damage_percent = 34.0
+fragmentation_chance = 0.14
+muzzle_velocity_ms = 890.0
+ballistic_coefficient = 0.26
+id = &"ammo_545x39_ps"
+display_name = "5.45x39 PS"
+description = "Der Standard. Solider Allrounder ohne Staerken und ohne Schwaechen."
+category = 1
+can_rotate = false
+weight_kg = 0.01
+max_stack = 60
+base_price = 96

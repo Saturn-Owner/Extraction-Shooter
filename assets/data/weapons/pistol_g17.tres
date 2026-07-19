@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_i36t6"]
+
+[resource]
+script = ExtResource("1_i36t6")
+caliber = &"9x19"
+magazine_size = 17
+fire_modes = Array[int]([0])
+fire_rate_rpm = 450
+muzzle_velocity_modifier = 0.92
+recoil_vertical = 62.0
+recoil_horizontal = 24.0
+ergonomics = 86
+accuracy_moa = 4.2
+id = &"weapon_pistol_g17"
+display_name = "G17"
+description = "Schlichte Dienstpistole. Leicht, zuverlaessig, immer besser als nichts."
+category = 2
+grid_width = 2
+grid_height = 2
+weight_kg = 0.62
+base_price = 6800

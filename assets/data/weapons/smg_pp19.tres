@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_17k82"]
+
+[resource]
+script = ExtResource("1_17k82")
+caliber = &"9x19"
+recoil_vertical = 82.0
+recoil_horizontal = 34.0
+ergonomics = 70
+accuracy_moa = 3.8
+id = &"weapon_smg_pp19"
+display_name = "PP-19 Vityaz"
+description = "Robuste MP auf Kalaschnikow-Basis. Weniger fein als die MP5, dafuer unverwuestlich."
+category = 2
+grid_width = 4
+grid_height = 2
+weight_kg = 2.9
+base_price = 17500

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_fr067"]
+
+[resource]
+script = ExtResource("1_fr067")
+damage = 65
+penetration_power = 11
+armor_damage_percent = 14.0
+fragmentation_chance = 0.45
+muzzle_velocity_ms = 880.0
+ballistic_coefficient = 0.23
+bleeding_chance = 0.44
+heavy_bleeding_chance = 0.13
+id = &"ammo_556x45_hp"
+display_name = "5.56x45 HP"
+description = "Reine Jagdmunition. Verheerend gegen ungeschuetzte Ziele, nutzlos gegen alles andere."
+category = 1
+can_rotate = false
+weight_kg = 0.012
+max_stack = 60
+base_price = 74

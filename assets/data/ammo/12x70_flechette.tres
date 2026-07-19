@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_jboja"]
+
+[resource]
+script = ExtResource("1_jboja")
+caliber = &"12/70"
+damage = 26
+penetration_power = 31
+armor_damage_percent = 26.0
+fragmentation_chance = 0.0
+pellet_count = 8
+pellet_spread_degrees = 3.0
+muzzle_velocity_ms = 450.0
+ballistic_coefficient = 0.09
+bleeding_chance = 0.34
+heavy_bleeding_chance = 0.08
+id = &"ammo_12x70_flechette"
+display_name = "12/70 Flechette"
+description = "Acht Stahlpfeile. Einzeln schwach, aber sie kommen durch leichte Platten."
+category = 1
+can_rotate = false
+weight_kg = 0.05
+max_stack = 20
+base_price = 210

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_44dxc"]
+
+[resource]
+script = ExtResource("1_44dxc")
+damage = 58
+penetration_power = 26
+fragmentation_chance = 0.34
+muzzle_velocity_ms = 900.0
+ballistic_coefficient = 0.26
+bleeding_chance = 0.34
+heavy_bleeding_chance = 0.09
+id = &"ammo_556x45_mk318"
+display_name = "5.56x45 Mk 318"
+description = "Offene Spitze, gebaut fuer Wirkung im Ziel. Gegen Platten die schlechteste Wahl im Kaliber."
+category = 1
+can_rotate = false
+weight_kg = 0.013
+max_stack = 60
+base_price = 152

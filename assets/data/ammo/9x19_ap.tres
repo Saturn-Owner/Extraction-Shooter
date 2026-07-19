@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_pxps8"]
+
+[resource]
+script = ExtResource("1_pxps8")
+caliber = &"9x19"
+damage = 44
+penetration_power = 32
+armor_damage_percent = 44.0
+fragmentation_chance = 0.02
+muzzle_velocity_ms = 480.0
+ballistic_coefficient = 0.17
+bleeding_chance = 0.12
+heavy_bleeding_chance = 0.02
+id = &"ammo_9x19_ap"
+display_name = "9x19 AP 6.3"
+description = "Panzerbrechende Pistolenmunition mit Stahlkern. Ueberraschend wirksam gegen leichte Platten."
+category = 1
+can_rotate = false
+weight_kg = 0.01
+max_stack = 70
+base_price = 290

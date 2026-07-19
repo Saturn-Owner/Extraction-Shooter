@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_fp1ow"]
+
+[resource]
+script = ExtResource("1_fp1ow")
+caliber = &"7.62x54R"
+magazine_size = 10
+fire_modes = Array[int]([0])
+fire_rate_rpm = 650
+muzzle_velocity_modifier = 1.08
+recoil_vertical = 186.0
+recoil_horizontal = 66.0
+ergonomics = 36
+accuracy_moa = 1.2
+id = &"weapon_dmr_svd"
+display_name = "SVD"
+description = "Die klassische Dragunow. Gebaut, um auf mehreren hundert Metern zu treffen."
+category = 2
+grid_width = 6
+grid_height = 2
+weight_kg = 4.3
+base_price = 61000

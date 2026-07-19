@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_2bmug"]
+
+[resource]
+script = ExtResource("1_2bmug")
+caliber = &"7.62x51"
+magazine_size = 20
+fire_modes = Array[int]([0])
+muzzle_velocity_modifier = 1.06
+recoil_vertical = 180.0
+recoil_horizontal = 70.0
+ergonomics = 38
+accuracy_moa = 1.5
+id = &"weapon_dmr_m14"
+display_name = "M14"
+description = "Altes Selbstladegewehr mit langem Lauf. Auf Distanz gnadenlos, in Gebaeuden unhandlich."
+category = 2
+grid_width = 6
+grid_height = 2
+weight_kg = 4.5
+base_price = 52000

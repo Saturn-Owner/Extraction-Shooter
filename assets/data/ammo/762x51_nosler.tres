@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_2hiq8"]
+
+[resource]
+script = ExtResource("1_2hiq8")
+caliber = &"7.62x51"
+damage = 107
+penetration_power = 20
+armor_damage_percent = 24.0
+fragmentation_chance = 0.48
+muzzle_velocity_ms = 790.0
+ballistic_coefficient = 0.33
+bleeding_chance = 0.5
+heavy_bleeding_chance = 0.16
+id = &"ammo_762x51_nosler"
+display_name = "7.62x51 Ultra Nosler"
+description = "Jagdgeschoss im Militaerkaliber. Toetet ungepanzerte Ziele praktisch sofort."
+category = 1
+can_rotate = false
+weight_kg = 0.023
+max_stack = 40
+base_price = 260

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_u2yjo"]
+
+[resource]
+script = ExtResource("1_u2yjo")
+caliber = &"7.62x54R"
+damage = 82
+penetration_power = 41
+armor_damage_percent = 48.0
+fragmentation_chance = 0.14
+muzzle_velocity_ms = 800.0
+ballistic_coefficient = 0.36
+bleeding_chance = 0.32
+heavy_bleeding_chance = 0.09
+id = &"ammo_762x54r_lps"
+display_name = "7.62x54R LPS"
+description = "Standard-Scharfschuetzenmunition. Reichweite und Wucht zu vertretbarem Preis."
+category = 1
+can_rotate = false
+weight_kg = 0.022
+max_stack = 40
+base_price = 340
