@@ -28,12 +28,19 @@ func _initialize() -> void:
 	root.add_child(_level)
 
 
-## Erst nach ein paar Frames loslegen: In _initialize() hängen die Knoten
-## zwar im Baum, aber _ready() ist noch nicht gelaufen — die Bank hätte dann
-## weder Modell noch Reichweite.
+## Der Ablauf braucht mehrere Frames, und zwar aus zwei Gründen:
+##
+##   1. In _initialize() hängen die Knoten zwar im Baum, aber _ready() ist
+##      noch nicht gelaufen — die Bank hätte weder Modell noch Reichweite.
+##   2. Area3D meldet einen Körper erst, wenn die Physik gerechnet hat.
+##      Deshalb wird der Spieler an die Bank gesetzt und dann gewartet.
 func _process(_delta: float) -> bool:
 	_frames += 1
-	if _frames < 3:
+
+	if _frames == 3:
+		_walk_to_bench()
+		return false
+	if _frames < 12:
 		return false
 
 	_run()
@@ -51,6 +58,15 @@ func _check(condition: bool, label: String) -> void:
 		print("  FEHLER ", label)
 
 
+## Setzt den Spieler an die Bank, damit die Physik ihn dort melden kann.
+func _walk_to_bench() -> void:
+	var station := _level.get_node_or_null("Werkbank") as Node3D
+	var player := _level.get_node_or_null("Player") as Node3D
+	if station == null or player == null:
+		return
+	player.global_position = station.global_position + Vector3(0.0, 0.2, 0.0)
+
+
 func _run() -> void:
 	var station := _level.get_node_or_null("Werkbank") as WorkbenchStation
 	_check(station != null, "Werkbank steht im Testgelände")
@@ -65,20 +81,37 @@ func _run() -> void:
 	_check(station.get_child_count() > 0, "Bank hat ihr Modell gebaut (%d Knoten)"
 		% station.get_child_count())
 
-	# Reichweite: Ausser Reichweite darf gar nichts gehen — auch nicht mit
-	# einer gültigen Anfrage. Sonst könnte man die Bank öffnen, weglaufen und
-	# aus der Ferne weiterbauen.
-	station.user = player
+	# DER TEST, DER GEFEHLT HAT.
+	#
+	# Vorher hat diese Suite `station.user` von Hand gesetzt und damit genau
+	# den Schritt übersprungen, der im Spiel kaputt war: Die Bank horchte auf
+	# Kollisionsebene 1, der Spieler liegt auf Ebene 2 — sie hat ihn nie
+	# bemerkt, Tab tat nichts, und alle Tests waren trotzdem grün.
+	#
+	# Ein Test, der sich den Zustand selbst hinlegt, den er prüfen soll,
+	# prüft nichts.
+	_check(station.user == player, "die Bank bemerkt den Spieler, der davor steht")
+	if station.user == null:
+		return
+
 	var stack := player.inventory.equipped_weapon
 	_check(stack != null, "Der Spieler hat eine Waffe in der Hand")
 	if stack == null:
 		return
 
-	station.global_position = player.global_position + Vector3(0.0, 0.0, 50.0)
+	# Ausser Reichweite darf gar nichts gehen — auch nicht mit einer gültigen
+	# Anfrage. Sonst könnte man die Bank öffnen, weglaufen und aus der Ferne
+	# weiterbauen.
+	#
+	# Geprüft wird über die Reichweite und nicht durch Verschieben der Bank:
+	# Beim Verschieben würde der Spieler den Bereich verlassen, `user` fiele
+	# auf null, und die Anfrage scheiterte dann an der fehlenden Waffe statt
+	# an der Entfernung — der Test wäre grün, ohne das Richtige zu prüfen.
+	var real_range := station.use_range
+	station.use_range = 0.01
 	_check(station.request_attach(stack.instance_id, AttachmentData.Slot.SIGHT, &"sight_micro_dot") != "",
-		"aus 50 m Entfernung nimmt die Bank nichts an")
-
-	station.global_position = player.global_position
+		"ausser Reichweite nimmt die Bank nichts an")
+	station.use_range = real_range
 	_check(station.request_attach(stack.instance_id, AttachmentData.Slot.SIGHT, &"sight_micro_dot") == "",
 		"an der Bank geht derselbe Anbau durch")
 

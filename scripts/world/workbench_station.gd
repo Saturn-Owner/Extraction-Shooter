@@ -26,6 +26,15 @@ signal closed()
 ## Die Bestückung einer Waffe hat sich geändert.
 signal build_changed(stack: ItemStack)
 
+## Ebene, auf der der Spieler liegt (siehe scenes/player/player.tscn).
+##
+## Ebenenbelegung im Projekt: 1 = Welt, 2 = Spieler, 4 = Ziele.
+##
+## Ohne diese Maske sieht die Bank den Spieler NICHT. Genau das ist beim
+## ersten Spieltest passiert: Area3D horcht ab Werk nur auf Ebene 1, der
+## Spieler liegt aber auf 2 — Tab tat schlicht nichts.
+const PLAYER_LAYER := 2
+
 ## Zustand einer unbeschädigten Waffe. Steht hier und nicht als lose 100.0
 ## im Code, damit Reparatur und Prüfung nie auseinanderlaufen können.
 const FULL_CONDITION := 100.0
@@ -40,6 +49,7 @@ var user: PlayerController = null
 
 var _open: bool = false
 var _ui: WorkbenchUI = null
+var _hint: Label = null
 
 
 func _ready() -> void:
@@ -49,6 +59,7 @@ func _ready() -> void:
 
 	_build_bench()
 	_build_trigger()
+	_build_hint()
 
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
@@ -101,6 +112,33 @@ func _build_trigger() -> void:
 	# Nur Körper melden, keine anderen Bereiche — der Spieler ist einer.
 	monitoring = true
 	monitorable = false
+	collision_mask = PLAYER_LAYER
+
+
+## Hinweis am unteren Bildrand, sobald man nah genug steht.
+##
+## Ohne ihn ist die Bank unbedienbar für jeden, der nicht weiß, dass es sie
+## gibt — und selbst wer es weiß, muss raten, ob er in Reichweite steht.
+func _build_hint() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "Hinweis"
+	layer.layer = 5
+	add_child(layer)
+
+	_hint = Label.new()
+	_hint.text = "[Tab]  Werkbank"
+	_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_hint.position = Vector2(-60.0, -90.0)
+	_hint.add_theme_font_size_override("font_size", 18)
+	_hint.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	_hint.add_theme_constant_override("outline_size", 4)
+	_hint.visible = false
+	layer.add_child(_hint)
+
+
+func _update_hint() -> void:
+	if _hint != null:
+		_hint.visible = user != null and not _open
 
 
 # ------------------------------------------------------------------ Zugang
@@ -108,6 +146,7 @@ func _build_trigger() -> void:
 func _on_body_entered(body: Node3D) -> void:
 	if body is PlayerController:
 		user = body as PlayerController
+		_update_hint()
 
 
 func _on_body_exited(body: Node3D) -> void:
@@ -116,6 +155,7 @@ func _on_body_exited(body: Node3D) -> void:
 		# und das Spiel angehalten, während die Bank ausser Reichweite ist.
 		close()
 		user = null
+		_update_hint()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -157,6 +197,7 @@ func open() -> void:
 	# angefasst werden — beides liegt im Arbeitsbereich des Kollegen.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().paused = true
+	_update_hint()
 	opened.emit()
 
 
@@ -170,6 +211,7 @@ func close() -> void:
 
 	get_tree().paused = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_update_hint()
 	closed.emit()
 
 
