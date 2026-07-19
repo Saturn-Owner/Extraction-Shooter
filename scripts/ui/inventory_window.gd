@@ -30,6 +30,7 @@ var _split_cell: Vector2i = Vector2i(-1, -1)
 @onready var _stats: Label = $Layout/Inhalt/Stats
 @onready var _ghost: DragGhost = $DragGhost
 @onready var _split_prompt: SplitPrompt = $SplitPrompt
+@onready var _tooltip: ItemTooltip = $ItemTooltip
 
 
 func _ready() -> void:
@@ -38,6 +39,7 @@ func _ready() -> void:
 	# immer an das Control, auf dem gedrueckt wurde.
 	_view.item_pressed.connect(_on_item_pressed)
 	_view.item_double_clicked.connect(_on_item_double_clicked)
+	_view.item_hovered.connect(_on_item_hovered)
 	_split_prompt.confirmed.connect(_on_split_confirmed)
 	_split_prompt.cancelled.connect(_on_split_cancelled)
 
@@ -53,6 +55,8 @@ func open_for(p_player: PlayerController) -> void:
 func close() -> void:
 	if _split_prompt != null and _split_prompt.is_open():
 		_split_prompt.cancel()
+	if _tooltip != null:
+		_tooltip.clear()
 	_cancel_drag()
 	hide()
 	closed.emit()
@@ -72,6 +76,14 @@ func _process(_delta: float) -> void:
 			drop_at(_drag_target_cell)
 
 	_update_stats()
+
+
+## Infoanzeige zum Gegenstand unter dem Zeiger.
+func _on_item_hovered(stack: ItemStack, _view: InventoryGridView) -> void:
+	if stack == null or _drag_stack != null:
+		_tooltip.clear()
+		return
+	_tooltip.show_for(stack)
 
 
 func _update_stats() -> void:
@@ -105,6 +117,7 @@ func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 
 	_drag_stack = stack
 	_drag_ctrl = Input.is_key_pressed(KEY_CTRL)
+	_tooltip.clear()
 
 	var origin := view.grid.get_position(stack.instance_id)
 	var local := view.get_local_mouse_position()

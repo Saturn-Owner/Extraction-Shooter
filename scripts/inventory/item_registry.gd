@@ -85,6 +85,15 @@ static func get_count() -> int:
 	return _items.size()
 
 
+## Alle Vorlagen. Fuer Pruefungen, die ueber den gesamten Bestand laufen.
+static func get_all() -> Array[ItemData]:
+	ensure_loaded()
+	var items: Array[ItemData] = []
+	for item in _items.values():
+		items.append(item)
+	return items
+
+
 static func get_all_ids() -> Array[StringName]:
 	ensure_loaded()
 	var ids: Array[StringName] = []

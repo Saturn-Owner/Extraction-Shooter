@@ -48,6 +48,8 @@ var _split_cell: Vector2i = Vector2i(-1, -1)
 @onready var _progress: ProgressBar = $Layout/Columns/Left/SearchProgress
 @onready var _ghost: DragGhost = $DragGhost
 @onready var _split_prompt: SplitPrompt = $SplitPrompt
+@onready var _tooltip: ItemTooltip = $ItemTooltip
+@onready var _find_sound: AudioStreamPlayer = $FundGeraeusch
 
 
 func _ready() -> void:
@@ -60,6 +62,7 @@ func _ready() -> void:
 		view.item_pressed.connect(_on_item_pressed)
 		view.item_double_clicked.connect(_on_item_double_clicked)
 		view.hidden_item_pressed.connect(_on_hidden_item_pressed)
+		view.item_hovered.connect(_on_item_hovered)
 
 	_split_prompt.confirmed.connect(_on_split_confirmed)
 	_split_prompt.cancelled.connect(_on_split_cancelled)
@@ -89,6 +92,8 @@ func close() -> void:
 		container.pause_search()
 	if _split_prompt != null and _split_prompt.is_open():
 		_split_prompt.cancel()
+	if _tooltip != null:
+		_tooltip.clear()
 	_cancel_drag()
 	hide()
 	closed.emit()
@@ -98,9 +103,36 @@ func is_open() -> bool:
 	return visible
 
 
-func _on_item_revealed(_stack: ItemStack, _remaining: int) -> void:
+func _on_item_revealed(stack: ItemStack, _remaining: int) -> void:
 	_container_view.queue_redraw()
 	_update_status()
+	_play_find_sound(stack)
+
+
+## Der Fund bekommt einen Klang nach seiner Seltenheit — Krimskrams bleibt
+## bewusst still, sonst waere jede Kiste ein Dauergeklingel.
+func _play_find_sound(stack: ItemStack) -> void:
+	if stack == null or _find_sound == null:
+		return
+	var data := stack.get_data()
+	if data == null:
+		return
+
+	var stream := SearchAudio.get_stream(data.get_rarity())
+	if stream == null:
+		return
+
+	_find_sound.stream = stream
+	_find_sound.play()
+
+
+## Infoanzeige zum Gegenstand unter dem Zeiger.
+func _on_item_hovered(stack: ItemStack, _view: InventoryGridView) -> void:
+	# Waehrend des Ziehens waere die Anzeige nur im Weg.
+	if stack == null or _drag_stack != null:
+		_tooltip.clear()
+		return
+	_tooltip.show_for(stack)
 
 
 ## Klick auf einen schwarzen Umriss: den zuerst durchsuchen.
@@ -156,6 +188,7 @@ func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 	_drag_stack = stack
 	_drag_source = view
 	_drag_ctrl = Input.is_key_pressed(KEY_CTRL)
+	_tooltip.clear()
 
 	# Anfasspunkt merken, damit der Gegenstand nicht zur Ecke springt.
 	var origin := view.grid.get_position(stack.instance_id)

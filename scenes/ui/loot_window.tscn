@@ -1,17 +1,18 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/loot_window.gd" id="1_loot_window"]
 [ext_resource type="Script" path="res://scripts/ui/inventory_grid_view.gd" id="2_grid_view"]
 [ext_resource type="Script" path="res://scripts/ui/drag_ghost.gd" id="3_drag_ghost"]
 [ext_resource type="PackedScene" path="res://scenes/ui/split_prompt.tscn" id="4_split_prompt"]
+[ext_resource type="PackedScene" path="res://scenes/ui/item_tooltip.tscn" id="5_item_tooltip"]
 
 [sub_resource type="StyleBoxFlat" id="Style_panel"]
-bg_color = Color(0.07, 0.08, 0.09, 0.97)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.3, 0.33, 0.37, 1)
+bg_color = Color(0.042, 0.046, 0.052, 0.985)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.2, 0.215, 0.235, 1)
 corner_radius_top_left = 4
 corner_radius_top_right = 4
 corner_radius_bottom_right = 4
@@ -32,7 +33,7 @@ script = ExtResource("1_loot_window")
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0, 0, 0, 0.55)
+color = Color(0, 0, 0, 0.72)
 mouse_filter = 2
 
 [node name="Layout" type="PanelContainer" parent="."]
@@ -107,4 +108,9 @@ anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("3_drag_ghost")
 
+[node name="ItemTooltip" parent="." instance=ExtResource("5_item_tooltip")]
+
 [node name="SplitPrompt" parent="." instance=ExtResource("4_split_prompt")]
+
+[node name="FundGeraeusch" type="AudioStreamPlayer" parent="."]
+volume_db = -6.0

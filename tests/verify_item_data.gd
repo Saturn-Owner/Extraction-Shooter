@@ -26,6 +26,8 @@ func _initialize() -> void:
 	_check_ammo_vs_plate()
 	_check_arsenal_coverage()
 	_check_damage_penetration_tradeoff()
+	_check_rarity_tiers()
+	_check_info_lines()
 	_print_caliber_overview()
 
 	print("\n=== ERGEBNIS: %s ===" % ("FEHLGESCHLAGEN" if _failed else "ALLES OK"))
@@ -120,6 +122,94 @@ func _print_caliber_overview() -> void:
 		if a.pellet_count > 1:
 			dmg_text = "%dx%d" % [a.pellet_count, a.damage]
 		print("  %-26s %-10s %5d %5s %8d" % [a.display_name, a.caliber, a.penetration_power, dmg_text, a.base_price])
+
+
+## Seltenheit steuert Farbe UND Fundgeraeusch. Landet alles in einer Stufe,
+## sind beide wertlos — dann faellt im Spiel nichts mehr auf.
+func _check_rarity_tiers() -> void:
+	print("\n--- Seltenheitsstufen")
+	ItemRegistry.ensure_loaded()
+
+	var counts := {}
+	for rarity in ItemData.Rarity.values():
+		counts[rarity] = 0
+
+	for item in ItemRegistry.get_all():
+		counts[item.get_rarity()] += 1
+
+	for rarity in ItemData.Rarity.values():
+		print("  %-10s %d Gegenstaende" % [ItemData.Rarity.keys()[rarity], counts[rarity]])
+
+	var used := 0
+	for rarity in ItemData.Rarity.values():
+		if counts[rarity] > 0:
+			used += 1
+
+	if used < 3:
+		_fail("nur %d Seltenheitsstufen kommen vor — Farbe und Klang unterscheiden dann kaum" % used)
+	else:
+		print("  OK  %d von 4 Stufen sind belegt" % used)
+
+	# Stichproben: Die Grenzen muessen zu den bekannten Gegenstaenden passen.
+	var billig := ItemRegistry.get_item(&"ammo_9x19_fmj")
+	var teuer := ItemRegistry.get_item(&"ammo_556x45_m995")
+	if billig != null and teuer != null:
+		if billig.get_rarity() >= teuer.get_rarity():
+			_fail("9mm FMJ gilt als mindestens so selten wie M995 — Grenzen pruefen")
+		else:
+			print("  OK  9mm FMJ (%s) < M995 (%s)" % [
+				ItemData.Rarity.keys()[billig.get_rarity()],
+				ItemData.Rarity.keys()[teuer.get_rarity()]])
+
+
+## Die Infoanzeige liest ihre Zeilen aus den Datenklassen. Fehlt dort etwas,
+## steht der Spieler vor einem leeren Kasten.
+func _check_info_lines() -> void:
+	print("\n--- Infoanzeige")
+	ItemRegistry.ensure_loaded()
+
+	var leer := 0
+	for item in ItemRegistry.get_all():
+		if item.get_info_lines().is_empty() or item.get_type_label().strip_edges() == "":
+			_fail("%s liefert keine Infozeilen" % item.id)
+			leer += 1
+	if leer == 0:
+		print("  OK  alle Gegenstaende liefern Name, Typ und Werte")
+
+	# Munition muss Schaden, Durchschlag und Art zeigen — das ist der
+	# eigentliche Grund, warum es die Anzeige gibt.
+	var m995 := ItemRegistry.get_item(&"ammo_556x45_m995") as AmmoData
+	if m995 == null:
+		_fail("M995 nicht gefunden")
+		return
+
+	var text := "\n".join(m995.get_info_lines())
+	for begriff in ["Schaden", "Durchschlag"]:
+		if not text.contains(begriff):
+			_fail("Munitionsinfo enthaelt '%s' nicht" % begriff)
+
+	var art := m995.get_ammo_type_name()
+	if art != "Panzerbrechend":
+		_fail("M995 (Pen %d) sollte als Panzerbrechend gelten, ist aber '%s'"
+			% [m995.penetration_power, art])
+	else:
+		print("  OK  M995 wird als %s gefuehrt" % art)
+
+	var typ := m995.get_type_label()
+	if not typ.contains(String(m995.caliber)):
+		_fail("Typzeile nennt das Kaliber nicht: %s" % typ)
+	else:
+		print("  OK  Typzeile: %s" % typ)
+
+	# Schrot muss als solches erkannt werden, sonst stimmt die Ableitung nicht.
+	for ammo in ItemRegistry.get_by_category(ItemData.Category.AMMO):
+		var a := ammo as AmmoData
+		if a != null and a.pellet_count > 1:
+			if a.get_ammo_type_name() != "Schrot":
+				_fail("%s hat %d Projektile, gilt aber nicht als Schrot" % [a.id, a.pellet_count])
+			else:
+				print("  OK  %s wird als Schrot gefuehrt" % a.id)
+			break
 
 
 func _fail(msg: String) -> void:

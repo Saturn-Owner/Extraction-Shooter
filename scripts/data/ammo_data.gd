@@ -93,6 +93,56 @@ func get_stat_summary() -> String:
 	return "%s | Schaden %d | Pen %d" % [caliber, damage, penetration_power]
 
 
+## Munitionsart im Klartext: Schrot, Panzerbrechend, Vollmantel, Teilmantel.
+##
+## ABGELEITET aus Durchschlag und Fragmentierung, nicht als eigenes Feld
+## gepflegt. Vorteil: keine der 27 vorhandenen .tres-Dateien muss angefasst
+## werden, und die Bezeichnung kann nie im Widerspruch zu den Werten stehen —
+## eine Patrone mit Pen 60, die "Vollmantel" heisst, waere eine Luege.
+##
+## Nachteil: Sondermunition wie Subsonic oder Brandsatz laesst sich so nicht
+## abbilden. Wenn wir die brauchen, wird daraus ein echtes Feld.
+func get_ammo_type_name() -> String:
+	if pellet_count > 1:
+		return "Schrot"
+	if penetration_power >= 45:
+		return "Panzerbrechend"
+	if penetration_power >= 28:
+		return "Vollmantel"
+	if fragmentation_chance >= 0.35:
+		return "Teilmantel"
+	return "Vollmantel"
+
+
+func get_type_label() -> String:
+	var art := get_ammo_type_name()
+	if is_tracer:
+		art += ", Leuchtspur"
+	return "%s  —  %s" % [caliber, art]
+
+
+func get_info_lines() -> Array[String]:
+	var lines: Array[String] = []
+
+	if pellet_count > 1:
+		lines.append("Schaden:      %d x %d  (%d gesamt)" % [pellet_count, damage, get_total_damage()])
+		lines.append("Streuung:     %.1f Grad" % pellet_spread_degrees)
+	else:
+		lines.append("Schaden:      %d" % damage)
+
+	lines.append("Durchschlag:  %d von 70" % penetration_power)
+	lines.append("Plattenschaden: %.0f %%" % armor_damage_percent)
+	lines.append("Fragmentierung: %.0f %%" % (fragmentation_chance * 100.0))
+	lines.append("Muendung:     %.0f m/s" % muzzle_velocity_ms)
+
+	if bleeding_chance > 0.0:
+		lines.append("Blutung:      %.0f %%  (schwer %.0f %%)" % [
+			bleeding_chance * 100.0, heavy_bleeding_chance * 100.0])
+
+	lines.append_array(super())
+	return lines
+
+
 func validate() -> Array[String]:
 	var problems := super()
 	if caliber == &"":

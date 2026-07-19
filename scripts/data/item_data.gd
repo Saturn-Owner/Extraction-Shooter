@@ -25,6 +25,16 @@ enum Category {
 	TOOL,        ## Eispickel, Brecheisen — schaltet Wege frei
 }
 
+## Seltenheitsstufe. Bestimmt Hintergrundfarbe im Inventar und den Klang
+## beim Fund. Wird aus dem Preis ABGELEITET, nicht pro Item gepflegt —
+## sonst müsste man bei jeder Preisänderung daran denken.
+enum Rarity {
+	COMMON,    ## Krimskrams, Pistolenmunition — grau, kein Fundgeräusch
+	UNCOMMON,  ## brauchbare Ausrüstung
+	RARE,      ## gute Munition, solide Waffen
+	EPIC,      ## Platten, hochwertige Waffen — der Fund, für den man bleibt
+}
+
 ## Eindeutige ID, z.B. "ammo_556x45_m995". Wird zum Speichern benutzt —
 ## darum NIEMALS nachträglich ändern, sonst brechen alte Spielstände.
 @export var id: StringName = &""
@@ -114,6 +124,53 @@ func get_search_time() -> float:
 		rarity_part = clampf(log(float(base_price)) / log(10.0) - 1.5, 0.0, 3.0) * 0.5
 
 	return clampf(0.4 + size_part + rarity_part, 0.4, 7.0)
+
+
+## Seltenheit aus dem Preis abgeleitet.
+##
+## Bewusst am Preis festgemacht statt als eigenes Feld: Der Preis wird
+## ohnehin gepflegt, und ein Gegenstand, der viel wert ist, IST selten.
+## Zwei getrennte Felder würden früher oder später auseinanderlaufen.
+##
+## Die Grenzen orientieren sich an den vorhandenen Daten:
+##   9mm FMJ 42        -> COMMON
+##   M855A1 260        -> UNCOMMON
+##   M995 780          -> RARE
+##   Schutzplatte 18500 -> EPIC
+func get_rarity() -> Rarity:
+	if base_price >= 5000:
+		return Rarity.EPIC
+	if base_price >= 500:
+		return Rarity.RARE
+	if base_price >= 150:
+		return Rarity.UNCOMMON
+	return Rarity.COMMON
+
+
+## Kurze Typbezeichnung für die Infoanzeige. Basisklasse: die Kategorie.
+func get_type_label() -> String:
+	match category:
+		Category.AMMO: return "Munition"
+		Category.WEAPON: return "Waffe"
+		Category.ARMOR_PLATE: return "Schutzplatte"
+		Category.ARMOR_RIG: return "Plattentraeger"
+		Category.CLOTHING: return "Kleidung"
+		Category.BACKPACK: return "Rucksack"
+		Category.MEDICAL: return "Medizin"
+		Category.FOOD: return "Verpflegung"
+		Category.KEY: return "Schluessel"
+		Category.TOOL: return "Werkzeug"
+	return "Gegenstand"
+
+
+## Zeilen für die Infoanzeige beim Darüberfahren.
+## Unterklassen hängen ihre eigenen Werte an.
+func get_info_lines() -> Array[String]:
+	var lines: Array[String] = []
+	lines.append("Gewicht:  %.2f kg" % weight_kg)
+	lines.append("Platz:    %dx%d" % [grid_width, grid_height])
+	lines.append("Wert:     %d" % base_price)
+	return lines
 
 
 ## Kleine Selbstprüfung. Gibt eine Liste von Problemen zurück,

@@ -1,0 +1,45 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/item_tooltip.gd" id="1_item_tooltip"]
+
+[sub_resource type="StyleBoxFlat" id="Style_tooltip"]
+bg_color = Color(0.055, 0.06, 0.068, 0.98)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.28, 0.3, 0.33, 1)
+content_margin_left = 12.0
+content_margin_top = 10.0
+content_margin_right = 12.0
+content_margin_bottom = 10.0
+
+[node name="ItemTooltip" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1_item_tooltip")
+
+[node name="Panel" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(260, 0)
+offset_right = 260.0
+offset_bottom = 180.0
+theme_override_styles/panel = SubResource("Style_tooltip")
+
+[node name="Inhalt" type="VBoxContainer" parent="Panel"]
+theme_override_constants/separation = 6
+
+[node name="Name" type="Label" parent="Panel/Inhalt"]
+text = "Gegenstand"
+theme_override_font_sizes/font_size = 16
+
+[node name="Typ" type="Label" parent="Panel/Inhalt"]
+text = "Typ"
+theme_override_colors/font_color = Color(0.55, 0.58, 0.62, 1)
+theme_override_font_sizes/font_size = 12
+
+[node name="Werte" type="Label" parent="Panel/Inhalt"]
+text = "..."
+theme_override_colors/font_color = Color(0.76, 0.78, 0.8, 1)
+theme_override_font_sizes/font_size = 12

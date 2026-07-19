@@ -21,17 +21,30 @@ signal hidden_item_pressed(stack: ItemStack, view: InventoryGridView)
 signal item_double_clicked(stack: ItemStack, view: InventoryGridView)
 signal cell_released(grid_position: Vector2i, view: InventoryGridView)
 
+## Der Zeiger steht auf einem erkannten Gegenstand (null = auf keinem).
+signal item_hovered(stack: ItemStack, view: InventoryGridView)
+
 const CELL_SIZE := 52.0
 const CELL_GAP := 2.0
 
-const COLOR_CELL := Color(0.16, 0.17, 0.19, 0.9)
-const COLOR_CELL_BORDER := Color(0.28, 0.30, 0.33)
-const COLOR_ITEM := Color(0.32, 0.35, 0.38)
-const COLOR_ITEM_BORDER := Color(0.55, 0.58, 0.62)
-const COLOR_HOVER_OK := Color(0.35, 0.75, 0.42, 0.45)
-const COLOR_HOVER_BAD := Color(0.80, 0.30, 0.25, 0.45)
-const COLOR_TEXT := Color(0.88, 0.90, 0.92)
-const COLOR_COUNT := Color(1.0, 0.92, 0.6)
+# Farbgebung bewusst düster (Tarkov-Anmutung): fast schwarze Felder, gedämpfte
+# Gegenstände, keine leuchtenden Flächen. Ein Inventar, in dem man im Raid
+# unter Zeitdruck sucht, soll ruhig wirken und nicht blenden.
+const COLOR_CELL := Color(0.075, 0.080, 0.088, 0.95)
+const COLOR_CELL_BORDER := Color(0.145, 0.155, 0.170)
+const COLOR_ITEM := Color(0.145, 0.152, 0.163)
+const COLOR_ITEM_BORDER := Color(0.26, 0.28, 0.31)
+const COLOR_HOVER_OK := Color(0.30, 0.62, 0.36, 0.38)
+const COLOR_HOVER_BAD := Color(0.68, 0.24, 0.20, 0.38)
+const COLOR_TEXT := Color(0.80, 0.82, 0.84)
+const COLOR_COUNT := Color(0.86, 0.80, 0.56)
+
+## Feiner Rahmen um den Gegenstand unter dem Zeiger.
+const COLOR_HIGHLIGHT := Color(0.62, 0.66, 0.72)
+
+## Wie stark die Seltenheitsfarbe den dunklen Grundton einfaerbt.
+## Niedrig halten: Die Farbe soll einordnen, nicht dominieren.
+const RARITY_TINT := 0.22
 
 ## Noch nicht durchsuchte Gegenstände: schwarze Umrisse. Der Spieler sieht
 ## Groesse und Lage, aber nicht, was es ist.
@@ -41,14 +54,15 @@ const COLOR_HIDDEN_BORDER := Color(0.22, 0.23, 0.26)
 ## Der Umriss, der gerade durchsucht wird.
 const COLOR_HIDDEN_ACTIVE_BORDER := Color(0.85, 0.78, 0.45)
 
-## Farbe je Kategorie — auf einen Blick erkennbar, was wo liegt.
+## Farbe je Kategorie — nur noch als schmaler Streifen am linken Rand, damit
+## man Munition von Medizin unterscheidet, ohne dass die Flaeche bunt wird.
 const CATEGORY_COLORS := {
-	ItemData.Category.AMMO: Color(0.42, 0.36, 0.22),
-	ItemData.Category.WEAPON: Color(0.30, 0.34, 0.42),
-	ItemData.Category.ARMOR_PLATE: Color(0.36, 0.30, 0.42),
-	ItemData.Category.BACKPACK: Color(0.28, 0.38, 0.32),
-	ItemData.Category.MEDICAL: Color(0.44, 0.28, 0.30),
-	ItemData.Category.FOOD: Color(0.40, 0.38, 0.24),
+	ItemData.Category.AMMO: Color(0.62, 0.52, 0.30),
+	ItemData.Category.WEAPON: Color(0.44, 0.50, 0.62),
+	ItemData.Category.ARMOR_PLATE: Color(0.52, 0.44, 0.62),
+	ItemData.Category.BACKPACK: Color(0.40, 0.56, 0.46),
+	ItemData.Category.MEDICAL: Color(0.66, 0.40, 0.42),
+	ItemData.Category.FOOD: Color(0.58, 0.56, 0.34),
 }
 
 var grid: InventoryGrid = null
@@ -71,6 +85,9 @@ var drag_source: InventoryGridView = null
 var preview_cell: Vector2i = Vector2i(-1, -1)
 
 var _hover_cell: Vector2i = Vector2i(-1, -1)
+
+## Gegenstand unter dem Zeiger. 0 = keiner.
+var _hover_stack_id: int = 0
 var _last_click_time: float = 0.0
 var _last_click_id: int = -1
 
@@ -139,6 +156,7 @@ func _gui_input(event: InputEvent) -> void:
 		var cell := position_to_cell((event as InputEventMouseMotion).position)
 		if cell != _hover_cell:
 			_hover_cell = cell
+			_update_hovered_stack(cell)
 			queue_redraw()
 		return
 
@@ -176,6 +194,32 @@ func _gui_input(event: InputEvent) -> void:
 		item_pressed.emit(stack, self)
 	else:
 		cell_released.emit(cell, self)
+
+
+## Meldet, welcher Gegenstand unter dem Zeiger liegt. Nicht durchsuchte
+## zaehlen NICHT — ihre Werte darf der Spieler noch nicht sehen.
+func _update_hovered_stack(cell: Vector2i) -> void:
+	var found: ItemStack = null
+	if cell.x >= 0:
+		var stack := grid.get_stack_at(cell.x, cell.y)
+		if stack != null and (container == null or container.is_revealed(stack.instance_id)):
+			found = stack
+
+	var new_id := found.instance_id if found != null else 0
+	if new_id == _hover_stack_id:
+		return
+	_hover_stack_id = new_id
+	item_hovered.emit(found, self)
+
+
+## Der Zeiger hat das Raster verlassen.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_MOUSE_EXIT:
+		_hover_cell = Vector2i(-1, -1)
+		if _hover_stack_id != 0:
+			_hover_stack_id = 0
+			item_hovered.emit(null, self)
+		queue_redraw()
 
 
 func _draw() -> void:
@@ -259,12 +303,21 @@ func _draw_stack(stack: ItemStack) -> void:
 		size.y * (CELL_SIZE + CELL_GAP) - CELL_GAP
 	))
 
-	var fill: Color = CATEGORY_COLORS.get(data.category, COLOR_ITEM) if data != null else COLOR_ITEM
-	draw_rect(rect, fill)
-	draw_rect(rect, COLOR_ITEM_BORDER, false, 1.5)
-
 	if data == null:
+		draw_rect(rect, COLOR_ITEM)
+		draw_rect(rect, COLOR_ITEM_BORDER, false, 1.5)
 		return
+
+	# Dunkler Grundton, leicht in Richtung Seltenheit eingefaerbt.
+	var rarity_color := ItemTooltip.get_rarity_color(data.get_rarity())
+	draw_rect(rect, COLOR_ITEM.lerp(rarity_color, RARITY_TINT))
+
+	# Schmaler Streifen links: die Kategorie auf einen Blick.
+	var accent: Color = CATEGORY_COLORS.get(data.category, COLOR_ITEM_BORDER)
+	draw_rect(Rect2(rect.position, Vector2(3.0, rect.size.y)), accent)
+
+	var hovered := _hover_stack_id == stack.instance_id
+	draw_rect(rect, COLOR_HIGHLIGHT if hovered else COLOR_ITEM_BORDER, false, 2.0 if hovered else 1.0)
 
 	var font := ThemeDB.fallback_font
 	var font_size := 12
