@@ -20,6 +20,8 @@ func _initialize() -> void:
 	_test_rotation()
 	_test_auto_stacking()
 	_test_move_onto_self()
+	_test_place_or_merge()
+	_test_splitting()
 	_test_nested_container()
 	_test_weight()
 	_test_serialization()
@@ -135,6 +137,65 @@ func _test_auto_stacking() -> void:
 	g2.add_item(ItemStack.create(&"plate_class4_front"))
 	g2.add_item(ItemStack.create(&"plate_class4_front"))
 	_check(g2.get_item_count() == 2, "Platten stapeln nicht (eigene Haltbarkeit)")
+
+
+## Gezieltes Ablegen auf ein belegtes Feld: die Maus zeigt genau dorthin,
+## und der Spieler erwartet, dass aufgestapelt wird statt abzuprallen.
+func _test_place_or_merge() -> void:
+	_section("Stapeln beim Ablegen")
+	var grid := InventoryGrid.new(6, 6)
+
+	var base := ItemStack.create(&"ammo_556x45_m995", 20)
+	grid.place(base, 0, 0)
+
+	var extra := ItemStack.create(&"ammo_556x45_m995", 15)
+	_check(grid.can_place_or_merge(extra, 0, 0), "belegtes Feld gilt als gueltiges Ziel")
+	_check(grid.place_or_merge(extra, 0, 0) == null, "alles wandert auf den Stapel")
+	_check(base.quantity == 35, "Stapel ist gewachsen (35)")
+	_check(grid.get_item_count() == 1, "kein zweiter Stapel entstanden")
+
+	# max_stack ist 60: was drueber liegt, muss als Rest zurueckkommen —
+	# stillschweigend verwerfen waere Diebstahl am Spieler.
+	var zuviel := ItemStack.create(&"ammo_556x45_m995", 40)
+	var rest := grid.place_or_merge(zuviel, 0, 0)
+	_check(base.quantity == 60, "Stapel laeuft nur bis max_stack (60)")
+	_check(rest != null and rest.quantity == 15, "der Rest kommt zurueck (15)")
+
+	# Fremde Munition darf nicht auf den Stapel.
+	var fremd := ItemStack.create(&"ammo_556x45_m855a1", 5)
+	_check(not grid.can_place_or_merge(fremd, 0, 0), "andere Sorte stapelt nicht")
+
+	# Platten haben eigene Haltbarkeit und duerfen nie verschmelzen.
+	var g2 := InventoryGrid.new(6, 6)
+	var platte := ItemStack.create(&"plate_class4_front")
+	g2.place(platte, 0, 0)
+	_check(not g2.can_place_or_merge(ItemStack.create(&"plate_class4_front"), 0, 0),
+		"Platten stapeln auch beim gezielten Ablegen nicht")
+
+
+## Strg + Ziehen teilt einen Stapel. Entscheidend ist, dass dabei die
+## Gesamtmenge erhalten bleibt — sonst vermehrt oder vernichtet die
+## Oberflaeche Munition.
+func _test_splitting() -> void:
+	_section("Stapel teilen")
+
+	var stack := ItemStack.create(&"ammo_556x45_m995", 30)
+	var part := stack.split(12)
+	_check(part != null, "Teilen liefert einen neuen Stapel")
+	_check(part.quantity == 12, "abgetrennte Menge stimmt (12)")
+	_check(stack.quantity == 18, "Ursprungsstapel schrumpft (18)")
+	_check(part.instance_id != stack.instance_id, "der Teil ist ein eigenes Exemplar")
+
+	_check(stack.split(0) == null, "null Stueck abtrennen ist Unfug")
+	_check(stack.split(18) == null, "den ganzen Stapel abtrennen ist Unfug")
+	_check(stack.split(99) == null, "mehr als vorhanden abtrennen ist Unfug")
+	_check(stack.quantity == 18, "gescheitertes Teilen laesst den Stapel unveraendert")
+
+	# Der abgetrennte Teil muss sich wieder zusammenlegen lassen.
+	var grid := InventoryGrid.new(6, 6)
+	grid.place(stack, 0, 0)
+	_check(grid.place_or_merge(part, 0, 0) == null, "Teil laesst sich zurueckstapeln")
+	_check(stack.quantity == 30, "wieder vollstaendig (30)")
 
 
 ## Ein Item um ein Feld verschieben darf nicht an sich selbst scheitern.

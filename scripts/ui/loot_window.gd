@@ -31,6 +31,15 @@ var _drag_offset: Vector2i = Vector2i.ZERO
 var _drag_target: InventoryGridView = null
 var _drag_target_cell: Vector2i = Vector2i(-1, -1)
 
+## Ob beim Anfassen Strg gedrueckt war — dann wird nach der Menge gefragt.
+var _drag_ctrl: bool = false
+
+## Was nach dem Loslassen noch auf die Mengenabfrage wartet.
+var _split_stack: ItemStack = null
+var _split_source: InventoryGridView = null
+var _split_target: InventoryGridView = null
+var _split_cell: Vector2i = Vector2i(-1, -1)
+
 @onready var _container_view: InventoryGridView = $Layout/Columns/Left/ContainerView
 @onready var _player_view: InventoryGridView = $Layout/Columns/Right/PlayerView
 @onready var _container_title: Label = $Layout/Columns/Left/ContainerTitle
@@ -38,6 +47,7 @@ var _drag_target_cell: Vector2i = Vector2i(-1, -1)
 @onready var _status: Label = $Layout/Columns/Left/Status
 @onready var _progress: ProgressBar = $Layout/Columns/Left/SearchProgress
 @onready var _ghost: DragGhost = $DragGhost
+@onready var _split_prompt: SplitPrompt = $SplitPrompt
 
 
 func _ready() -> void:
@@ -49,6 +59,9 @@ func _ready() -> void:
 	for view in [_container_view, _player_view]:
 		view.item_pressed.connect(_on_item_pressed)
 		view.item_double_clicked.connect(_on_item_double_clicked)
+
+	_split_prompt.confirmed.connect(_on_split_confirmed)
+	_split_prompt.cancelled.connect(_on_split_cancelled)
 
 
 ## Öffnet das Fenster für eine Kiste.
@@ -73,6 +86,8 @@ func open_for(p_container: LootContainer, p_inventory: PlayerInventory) -> void:
 func close() -> void:
 	if container != null:
 		container.pause_search()
+	if _split_prompt != null and _split_prompt.is_open():
+		_split_prompt.cancel()
 	_cancel_drag()
 	hide()
 	closed.emit()
@@ -122,8 +137,13 @@ func _update_status() -> void:
 # ---------------------------------------------------------------------------
 
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
+	# Solange die Mengenabfrage offen ist, wird nichts Neues angefasst.
+	if _split_prompt.is_open():
+		return
+
 	_drag_stack = stack
 	_drag_source = view
+	_drag_ctrl = Input.is_key_pressed(KEY_CTRL)
 
 	# Anfasspunkt merken, damit der Gegenstand nicht zur Ecke springt.
 	var origin := view.grid.get_position(stack.instance_id)
@@ -166,17 +186,36 @@ func drop_at(target: InventoryGridView, cell: Vector2i) -> void:
 	if _drag_stack == null:
 		return
 
-	if target != null and cell.x >= 0 and cell.y >= 0:
-		if target == _drag_source:
-			_move_within(target, cell)
-		else:
-			_move_between(target, cell)
+	if target == null or cell.x < 0 or cell.y < 0:
+		_cancel_drag()
+		return
+
+	# Mit Strg wird nach der Menge gefragt, statt alles zu verschieben.
+	if _drag_ctrl and _drag_stack.quantity > 1 and _can_take_from_source(_drag_stack):
+		_begin_split(target, cell)
+		return
+
+	if target == _drag_source:
+		_move_within(target, cell)
+	else:
+		_move_between(target, cell)
 
 	_cancel_drag()
 
 
-## Innerhalb desselben Rasters verschieben.
+## Innerhalb desselben Rasters verschieben — oder auf einen passenden
+## Stapel drauflegen.
 func _move_within(view: InventoryGridView, cell: Vector2i) -> void:
+	var existing := view.grid.get_stack_at(cell.x, cell.y)
+	if existing != null and existing.can_merge_with(_drag_stack):
+		existing.merge_from(_drag_stack)
+		# Ein leer geraeumter Stapel darf nicht als Geisterfeld liegenbleiben.
+		if _drag_stack.quantity <= 0:
+			view.grid.remove_item(_drag_stack.instance_id)
+		view.grid.changed.emit()
+		_notify_changed()
+		return
+
 	view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
 
 
@@ -186,28 +225,103 @@ func _move_between(target: InventoryGridView, cell: Vector2i) -> void:
 	var source_grid := _drag_source.grid
 	var target_grid := target.grid
 
-	if not target_grid.can_place(_drag_stack, cell.x, cell.y):
+	if not target_grid.can_place_or_merge(_drag_stack, cell.x, cell.y):
 		return
 
-	# Aus der Kiste nehmen: nur aufgedeckte Gegenstände.
-	if _drag_source == _container_view and container != null:
-		if not container.is_revealed(_drag_stack.instance_id):
-			return
+	if not _can_take_from_source(_drag_stack):
+		return
 
 	var removed := source_grid.remove_item(_drag_stack.instance_id)
 	if removed == null:
 		return
 
-	if not target_grid.place(removed, cell.x, cell.y):
-		# Zurücklegen — nichts darf verschwinden.
-		source_grid.add_item(removed)
-		return
+	var leftover := target_grid.place_or_merge(removed, cell.x, cell.y)
+	if leftover != null:
+		# Zurücklegen — nichts darf verschwinden. Auch ein Rest, der nicht
+		# mehr auf den Zielstapel passte, gehoert wieder zurueck.
+		source_grid.add_item(leftover)
+		if leftover == removed:
+			return
 
 	# Was der Spieler selbst hineinlegt, muss er auch sehen können.
 	if target == _container_view and container != null:
 		container.mark_revealed(removed)
 
 	_notify_changed()
+
+
+## Aus der Kiste darf nur genommen werden, was aufgedeckt ist.
+func _can_take_from_source(stack: ItemStack) -> bool:
+	if _drag_source != _container_view or container == null:
+		return true
+	return container.is_revealed(stack.instance_id)
+
+
+# ---------------------------------------------------------------------------
+# Aufteilen mit Strg
+# ---------------------------------------------------------------------------
+
+func _begin_split(target: InventoryGridView, cell: Vector2i) -> void:
+	_split_stack = _drag_stack
+	_split_source = _drag_source
+	_split_target = target
+	_split_cell = cell
+
+	var data := _split_stack.get_data()
+	var item_name := data.display_name if data != null else "Aufteilen"
+	_split_prompt.ask(item_name, _split_stack.quantity, get_global_mouse_position())
+
+	# Das Ziehen ist vorbei — die Abfrage uebernimmt.
+	_cancel_drag()
+
+
+func _on_split_confirmed(amount: int) -> void:
+	if _split_stack == null or _split_target == null:
+		_clear_split()
+		return
+
+	var stack := _split_stack
+	var target := _split_target
+	var cell := _split_cell
+	var source := _split_source
+	_clear_split()
+
+	# Alles gewaehlt: das ist ein normales Verschieben.
+	if amount >= stack.quantity:
+		_drag_stack = stack
+		_drag_source = source
+		if target == source:
+			_move_within(target, cell)
+		else:
+			_move_between(target, cell)
+		_cancel_drag()
+		return
+
+	var part := stack.split(amount)
+	if part == null:
+		return
+
+	var leftover := target.grid.place_or_merge(part, cell.x, cell.y)
+	if leftover != null:
+		# Passte nicht: zurueck auf den Ursprungsstapel, nichts geht verloren.
+		stack.quantity += leftover.quantity
+		return
+
+	if target == _container_view and container != null:
+		container.mark_revealed(part)
+
+	_notify_changed()
+
+
+func _on_split_cancelled() -> void:
+	_clear_split()
+
+
+func _clear_split() -> void:
+	_split_stack = null
+	_split_source = null
+	_split_target = null
+	_split_cell = Vector2i(-1, -1)
 
 
 func _on_item_double_clicked(stack: ItemStack, view: InventoryGridView) -> void:
@@ -234,6 +348,7 @@ func _cancel_drag() -> void:
 	_drag_target = null
 	_drag_target_cell = Vector2i(-1, -1)
 	_drag_offset = Vector2i.ZERO
+	_drag_ctrl = false
 	if _ghost != null:
 		_ghost.clear()
 	for v in [_container_view, _player_view]:

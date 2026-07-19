@@ -20,9 +20,16 @@ var _drag_stack: ItemStack = null
 var _drag_offset: Vector2i = Vector2i.ZERO
 var _drag_target_cell: Vector2i = Vector2i(-1, -1)
 
+## Ob beim Anfassen Strg gedrueckt war — dann wird nach der Menge gefragt.
+var _drag_ctrl: bool = false
+
+var _split_stack: ItemStack = null
+var _split_cell: Vector2i = Vector2i(-1, -1)
+
 @onready var _view: InventoryGridView = $Layout/Inhalt/GridView
 @onready var _stats: Label = $Layout/Inhalt/Stats
 @onready var _ghost: DragGhost = $DragGhost
+@onready var _split_prompt: SplitPrompt = $SplitPrompt
 
 
 func _ready() -> void:
@@ -31,6 +38,8 @@ func _ready() -> void:
 	# immer an das Control, auf dem gedrueckt wurde.
 	_view.item_pressed.connect(_on_item_pressed)
 	_view.item_double_clicked.connect(_on_item_double_clicked)
+	_split_prompt.confirmed.connect(_on_split_confirmed)
+	_split_prompt.cancelled.connect(_on_split_cancelled)
 
 
 func open_for(p_player: PlayerController) -> void:
@@ -42,6 +51,8 @@ func open_for(p_player: PlayerController) -> void:
 
 
 func close() -> void:
+	if _split_prompt != null and _split_prompt.is_open():
+		_split_prompt.cancel()
 	_cancel_drag()
 	hide()
 	closed.emit()
@@ -89,7 +100,11 @@ func _update_stats() -> void:
 # ---------------------------------------------------------------------------
 
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
+	if _split_prompt.is_open():
+		return
+
 	_drag_stack = stack
+	_drag_ctrl = Input.is_key_pressed(KEY_CTRL)
 
 	var origin := view.grid.get_position(stack.instance_id)
 	var local := view.get_local_mouse_position()
@@ -117,9 +132,61 @@ func _update_drag_target() -> void:
 func drop_at(cell: Vector2i) -> void:
 	if _drag_stack == null:
 		return
-	if cell.x >= 0 and cell.y >= 0:
+	if cell.x < 0 or cell.y < 0:
+		_cancel_drag()
+		return
+
+	# Mit Strg wird nach der Menge gefragt, statt alles zu verschieben.
+	if _drag_ctrl and _drag_stack.quantity > 1:
+		_split_stack = _drag_stack
+		_split_cell = cell
+		var data := _split_stack.get_data()
+		_split_prompt.ask(
+			data.display_name if data != null else "Aufteilen",
+			_split_stack.quantity,
+			get_global_mouse_position()
+		)
+		_cancel_drag()
+		return
+
+	# Auf einen passenden Stapel drauflegen, statt am belegten Feld zu scheitern.
+	var existing := _view.grid.get_stack_at(cell.x, cell.y)
+	if existing != null and existing.can_merge_with(_drag_stack):
+		existing.merge_from(_drag_stack)
+		if _drag_stack.quantity <= 0:
+			_view.grid.remove_item(_drag_stack.instance_id)
+		_view.grid.changed.emit()
+	else:
 		_view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
+
 	_cancel_drag()
+
+
+func _on_split_confirmed(amount: int) -> void:
+	var stack := _split_stack
+	var cell := _split_cell
+	_split_stack = null
+	_split_cell = Vector2i(-1, -1)
+
+	if stack == null or amount >= stack.quantity:
+		return
+
+	var part := stack.split(amount)
+	if part == null:
+		return
+
+	var leftover := _view.grid.place_or_merge(part, cell.x, cell.y)
+	if leftover != null:
+		# Passte nicht: zurueck auf den Ursprungsstapel, nichts geht verloren.
+		stack.quantity += leftover.quantity
+		return
+
+	_view.queue_redraw()
+
+
+func _on_split_cancelled() -> void:
+	_split_stack = null
+	_split_cell = Vector2i(-1, -1)
 
 
 ## Doppelklick nimmt eine Waffe in die Hand. Bei allem anderen passiert
@@ -150,6 +217,7 @@ func _cancel_drag() -> void:
 	_drag_stack = null
 	_drag_offset = Vector2i.ZERO
 	_drag_target_cell = Vector2i(-1, -1)
+	_drag_ctrl = false
 	if _ghost != null:
 		_ghost.clear()
 	_view.drag_stack = null

@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/inventory_window.gd" id="1_inventory_window"]
 [ext_resource type="Script" path="res://scripts/ui/inventory_grid_view.gd" id="2_grid_view"]
 [ext_resource type="Script" path="res://scripts/ui/drag_ghost.gd" id="3_drag_ghost"]
+[ext_resource type="PackedScene" path="res://scenes/ui/split_prompt.tscn" id="4_split_prompt"]
 
 [sub_resource type="StyleBoxFlat" id="Style_panel"]
 bg_color = Color(0.07, 0.08, 0.09, 0.97)
@@ -63,7 +64,7 @@ mouse_filter = 1
 script = ExtResource("2_grid_view")
 
 [node name="Hinweis" type="Label" parent="Layout/Inhalt"]
-text = "Ziehen sortiert um  |  R dreht  |  Doppelklick nimmt eine Waffe in die Hand"
+text = "Ziehen sortiert um  |  Strg + Ziehen teilt einen Stapel  |  R dreht  |  Doppelklick nimmt eine Waffe in die Hand"
 theme_override_colors/font_color = Color(0.62, 0.66, 0.7, 1)
 
 [node name="Fusszeile" type="Label" parent="."]
@@ -85,3 +86,5 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("3_drag_ghost")
+
+[node name="SplitPrompt" parent="." instance=ExtResource("4_split_prompt")]

@@ -147,6 +147,41 @@ func add_item(stack: ItemStack) -> bool:
 	return place(stack, pos.x, pos.y)
 
 
+## Ob hier abgelegt werden kann — entweder weil Platz ist, oder weil dort ein
+## Stapel liegt, auf den es draufpasst. Fuer die Vorschau unter dem Mauszeiger:
+## sie muss gruen zeigen, wo das Ablegen auch wirklich klappt.
+func can_place_or_merge(stack: ItemStack, x: int, y: int, ignore_id: int = 0) -> bool:
+	if stack == null:
+		return false
+	if can_place(stack, x, y, ignore_id):
+		return true
+	var target := get_stack_at(x, y)
+	return target != null and target.instance_id != ignore_id and target.can_merge_with(stack)
+
+
+## Legt an eine BESTIMMTE Stelle ab und stapelt dabei auf, was dort schon liegt.
+##
+## Unterschied zu add_item(): das hier ist die Maus. Der Spieler zeigt genau
+## auf ein Feld und erwartet, dass 20 Patronen auf die 14 dort draufwandern —
+## statt einer Fehlermeldung, weil das Feld belegt ist.
+##
+## Gibt zurueck, was NICHT untergebracht wurde (null = alles untergebracht).
+## Der Rest bleibt ein gueltiger Stapel und darf nicht verworfen werden.
+func place_or_merge(stack: ItemStack, x: int, y: int) -> ItemStack:
+	if stack == null:
+		return null
+
+	var target := get_stack_at(x, y)
+	if target != null and target.can_merge_with(stack):
+		target.merge_from(stack)
+		changed.emit()
+		return null if stack.quantity <= 0 else stack
+
+	if place(stack, x, y):
+		return null
+	return stack
+
+
 # ---------------------------------------------------------------------------
 # Entfernen und Verschieben
 # ---------------------------------------------------------------------------

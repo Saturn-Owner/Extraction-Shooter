@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/loot_window.gd" id="1_loot_window"]
 [ext_resource type="Script" path="res://scripts/ui/inventory_grid_view.gd" id="2_grid_view"]
 [ext_resource type="Script" path="res://scripts/ui/drag_ghost.gd" id="3_drag_ghost"]
+[ext_resource type="PackedScene" path="res://scenes/ui/split_prompt.tscn" id="4_split_prompt"]
 
 [sub_resource type="StyleBoxFlat" id="Style_panel"]
 bg_color = Color(0.07, 0.08, 0.09, 0.97)
@@ -96,7 +97,7 @@ offset_left = -300.0
 offset_top = -60.0
 offset_right = 300.0
 offset_bottom = -30.0
-text = "[Tab] alles nehmen     [F] / [Esc] schliessen"
+text = "[Tab] alles nehmen     [Strg] + Ziehen teilt einen Stapel     [F] / [Esc] schliessen"
 horizontal_alignment = 1
 
 [node name="DragGhost" type="Control" parent="."]
@@ -105,3 +106,5 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 script = ExtResource("3_drag_ghost")
+
+[node name="SplitPrompt" parent="." instance=ExtResource("4_split_prompt")]

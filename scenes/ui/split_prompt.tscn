@@ -1,0 +1,60 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/split_prompt.gd" id="1_split_prompt"]
+
+[sub_resource type="StyleBoxFlat" id="Style_panel"]
+bg_color = Color(0.11, 0.12, 0.14, 0.99)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.48, 0.53, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+content_margin_left = 14.0
+content_margin_top = 12.0
+content_margin_right = 14.0
+content_margin_bottom = 12.0
+
+[node name="SplitPrompt" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 1
+script = ExtResource("1_split_prompt")
+
+[node name="Panel" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(260, 0)
+offset_right = 260.0
+offset_bottom = 150.0
+theme_override_styles/panel = SubResource("Style_panel")
+
+[node name="Inhalt" type="VBoxContainer" parent="Panel"]
+theme_override_constants/separation = 8
+
+[node name="Titel" type="Label" parent="Panel/Inhalt"]
+text = "Aufteilen"
+theme_override_font_sizes/font_size = 16
+
+[node name="Menge" type="Label" parent="Panel/Inhalt"]
+text = "1 von 1"
+theme_override_colors/font_color = Color(1, 0.92, 0.6, 1)
+
+[node name="Slider" type="HSlider" parent="Panel/Inhalt"]
+custom_minimum_size = Vector2(0, 20)
+min_value = 1.0
+max_value = 1.0
+value = 1.0
+
+[node name="Knoepfe" type="HBoxContainer" parent="Panel/Inhalt"]
+theme_override_constants/separation = 8
+
+[node name="Nehmen" type="Button" parent="Panel/Inhalt/Knoepfe"]
+size_flags_horizontal = 3
+text = "Nehmen"
+
+[node name="Abbrechen" type="Button" parent="Panel/Inhalt/Knoepfe"]
+size_flags_horizontal = 3
+text = "Abbrechen"

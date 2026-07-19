@@ -188,7 +188,7 @@ func _draw_drag_preview() -> void:
 	# Beim Verschieben innerhalb desselben Rasters darf sich der Gegenstand
 	# mit sich selbst überlappen.
 	var ignore := drag_stack.instance_id if drag_source == self else 0
-	var fits := grid.can_place(drag_stack, preview_cell.x, preview_cell.y, ignore)
+	var fits := grid.can_place_or_merge(drag_stack, preview_cell.x, preview_cell.y, ignore)
 	draw_rect(rect, COLOR_HOVER_OK if fits else COLOR_HOVER_BAD)
 
 
