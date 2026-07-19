@@ -88,11 +88,32 @@ func _build_lower_receiver() -> void:
 	add_child(ViewmodelParts.box("GuardRear", Vector3(0.009, 0.016, 0.006), Vector3(0.0, -0.074, -0.050), steel,
 		Vector3(24.0, 0.0, 0.0)))
 
-	add_child(ViewmodelParts.box("PistolGrip", Vector3(0.032, 0.074, 0.042), Vector3(0.0, -0.082, -0.030),
-		polymer, Vector3(-17.0, 0.0, 0.0)))
-	add_child(ViewmodelParts.box("GripFlare", Vector3(0.035, 0.010, 0.046), Vector3(0.0, -0.116, -0.020),
-		polymer, Vector3(-17.0, 0.0, 0.0)))
+	# Griff als eigene Baugruppe, damit die Riffelung die Neigung des Griffs
+	# mitmacht, statt sie an jedem einzelnen Teil wiederholen zu muessen.
+	var grip := ViewmodelParts.pivot("GripAssembly", Vector3(0.0, -0.082, -0.030))
+	grip.rotation_degrees = Vector3(-17.0, 0.0, 0.0)
+	grip.add_child(ViewmodelParts.box("PistolGrip", Vector3(0.032, 0.074, 0.042), Vector3.ZERO, polymer))
+	grip.add_child(ViewmodelParts.box("GripFlare", Vector3(0.035, 0.010, 0.046), Vector3(0.0, -0.038, 0.006), polymer))
+	# Riffelung vorn und hinten. Das ist die Stelle, die der Spieler beim
+	# Nachladen aus naechster Naehe sieht.
+	# Bewusst flach und dicht: Zu dicke Rippen mit grossen Luecken sehen aus
+	# wie eine angeschraubte Leiter, nicht wie eine gegriffige Oberflaeche.
+	grip.add_child(ViewmodelParts.ribs("GripFront", 8, Vector3(0.029, 0.0035, 0.0022),
+		Vector3(0.0, -0.029, -0.0210), Vector3(0.0, 0.0082, 0.0), polymer))
+	grip.add_child(ViewmodelParts.ribs("GripBack", 8, Vector3(0.029, 0.0035, 0.0022),
+		Vector3(0.0, -0.029, 0.0210), Vector3(0.0, 0.0082, 0.0), polymer))
+	add_child(grip)
+
 	add_child(ViewmodelParts.box("GripTang", Vector3(0.028, 0.016, 0.024), Vector3(0.0, -0.052, -0.036), polymer))
+
+	# Die beiden Verschlussbolzen. Winzig, aber das Auge sucht solche Punkte —
+	# eine Flaeche mit einem Bolzen wirkt gebaut, eine glatte wirkt gegossen.
+	for side in [-1.0, 1.0]:
+		var tag := "L" if side < 0.0 else "R"
+		add_child(ViewmodelParts.screw("PivotPin" + tag, 0.0055, 0.004,
+			Vector3(side * 0.017, -0.014, -0.148), steel))
+		add_child(ViewmodelParts.screw("TakedownPin" + tag, 0.0055, 0.004,
+			Vector3(side * 0.017, -0.014, -0.040), steel))
 
 
 ## Achteckiger Handschutz mit durchlaufender Schiene bis kurz vor die Muendung.
@@ -110,6 +131,16 @@ func _build_handguard() -> void:
 	add_child(ViewmodelParts.box("HandguardRailBase", Vector3(0.022, 0.006, 0.220),
 		Vector3(0.0, RAIL_Y - 0.003, center_z), black))
 	ViewmodelParts.rail(self, "HandguardRail", -0.232, -0.452, RAIL_Y + 0.003, black)
+
+	# M-LOK-Schlitze an beiden Seiten und unten. Ein glatter Handschutz ist
+	# die groesste zusammenhaengende Flaeche der Waffe — bleibt sie leer,
+	# faellt genau dort auf, dass das Modell unfertig ist.
+	for side in [-1.0, 1.0]:
+		add_child(ViewmodelParts.ribs("Mlok%s" % ("L" if side < 0.0 else "R"), 6,
+			Vector3(0.004, 0.009, 0.024),
+			Vector3(side * 0.0245, BORE_Y, -0.268), Vector3(0.0, 0.0, -0.030), black))
+	add_child(ViewmodelParts.ribs("MlokBottom", 6, Vector3(0.009, 0.004, 0.024),
+		Vector3(0.0, BORE_Y - 0.0245, -0.268), Vector3(0.0, 0.0, -0.030), black))
 
 
 func _build_barrel() -> void:

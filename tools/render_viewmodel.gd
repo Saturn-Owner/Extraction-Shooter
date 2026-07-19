@@ -19,20 +19,22 @@ extends SceneTree
 
 const SIZE := Vector2i(1280, 720)
 
-## Kamerapositionen, ausgelegt auf ein Gewehr in voller Laenge.
-## Kuerzere Waffen ruecken naeher heran, sonst verschwindet eine Pistole
-## als Punkt in der Bildmitte.
+## Blickrichtungen, nicht feste Positionen.
+##
+## Vorher standen hier absolute Kamerapunkte, die auf ein Gewehr ausgelegt
+## waren, plus ein Streckfaktor aus der Lauflaenge. Bei der Pistole ging das
+## schief: Sie hat andere Proportionen als ein Gewehr, war halb aus dem Bild
+## und der Griff abgeschnitten. Jetzt wird die tatsaechliche Ausdehnung des
+## Modells gemessen und die Kamera daraus gesetzt — das passt fuer jede Waffe,
+## auch fuer die acht, die noch kommen.
+##
+## focus = "hinten" rueckt auf das hintere Stueck: Gehaeuse, Griff, Schaft.
+## Genau dort sitzen die Fehler, die man in der Gesamtansicht nicht sieht.
 const VIEWS := [
-	{name = "perspektive", from = Vector3(0.48, 0.26, 0.30), look_at = Vector3(0.0, -0.01, -0.24)},
-	{name = "seite", from = Vector3(0.95, 0.02, -0.22), look_at = Vector3(0.0, 0.0, -0.22)},
-	# Nahansicht auf Gehaeuse, Griff und Schaft. In der Gesamtansicht sind
-	# genau dort die Fehler, die man nicht sieht — durchstechende Teile,
-	# Luecken, Stufen. Aus zwei Metern faellt so etwas nicht auf.
-	{name = "nah_gehaeuse", from = Vector3(0.40, 0.14, 0.30), look_at = Vector3(0.0, -0.02, -0.04)},
+	{name = "perspektive", dir = Vector3(0.62, 0.34, 0.71), margin = 1.18, focus = "alles"},
+	{name = "seite", dir = Vector3(1.0, 0.04, 0.0), margin = 1.15, focus = "alles"},
+	{name = "nah_gehaeuse", dir = Vector3(0.70, 0.34, 0.63), margin = 1.10, focus = "hinten"},
 ]
-
-## Laenge, auf die die Kameraabstaende ausgelegt sind (Muendung der AR-15).
-const REFERENCE_LENGTH := 0.575
 
 var _output_dir := ""
 var _filter := ""
@@ -171,11 +173,51 @@ func _apply_job(index: int) -> void:
 		_model.build()
 		_model_weapon = weapon_index
 
-	# Kurze Waffen naeher heranholen, damit alle bildfuellend sind.
-	var scale := clampf(absf(_model.muzzle_z) / REFERENCE_LENGTH, 0.55, 1.4)
 	var view: Dictionary = VIEWS[job["view"]]
-	var look_at: Vector3 = view["look_at"] * scale
-	_camera.look_at_from_position(view["from"] * scale, look_at, Vector3.UP)
+	var bounds := _model_bounds(_model, view["focus"] == "hinten")
+	var centre := bounds.get_center()
+	# Umkugel des Kastens als Mass, damit die Waffe aus jeder Richtung
+	# vollstaendig ins Bild passt.
+	var radius: float = maxf(0.02, bounds.size.length() * 0.5)
+	var distance: float = radius / tan(deg_to_rad(_camera.fov) * 0.5) * float(view["margin"])
+	var direction: Vector3 = (view["dir"] as Vector3).normalized()
+	_camera.look_at_from_position(centre + direction * distance, centre, Vector3.UP)
+
+
+## Ausdehnung des Modells, gemessen an den tatsaechlichen Meshes.
+##
+## rear_only beschraenkt auf die hintere Haelfte. -Z ist vorne, das hintere
+## Ende liegt also bei den groesseren Z-Werten.
+func _model_bounds(node: Node3D, rear_only: bool) -> AABB:
+	var boxes: Array[AABB] = []
+	_collect_boxes(node, Transform3D.IDENTITY, boxes)
+	if boxes.is_empty():
+		push_error("Modell hat keine sichtbaren Meshes")
+		return AABB(Vector3.ZERO, Vector3.ONE * 0.1)
+
+	var bounds := boxes[0]
+	for i in range(1, boxes.size()):
+		bounds = bounds.merge(boxes[i])
+
+	if not rear_only:
+		return bounds
+
+	var split := bounds.get_center().z
+	return AABB(
+		Vector3(bounds.position.x, bounds.position.y, split),
+		Vector3(bounds.size.x, bounds.size.y, bounds.end.z - split)
+	)
+
+
+func _collect_boxes(node: Node, transform: Transform3D, boxes: Array[AABB]) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			boxes.append(transform * mesh_instance.mesh.get_aabb())
+
+	for child in node.get_children():
+		if child is Node3D:
+			_collect_boxes(child, transform * (child as Node3D).transform, boxes)
 
 
 func _process(_delta: float) -> bool:

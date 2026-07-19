@@ -64,10 +64,19 @@ func _build_frame() -> void:
 	add_child(ViewmodelParts.box("AccessoryRail", Vector3(0.014, 0.006, 0.038), Vector3(0.0, -0.021, -0.150), black))
 
 	# Griff mit dem typisch steilen Winkel.
-	add_child(ViewmodelParts.box("Grip", Vector3(0.028, 0.098, 0.038), Vector3(0.0, -0.076, -0.018),
-		polymer, Vector3(-11.0, 0.0, 0.0)))
-	add_child(ViewmodelParts.box("Backstrap", Vector3(0.024, 0.090, 0.010), Vector3(0.0, -0.072, 0.004),
-		polymer, Vector3(-11.0, 0.0, 0.0)))
+	# Griff als Baugruppe, damit die Riffelung die Neigung mitmacht.
+	var grip := ViewmodelParts.pivot("GripAssembly", Vector3(0.0, -0.076, -0.018))
+	grip.rotation_degrees = Vector3(-11.0, 0.0, 0.0)
+	grip.add_child(ViewmodelParts.box("Grip", Vector3(0.028, 0.098, 0.038), Vector3.ZERO, polymer))
+	grip.add_child(ViewmodelParts.box("Backstrap", Vector3(0.024, 0.090, 0.010), Vector3(0.0, 0.004, 0.022), polymer))
+	# Die grobe Griffnarbung der Glock, angedeutet durch waagerechte Rippen
+	# vorn und hinten. Bei einer Pistole ist der Griff das groesste sichtbare
+	# Bauteil — bleibt er glatt, sieht die ganze Waffe unfertig aus.
+	grip.add_child(ViewmodelParts.ribs("GripFront", 10, Vector3(0.025, 0.0035, 0.0022),
+		Vector3(0.0, -0.040, -0.0190), Vector3(0.0, 0.0086, 0.0), polymer))
+	grip.add_child(ViewmodelParts.ribs("GripBack", 10, Vector3(0.021, 0.0035, 0.0022),
+		Vector3(0.0, -0.040, 0.0270), Vector3(0.0, 0.0086, 0.0), polymer))
+	add_child(grip)
 	add_child(ViewmodelParts.box("Beavertail", Vector3(0.024, 0.012, 0.024), Vector3(0.0, -0.028, 0.006), polymer))
 	add_child(ViewmodelParts.box("MagFunnel", Vector3(0.030, 0.010, 0.040), Vector3(0.0, -0.124, -0.006),
 		polymer, Vector3(-11.0, 0.0, 0.0)))

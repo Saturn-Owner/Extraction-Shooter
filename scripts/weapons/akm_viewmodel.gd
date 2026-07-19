@@ -111,11 +111,15 @@ func _build_furniture() -> void:
 	add_child(ViewmodelParts.box("UpperHandguard", Vector3(0.036, 0.026, 0.130), Vector3(0.0, BORE_Y + 0.036, -0.305), wood))
 	add_child(ViewmodelParts.box("RetainerRing", Vector3(0.040, 0.048, 0.014), Vector3(0.0, BORE_Y + 0.008, -0.232), steel))
 
-	# Pistolengriff, steiler als bei der AR-15.
-	add_child(ViewmodelParts.box("PistolGrip", Vector3(0.032, 0.086, 0.044), Vector3(0.0, -0.062, -0.036),
-		polymer, Vector3(-14.0, 0.0, 0.0)))
-	add_child(ViewmodelParts.box("GripCap", Vector3(0.034, 0.010, 0.046), Vector3(0.0, -0.104, -0.026),
-		polymer, Vector3(-14.0, 0.0, 0.0)))
+	# Pistolengriff, steiler als bei der AR-15. Als Baugruppe, damit die
+	# Riffelung die Neigung mitmacht.
+	var grip := ViewmodelParts.pivot("GripAssembly", Vector3(0.0, -0.062, -0.036))
+	grip.rotation_degrees = Vector3(-14.0, 0.0, 0.0)
+	grip.add_child(ViewmodelParts.box("PistolGrip", Vector3(0.032, 0.086, 0.044), Vector3.ZERO, polymer))
+	grip.add_child(ViewmodelParts.box("GripCap", Vector3(0.034, 0.010, 0.046), Vector3(0.0, -0.043, 0.008), polymer))
+	grip.add_child(ViewmodelParts.ribs("GripFront", 9, Vector3(0.029, 0.0035, 0.0022),
+		Vector3(0.0, -0.034, -0.0220), Vector3(0.0, 0.0084, 0.0), polymer))
+	add_child(grip)
 
 	# Fester Holzschaft mit abfallendem Ruecken — kein ausziehbares Rohr.
 	add_child(ViewmodelParts.box("StockNeck", Vector3(0.034, 0.044, 0.070), Vector3(0.0, -0.008, 0.010),

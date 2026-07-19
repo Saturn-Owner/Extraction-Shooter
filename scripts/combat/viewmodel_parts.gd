@@ -301,6 +301,34 @@ static func rail(parent: Node3D, prefix: String, from_z: float, to_z: float,
 		))
 
 
+## Reihe paralleler Rippen.
+##
+## Griffriffelung, Schlittenrillen, Pumpenprofil, Kuehlrippen — alles dasselbe
+## Muster. Aus zwei Metern liest das Auge daraus "gefraeste Oberflaeche",
+## obwohl es ein Dutzend duenner Quader sind. Derselbe Trick wie bei der
+## Picatinny-Schiene, und der billigste Weg zu wahrgenommenem Detail.
+static func ribs(name: String, count: int, size: Vector3, start: Vector3, step: Vector3,
+		mat: Material, rotation_deg: Vector3 = Vector3.ZERO) -> Node3D:
+	var node := Node3D.new()
+	node.name = name
+	for i in range(count):
+		node.add_child(box(
+			"%sRib%d" % [name, i],
+			size,
+			start + step * float(i),
+			mat,
+			rotation_deg
+		))
+	return node
+
+
+## Schraubenkopf oder Haltebolzen. Standardmaessig quer eingesetzt, also
+## entlang X — so sitzen die meisten Bolzen an einem Gehaeuse.
+static func screw(name: String, radius: float, depth: float, pos: Vector3,
+		mat: Material, rotation_deg: Vector3 = Vector3(0.0, 0.0, 90.0)) -> MeshInstance3D:
+	return cylinder(name, radius, depth, pos, mat, rotation_deg)
+
+
 ## Achteckige Roehre aus acht Platten — fuer Handschuetze und Vorderschaefte.
 ## Kanten in mehreren Winkeln lesen sich als Rundung, ein Kasten nicht.
 static func octagon_tube(name: String, radius: float, length: float, center: Vector3,
