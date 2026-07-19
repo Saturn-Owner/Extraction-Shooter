@@ -1,0 +1,218 @@
+## First-Person-Steuerung der Spielerfigur.
+##
+## Bewegungsgefühl bewusst "schwer und bedacht" (Tarkov/Arma), nicht flott:
+## Die Figur beschleunigt und bremst spürbar, statt sofort auf Tempo zu sein.
+## Jede Bewegung soll sich nach einer Entscheidung anfühlen, nicht nach einem
+## Reflex — das trägt später das Survival-Gefühl.
+##
+## Drei Dinge bremsen den Spieler, und alle sollen sich unterscheidbar anfühlen:
+##   1. Getragenes Gewicht (Inventar)
+##   2. Erschöpfung (Ausdauer leer)
+##   3. Haltung (geduckt)
+##
+## HINWEIS ZUM NETZWERK: Diese Klasse bewegt den lokalen Spieler und ist damit
+## bewusst client-seitig. Sobald Multiplayer dazukommt, muss der Server jede
+## Position gegenprüfen (Plausibilitätscheck gegen die hier definierten
+## Höchstgeschwindigkeiten), sonst kann ein Client beliebig schnell laufen.
+class_name PlayerController
+extends CharacterBody3D
+
+signal stamina_changed(current: float, maximum: float)
+signal exhausted()
+
+@export_group("Tempo (Meter pro Sekunde)")
+
+## Normales Gehen. Bewusst langsam — das ist die Standardgeschwindigkeit,
+## in der der Spieler die meiste Zeit unterwegs ist.
+@export var walk_speed: float = 2.4
+
+## Sprint. Kostet Ausdauer und macht laut.
+@export var sprint_speed: float = 5.2
+
+## Geduckt. Langsam, aber leise und schwerer zu treffen.
+@export var crouch_speed: float = 1.2
+
+@export_group("Trägheit")
+
+## Wie schnell die Figur auf Tempo kommt. Niedrig = schwerfällig.
+@export var acceleration: float = 8.0
+
+## Wie schnell sie zum Stehen kommt.
+@export var deceleration: float = 10.0
+
+## Bewegungskontrolle in der Luft (0 = gar keine).
+@export_range(0.0, 1.0) var air_control: float = 0.15
+
+@export var jump_velocity: float = 4.0
+
+@export_group("Kamera")
+
+@export_range(0.01, 1.0) var mouse_sensitivity: float = 0.15
+
+## Wie weit hoch und runter geschaut werden darf (Grad).
+@export var pitch_limit_degrees: float = 89.0
+
+## Augenhöhe im Stehen und im Ducken.
+@export var stand_eye_height: float = 1.65
+@export var crouch_eye_height: float = 0.95
+
+@export_group("Ausdauer")
+
+@export var max_stamina: float = 100.0
+
+## Verbrauch pro Sekunde beim Sprinten.
+@export var stamina_drain_per_second: float = 14.0
+
+## Erholung pro Sekunde, wenn nicht gesprintet wird.
+@export var stamina_regen_per_second: float = 9.0
+
+## Pause vor Beginn der Erholung. Verhindert Dauersprint mit Mikropausen.
+@export var stamina_regen_delay: float = 1.4
+
+@export_group("Traglast")
+
+## Gewicht, ab dem der Spieler langsamer wird.
+@export var comfortable_weight_kg: float = 18.0
+
+## Gewicht, ab dem kaum noch Bewegung möglich ist.
+@export var max_weight_kg: float = 48.0
+
+## Wie stark Überladung bremst (1.0 = bis zum Stillstand bei max_weight_kg).
+@export_range(0.0, 1.0) var weight_slowdown: float = 0.55
+
+## Aktuell getragenes Gewicht. Wird später vom Inventar gesetzt:
+##   player.carried_weight_kg = inventory.get_total_weight()
+var carried_weight_kg: float = 0.0
+
+var stamina: float = 100.0
+var is_crouching: bool = false
+var is_sprinting: bool = false
+
+var _pitch: float = 0.0
+var _time_since_sprint: float = 0.0
+var _was_exhausted: bool = false
+
+@onready var _camera_pivot: Node3D = $CameraPivot
+@onready var _collision: CollisionShape3D = $CollisionShape3D
+
+
+func _ready() -> void:
+	stamina = max_stamina
+	_capture_mouse(true)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		var motion := event as InputEventMouseMotion
+		# Waagerecht dreht die ganze Figur, senkrecht nur den Kopf.
+		rotate_y(deg_to_rad(-motion.relative.x * mouse_sensitivity))
+		_pitch = clampf(
+			_pitch - motion.relative.y * mouse_sensitivity,
+			-pitch_limit_degrees,
+			pitch_limit_degrees
+		)
+		_camera_pivot.rotation_degrees.x = _pitch
+
+	if event.is_action_pressed("toggle_mouse"):
+		_capture_mouse(Input.mouse_mode != Input.MOUSE_MODE_CAPTURED)
+
+
+func _capture_mouse(capture: bool) -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if capture else Input.MOUSE_MODE_VISIBLE
+
+
+func _physics_process(delta: float) -> void:
+	_update_crouch(delta)
+	_update_stamina(delta)
+	_update_movement(delta)
+	move_and_slide()
+
+
+func _update_crouch(delta: float) -> void:
+	is_crouching = Input.is_action_pressed("crouch") and is_on_floor()
+	var target_height := crouch_eye_height if is_crouching else stand_eye_height
+	# Weich statt sprunghaft — sonst wirkt das Ducken wie ein Teleport.
+	_camera_pivot.position.y = move_toward(_camera_pivot.position.y, target_height, 6.0 * delta)
+
+	var shape := _collision.shape as CapsuleShape3D
+	if shape != null:
+		var target_shape_height := 1.2 if is_crouching else 1.8
+		shape.height = move_toward(shape.height, target_shape_height, 4.0 * delta)
+
+
+func _update_stamina(delta: float) -> void:
+	if is_sprinting:
+		stamina = maxf(0.0, stamina - stamina_drain_per_second * delta)
+		_time_since_sprint = 0.0
+	else:
+		_time_since_sprint += delta
+		if _time_since_sprint >= stamina_regen_delay:
+			stamina = minf(max_stamina, stamina + stamina_regen_per_second * delta)
+
+	stamina_changed.emit(stamina, max_stamina)
+
+	# Nur einmal melden, nicht in jedem Frame.
+	if stamina <= 0.0 and not _was_exhausted:
+		_was_exhausted = true
+		exhausted.emit()
+	elif stamina > max_stamina * 0.2:
+		_was_exhausted = false
+
+
+## Wie stark die Traglast bremst. 1.0 = volles Tempo, 0.45 = stark verlangsamt.
+func get_weight_factor() -> float:
+	if carried_weight_kg <= comfortable_weight_kg:
+		return 1.0
+	var over := carried_weight_kg - comfortable_weight_kg
+	var span := maxf(1.0, max_weight_kg - comfortable_weight_kg)
+	var ratio := clampf(over / span, 0.0, 1.0)
+	return 1.0 - ratio * weight_slowdown
+
+
+## Ob gerade gesprintet werden darf.
+## Bewusst restriktiv: nicht rückwärts, nicht geduckt, nicht ohne Ausdauer,
+## nicht hoffnungslos überladen.
+func can_sprint(input_dir: Vector2) -> bool:
+	if is_crouching or not is_on_floor():
+		return false
+	if stamina <= 0.0:
+		return false
+	if carried_weight_kg >= max_weight_kg:
+		return false
+	return input_dir.y < -0.1
+
+
+func get_current_max_speed() -> float:
+	var base := walk_speed
+	if is_crouching:
+		base = crouch_speed
+	elif is_sprinting:
+		base = sprint_speed
+	return base * get_weight_factor()
+
+
+func _update_movement(delta: float) -> void:
+	if not is_on_floor():
+		velocity += get_gravity() * delta
+
+	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	is_sprinting = Input.is_action_pressed("sprint") and can_sprint(input_dir)
+
+	if Input.is_action_just_pressed("jump") and is_on_floor() and stamina > 10.0:
+		velocity.y = jump_velocity
+		stamina = maxf(0.0, stamina - 8.0)
+
+	# Eingaberichtung in Weltkoordinaten umrechnen.
+	var direction := (transform.basis * Vector3(input_dir.x, 0.0, input_dir.y)).normalized()
+	var speed := get_current_max_speed()
+	var control := 1.0 if is_on_floor() else air_control
+
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z)
+	if direction.length_squared() > 0.01:
+		var target := direction * speed
+		horizontal = horizontal.move_toward(target, acceleration * control * delta * speed)
+	else:
+		horizontal = horizontal.move_toward(Vector3.ZERO, deceleration * control * delta * speed)
+
+	velocity.x = horizontal.x
+	velocity.z = horizontal.z
