@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_pxkba"]
+
+[resource]
+script = ExtResource("1_pxkba")
+caliber = &"7.62x39"
+fire_rate_rpm = 600
+recoil_vertical = 158.0
+recoil_horizontal = 62.0
+ergonomics = 46
+accuracy_moa = 3.2
+id = &"weapon_rifle_akm"
+display_name = "AKM"
+description = "Mehr Wucht als die AK-74, aber auch deutlich mehr Rueckstoss. Dauerfeuer ist Verschwendung."
+category = 2
+grid_width = 5
+grid_height = 2
+weight_kg = 3.6
+base_price = 24500

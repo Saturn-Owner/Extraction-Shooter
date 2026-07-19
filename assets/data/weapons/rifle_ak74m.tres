@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_ptcnj"]
+
+[resource]
+script = ExtResource("1_ptcnj")
+caliber = &"5.45x39"
+fire_rate_rpm = 650
+recoil_vertical = 126.0
+recoil_horizontal = 46.0
+accuracy_moa = 2.8
+id = &"weapon_rifle_ak74m"
+display_name = "AK-74M"
+description = "Das Arbeitstier. Frisst Dreck, Schnee und Vernachlaessigung ohne Klage."
+category = 2
+grid_width = 5
+grid_height = 2
+weight_kg = 3.4
+base_price = 22000

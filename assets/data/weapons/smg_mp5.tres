@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_84qqg"]
+
+[resource]
+script = ExtResource("1_84qqg")
+caliber = &"9x19"
+fire_modes = Array[int]([0, 1, 2])
+fire_rate_rpm = 800
+muzzle_velocity_modifier = 1.02
+recoil_vertical = 74.0
+recoil_horizontal = 30.0
+ergonomics = 78
+accuracy_moa = 3.4
+id = &"weapon_smg_mp5"
+display_name = "MP5"
+description = "Sehr kontrollierbare Maschinenpistole. In engen Raeumen kaum zu schlagen."
+category = 2
+grid_width = 4
+grid_height = 2
+weight_kg = 2.5
+base_price = 21000

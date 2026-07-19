@@ -24,9 +24,102 @@ func _initialize() -> void:
 	_check_all_ammo()
 	_check_plate_degradation()
 	_check_ammo_vs_plate()
+	_check_arsenal_coverage()
+	_check_damage_penetration_tradeoff()
+	_print_caliber_overview()
 
 	print("\n=== ERGEBNIS: %s ===" % ("FEHLGESCHLAGEN" if _failed else "ALLES OK"))
 	quit(1 if _failed else 0)
+
+
+## Jede Waffe braucht mindestens eine passende Munition, sonst ist sie
+## im Spiel unbenutzbar. Bei 12 Waffen faellt so ein Tippfehler im Kaliber
+## sonst erst auf, wenn jemand die Waffe kauft.
+func _check_arsenal_coverage() -> void:
+	print("\n--- Waffen und Munition passen zusammen")
+	ItemRegistry.ensure_loaded()
+
+	var weapons := ItemRegistry.get_by_category(ItemData.Category.WEAPON)
+	var ammo := ItemRegistry.get_by_category(ItemData.Category.AMMO)
+	print("  %d Waffen, %d Munitionssorten" % [weapons.size(), ammo.size()])
+
+	if weapons.is_empty() or ammo.is_empty():
+		_fail("Arsenal ist leer")
+		return
+
+	for w in weapons:
+		var weapon := w as WeaponData
+		var matches := 0
+		for a in ammo:
+			if weapon.accepts_ammo(a as AmmoData):
+				matches += 1
+		if matches == 0:
+			_fail("%s (%s) hat keine passende Munition" % [weapon.display_name, weapon.caliber])
+		else:
+			print("  OK  %-12s %-10s %d Sorten" % [weapon.display_name, weapon.caliber, matches])
+
+	# Umgekehrt: Munition ohne Waffe waere toter Ballast im Loot.
+	for a in ammo:
+		var round_data := a as AmmoData
+		var usable := false
+		for w in weapons:
+			if (w as WeaponData).accepts_ammo(round_data):
+				usable = true
+				break
+		if not usable:
+			_fail("%s passt in keine Waffe" % round_data.display_name)
+
+
+## Der Kern des Balancings: Innerhalb eines Kalibers muss die Munition mit
+## dem hoechsten Durchschlag NICHT gleichzeitig den hoechsten Schaden haben.
+## Sonst gaebe es eine objektiv beste Sorte und die Wahl waere sinnlos.
+func _check_damage_penetration_tradeoff() -> void:
+	print("\n--- Kein Kaliber hat eine 'beste' Munition")
+	ItemRegistry.ensure_loaded()
+
+	var by_caliber: Dictionary = {}
+	for a in ItemRegistry.get_by_category(ItemData.Category.AMMO):
+		var round_data := a as AmmoData
+		if not by_caliber.has(round_data.caliber):
+			by_caliber[round_data.caliber] = []
+		by_caliber[round_data.caliber].append(round_data)
+
+	for caliber in by_caliber.keys():
+		var rounds: Array = by_caliber[caliber]
+		if rounds.size() < 2:
+			continue
+
+		var best_pen: AmmoData = rounds[0]
+		var best_dmg: AmmoData = rounds[0]
+		for r in rounds:
+			if (r as AmmoData).penetration_power > best_pen.penetration_power:
+				best_pen = r
+			if (r as AmmoData).get_total_damage() > best_dmg.get_total_damage():
+				best_dmg = r
+
+		if best_pen == best_dmg:
+			_fail("%s: '%s' hat sowohl den hoechsten Durchschlag als auch den hoechsten Schaden"
+				% [caliber, best_pen.display_name])
+		else:
+			print("  OK  %-10s Pen: %-22s Schaden: %s"
+				% [caliber, best_pen.display_name, best_dmg.display_name])
+
+
+## Reine Uebersicht, kein Test — hilft beim Nachbalancieren.
+func _print_caliber_overview() -> void:
+	print("\n--- Uebersicht (nach Durchschlag sortiert)")
+	ItemRegistry.ensure_loaded()
+
+	var rounds: Array = ItemRegistry.get_by_category(ItemData.Category.AMMO)
+	rounds.sort_custom(func(a, b): return (a as AmmoData).penetration_power > (b as AmmoData).penetration_power)
+
+	print("  %-26s %-10s %5s %5s %8s" % ["Munition", "Kaliber", "Pen", "Schad", "Preis"])
+	for r in rounds:
+		var a := r as AmmoData
+		var dmg_text := str(a.damage)
+		if a.pellet_count > 1:
+			dmg_text = "%dx%d" % [a.pellet_count, a.damage]
+		print("  %-26s %-10s %5d %5s %8d" % [a.display_name, a.caliber, a.penetration_power, dmg_text, a.base_price])
 
 
 func _fail(msg: String) -> void:

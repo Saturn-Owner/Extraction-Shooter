@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_2ogxp"]
+
+[resource]
+script = ExtResource("1_2ogxp")
+caliber = &"7.62x51"
+magazine_size = 20
+fire_rate_rpm = 600
+recoil_vertical = 172.0
+recoil_horizontal = 68.0
+ergonomics = 44
+accuracy_moa = 1.9
+id = &"weapon_rifle_scar_h"
+display_name = "SCAR-H"
+description = "Schweres Sturmgewehr. Enorme Wirkung, enormer Rueckstoss, enormer Preis."
+category = 2
+grid_width = 5
+grid_height = 2
+weight_kg = 4.1
+base_price = 68000

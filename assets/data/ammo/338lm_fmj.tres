@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_dqkr7"]
+
+[resource]
+script = ExtResource("1_dqkr7")
+caliber = &".338 LM"
+damage = 152
+penetration_power = 47
+armor_damage_percent = 56.0
+fragmentation_chance = 0.2
+muzzle_velocity_ms = 880.0
+ballistic_coefficient = 0.52
+bleeding_chance = 0.44
+heavy_bleeding_chance = 0.16
+id = &"ammo_338lm_fmj"
+display_name = ".338 LM FMJ"
+description = "Extrem schweres Geschoss. Was es trifft, steht danach nicht mehr auf."
+category = 1
+can_rotate = false
+weight_kg = 0.043
+max_stack = 30
+base_price = 1450

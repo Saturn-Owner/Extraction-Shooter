@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_6esg3"]
+
+[resource]
+script = ExtResource("1_6esg3")
+caliber = &"5.45x39"
+damage = 62
+penetration_power = 12
+armor_damage_percent = 16.0
+fragmentation_chance = 0.42
+muzzle_velocity_ms = 884.0
+ballistic_coefficient = 0.24
+bleeding_chance = 0.4
+heavy_bleeding_chance = 0.11
+id = &"ammo_545x39_hp"
+display_name = "5.45x39 HP"
+description = "Hohlspitz. Reisst ungeschuetzte Ziele auf, scheitert an allem Gepanzerten."
+category = 1
+can_rotate = false
+weight_kg = 0.01
+max_stack = 60
+base_price = 58

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_lt57x"]
+
+[resource]
+script = ExtResource("1_lt57x")
+caliber = &"9x19"
+damage = 54
+penetration_power = 10
+armor_damage_percent = 22.0
+fragmentation_chance = 0.05
+muzzle_velocity_ms = 380.0
+ballistic_coefficient = 0.14
+bleeding_chance = 0.18
+heavy_bleeding_chance = 0.03
+id = &"ammo_9x19_fmj"
+display_name = "9x19 FMJ"
+description = "Standard-Vollmantel. Billig, ueberall zu finden, gegen jede Platte nutzlos."
+category = 1
+can_rotate = false
+weight_kg = 0.011
+max_stack = 70
+base_price = 42

@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_i8j04"]
+
+[resource]
+script = ExtResource("1_i8j04")
+caliber = &"7.62x39"
+damage = 73
+penetration_power = 15
+armor_damage_percent = 18.0
+fragmentation_chance = 0.4
+muzzle_velocity_ms = 730.0
+ballistic_coefficient = 0.26
+bleeding_chance = 0.42
+heavy_bleeding_chance = 0.12
+id = &"ammo_762x39_hp"
+display_name = "7.62x39 HP"
+description = "Schwere Hohlspitz. Ein Treffer in den Oberkoerper beendet die meisten Kaempfe sofort."
+category = 1
+can_rotate = false
+weight_kg = 0.016
+max_stack = 60
+base_price = 88

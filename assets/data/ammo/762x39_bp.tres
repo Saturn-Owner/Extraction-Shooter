@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_fytqk"]
+
+[resource]
+script = ExtResource("1_fytqk")
+caliber = &"7.62x39"
+damage = 53
+penetration_power = 47
+armor_damage_percent = 54.0
+fragmentation_chance = 0.06
+muzzle_velocity_ms = 730.0
+heavy_bleeding_chance = 0.04
+id = &"ammo_762x39_bp"
+display_name = "7.62x39 BP"
+description = "Gehaerteter Stahlkern. Der beste Kompromiss aus Durchschlag und Wirkung im ganzen Spiel."
+category = 1
+can_rotate = false
+weight_kg = 0.017
+max_stack = 60
+base_price = 480

@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_ngbin"]
+
+[resource]
+script = ExtResource("1_ngbin")
+caliber = &"12/70"
+damage = 48
+penetration_power = 3
+armor_damage_percent = 8.0
+fragmentation_chance = 0.0
+pellet_count = 8
+pellet_spread_degrees = 4.5
+muzzle_velocity_ms = 385.0
+ballistic_coefficient = 0.06
+bleeding_chance = 0.3
+heavy_bleeding_chance = 0.07
+id = &"ammo_12x70_buckshot"
+display_name = "12/70 Buckshot"
+description = "Acht Kugeln pro Schuss. Auf zwei Metern vernichtend, auf dreissig voellig harmlos."
+category = 1
+can_rotate = false
+weight_kg = 0.052
+max_stack = 20
+base_price = 55

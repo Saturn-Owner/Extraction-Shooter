@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_whc5d"]
+
+[resource]
+script = ExtResource("1_whc5d")
+caliber = &"9x19"
+damage = 72
+penetration_power = 5
+armor_damage_percent = 12.0
+fragmentation_chance = 0.35
+muzzle_velocity_ms = 355.0
+ballistic_coefficient = 0.12
+bleeding_chance = 0.38
+heavy_bleeding_chance = 0.1
+id = &"ammo_9x19_hp"
+display_name = "9x19 Hohlspitz"
+description = "Verformt sich im Ziel und richtet schwere Wunden an. Gegen Rüstung voellig wirkungslos."
+category = 1
+can_rotate = false
+weight_kg = 0.011
+max_stack = 70
+base_price = 78

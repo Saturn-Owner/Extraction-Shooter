@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_lj3b8"]
+
+[resource]
+script = ExtResource("1_lj3b8")
+caliber = &"7.62x54R"
+damage = 75
+penetration_power = 56
+armor_damage_percent = 60.0
+fragmentation_chance = 0.06
+muzzle_velocity_ms = 820.0
+ballistic_coefficient = 0.38
+bleeding_chance = 0.24
+heavy_bleeding_chance = 0.06
+id = &"ammo_762x54r_snb"
+display_name = "7.62x54R SNB"
+description = "Stahlkern mit hoher Praezision. Bevorzugte Wahl gegen gepanzerte Ziele auf Distanz."
+category = 1
+can_rotate = false
+weight_kg = 0.022
+max_stack = 40
+base_price = 690

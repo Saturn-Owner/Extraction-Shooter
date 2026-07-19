@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_nyl67"]
+
+[resource]
+script = ExtResource("1_nyl67")
+caliber = &".45 ACP"
+magazine_size = 7
+fire_modes = Array[int]([0])
+fire_rate_rpm = 380
+muzzle_velocity_modifier = 0.9
+recoil_vertical = 88.0
+recoil_horizontal = 32.0
+ergonomics = 74
+accuracy_moa = 4.8
+id = &"weapon_pistol_m1911"
+display_name = "M1911"
+description = "Alte Konstruktion, harter Rueckstoss, wenig Schuss. Wer trifft, braucht keinen zweiten."
+category = 2
+grid_width = 2
+grid_height = 2
+weight_kg = 1.1
+base_price = 9400

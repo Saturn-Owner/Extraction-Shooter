@@ -44,6 +44,18 @@ extends ItemData
 ## Nur relevant, wenn es NICHT durch eine Platte musste.
 @export_range(0.0, 1.0) var fragmentation_chance: float = 0.15
 
+## Anzahl Projektile pro Schuss. 1 bei allem ausser Schrot.
+## Schrot macht pro Kugel wenig Schaden, in Summe aber sehr viel — dafür
+## streut es stark und hat kaum Durchschlagskraft. Auf Distanz nutzlos,
+## auf zwei Metern tödlich.
+@export_range(1, 16) var pellet_count: int = 1
+
+## Streuung bei mehreren Projektilen, in Grad. 0 bei Einzelgeschossen.
+@export_range(0.0, 15.0) var pellet_spread_degrees: float = 0.0
+
+## Leuchtspur — verrät die eigene Position, hilft aber beim Korrigieren.
+@export var is_tracer: bool = false
+
 @export_group("Ballistik (Flugverhalten)")
 
 ## Mündungsgeschwindigkeit in m/s. Bestimmt Flugzeit und Fallkurve.
@@ -68,8 +80,16 @@ extends ItemData
 @export_range(0.0, 1.0) var heavy_bleeding_chance: float = 0.05
 
 
+## Gesamtschaden eines Schusses, wenn alle Projektile treffen.
+## Bei Schrot ist das deutlich mehr als der Einzelwert.
+func get_total_damage() -> int:
+	return damage * pellet_count
+
+
 ## Kurze Zusammenfassung für die Item-Beschreibung im Terminal.
 func get_stat_summary() -> String:
+	if pellet_count > 1:
+		return "%s | %dx%d Schaden | Pen %d" % [caliber, pellet_count, damage, penetration_power]
 	return "%s | Schaden %d | Pen %d" % [caliber, damage, penetration_power]
 
 

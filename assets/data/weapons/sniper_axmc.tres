@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_26ide"]
+
+[resource]
+script = ExtResource("1_26ide")
+caliber = &".338 LM"
+magazine_size = 10
+fire_modes = Array[int]([0])
+fire_rate_rpm = 40
+muzzle_velocity_modifier = 1.12
+recoil_vertical = 320.0
+recoil_horizontal = 90.0
+ergonomics = 24
+accuracy_moa = 0.6
+id = &"weapon_sniper_axmc"
+display_name = "AXMC"
+description = "Repetierbuechse fuer extreme Entfernungen. Schwer, langsam, unbezahlbar - und toedlich."
+category = 2
+grid_width = 6
+grid_height = 2
+weight_kg = 6.8
+base_price = 240000

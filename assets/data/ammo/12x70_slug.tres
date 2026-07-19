@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_6maww"]
+
+[resource]
+script = ExtResource("1_6maww")
+caliber = &"12/70"
+damage = 190
+penetration_power = 20
+armor_damage_percent = 32.0
+fragmentation_chance = 0.1
+muzzle_velocity_ms = 470.0
+ballistic_coefficient = 0.14
+bleeding_chance = 0.4
+heavy_bleeding_chance = 0.14
+id = &"ammo_12x70_slug"
+display_name = "12/70 Flintenlaufgeschoss"
+description = "Ein einzelnes schweres Geschoss statt Schrot. Macht aus der Flinte eine Kurzdistanzwaffe mit Wucht."
+category = 1
+can_rotate = false
+weight_kg = 0.055
+max_stack = 20
+base_price = 130

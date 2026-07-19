@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_xb87o"]
+
+[resource]
+script = ExtResource("1_xb87o")
+damage = 54
+penetration_power = 31
+armor_damage_percent = 36.0
+fragmentation_chance = 0.16
+muzzle_velocity_ms = 922.0
+ballistic_coefficient = 0.27
+bleeding_chance = 0.22
+id = &"ammo_556x45_m855"
+display_name = "5.56x45 M855"
+description = "Der alte NATO-Standard mit Stahlspitze. Guenstig und ueberall verfuegbar."
+category = 1
+can_rotate = false
+weight_kg = 0.013
+max_stack = 60
+base_price = 118

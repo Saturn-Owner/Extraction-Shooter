@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_xx5io"]
+
+[resource]
+script = ExtResource("1_xx5io")
+caliber = &".45 ACP"
+damage = 68
+penetration_power = 8
+armor_damage_percent = 20.0
+fragmentation_chance = 0.04
+muzzle_velocity_ms = 260.0
+ballistic_coefficient = 0.16
+bleeding_chance = 0.22
+heavy_bleeding_chance = 0.04
+id = &"ammo_45acp_fmj"
+display_name = ".45 ACP FMJ"
+description = "Schweres, langsames Geschoss. Enorme Wirkung auf kurze Distanz, faellt weit ab."
+category = 1
+can_rotate = false
+weight_kg = 0.021
+max_stack = 60
+base_price = 65

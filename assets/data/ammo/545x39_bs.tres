@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_vloor"]
+
+[resource]
+script = ExtResource("1_vloor")
+caliber = &"5.45x39"
+penetration_power = 51
+armor_damage_percent = 58.0
+fragmentation_chance = 0.04
+muzzle_velocity_ms = 830.0
+ballistic_coefficient = 0.29
+bleeding_chance = 0.14
+heavy_bleeding_chance = 0.03
+id = &"ammo_545x39_bs"
+display_name = "5.45x39 BS"
+description = "Wolframkern. Durchschlaegt schwere Platten, laesst den Getroffenen aber oft noch stehen."
+category = 1
+can_rotate = false
+weight_kg = 0.011
+max_stack = 60
+base_price = 720

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_u0a1j"]
+
+[resource]
+script = ExtResource("1_u0a1j")
+caliber = &".45 ACP"
+damage = 52
+armor_damage_percent = 40.0
+fragmentation_chance = 0.02
+muzzle_velocity_ms = 310.0
+ballistic_coefficient = 0.18
+bleeding_chance = 0.14
+heavy_bleeding_chance = 0.02
+id = &"ammo_45acp_ap"
+display_name = ".45 ACP AP"
+description = "Selten und teuer. Verbindet die Wucht des Kalibers mit brauchbarem Durchschlag."
+category = 1
+can_rotate = false
+weight_kg = 0.02
+max_stack = 60
+base_price = 310

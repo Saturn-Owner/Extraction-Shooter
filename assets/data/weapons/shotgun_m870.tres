@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_md80f"]
+
+[resource]
+script = ExtResource("1_md80f")
+caliber = &"12/70"
+magazine_size = 7
+fire_modes = Array[int]([0])
+fire_rate_rpm = 60
+muzzle_velocity_modifier = 0.95
+recoil_vertical = 240.0
+recoil_horizontal = 74.0
+ergonomics = 48
+accuracy_moa = 9.0
+id = &"weapon_shotgun_m870"
+display_name = "M870"
+description = "Vorderschaftrepetierer. Ein Treffer auf kurze Distanz beendet fast jede Auseinandersetzung."
+category = 2
+grid_width = 5
+grid_height = 2
+weight_kg = 3.6
+base_price = 14500

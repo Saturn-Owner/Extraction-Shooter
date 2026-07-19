@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="AmmoData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ammo_data.gd" id="1_8m1mx"]
+
+[resource]
+script = ExtResource("1_8m1mx")
+caliber = &"5.45x39"
+damage = 44
+penetration_power = 37
+armor_damage_percent = 42.0
+fragmentation_chance = 0.1
+is_tracer = true
+muzzle_velocity_ms = 900.0
+ballistic_coefficient = 0.27
+bleeding_chance = 0.18
+heavy_bleeding_chance = 0.04
+id = &"ammo_545x39_bt"
+display_name = "5.45x39 BT"
+description = "Leuchtspur mit gehaertetem Kern. Zeigt dir deine Treffer - und dem Gegner deine Position."
+category = 1
+can_rotate = false
+weight_kg = 0.01
+max_stack = 60
+base_price = 175
