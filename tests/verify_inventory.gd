@@ -20,6 +20,7 @@ func _initialize() -> void:
 	_test_rotation()
 	_test_auto_stacking()
 	_test_move_onto_self()
+	_test_rotation_from_outside()
 	_test_place_or_merge()
 	_test_splitting()
 	_test_nested_container()
@@ -137,6 +138,47 @@ func _test_auto_stacking() -> void:
 	g2.add_item(ItemStack.create(&"plate_class4_front"))
 	g2.add_item(ItemStack.create(&"plate_class4_front"))
 	_check(g2.get_item_count() == 2, "Platten stapeln nicht (eigene Haltbarkeit)")
+
+
+## Das Raster muss genau die Felder freigeben, die es belegt hat — auch
+## wenn der Gegenstand von aussen gedreht wurde, waehrend er darin lag.
+##
+## GEFUNDEN IM SPIEL, NICHT IM TEST: Beim Ziehen dreht R den Gegenstand,
+## der dabei noch im Ursprungsraster liegt. remove_item() raeumte danach
+## mit der NEUEN Flaeche frei — ein 5x2-Gewehr wurde als 2x5 freigegeben
+## und lief aus dem Raster heraus ("Out of bounds set index 25").
+##
+## Die Tests waren gruen, weil die Faelle dort zufaellig im Raster blieben.
+func _test_rotation_from_outside() -> void:
+	_section("Drehen von aussen")
+
+	var grid := InventoryGrid.new(10, 8)
+	var rifle := ItemStack.create(&"weapon_rifle_ar15")
+	_check(grid.place(rifle, 4, 5), "Gewehr 5x2 liegt bei (4,5)")
+
+	var free_before := grid.get_free_cell_count()
+
+	# So macht es das Loot-Fenster beim Ziehen: einfach umschalten.
+	rifle.rotated = not rifle.rotated
+	_check(rifle.get_size() == Vector2i(2, 5), "gedreht ist es 2x5")
+
+	# Bei (4,5) waere 2x5 weit ausserhalb — genau hier kam der Absturz.
+	var removed := grid.remove_item(rifle.instance_id)
+	_check(removed != null, "es laesst sich trotzdem herausnehmen")
+	_check(grid.get_free_cell_count() == free_before + 10,
+		"und gibt genau seine 10 alten Felder frei (%d)" % grid.get_free_cell_count())
+	_check(grid.get_item_count() == 0, "das Raster ist danach leer")
+
+	# Das Raster muss weiter benutzbar sein: keine Geisterfelder.
+	var second := ItemStack.create(&"weapon_rifle_ar15")
+	_check(grid.place(second, 4, 5), "an derselben Stelle passt wieder eines hin")
+
+	# Auch das Verschieben eines von aussen gedrehten Gegenstands.
+	second.rotated = true
+	_check(grid.move_item(second.instance_id, 0, 0), "gedreht laesst es sich verschieben")
+	_check(grid.get_position(second.instance_id) == Vector2i(0, 0), "und liegt bei (0,0)")
+	_check(grid.get_stack_at(1, 4) == second, "belegt jetzt wirklich 2x5")
+	_check(grid.get_stack_at(4, 1) == null, "und nicht mehr die alten Felder")
 
 
 ## Gezieltes Ablegen auf ein belegtes Feld: die Maus zeigt genau dorthin,
