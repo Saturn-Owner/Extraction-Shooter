@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_item_data"]
+
+[resource]
+script = ExtResource("1_item_data")
+id = &"backpack_small"
+display_name = "Kleiner Rucksack"
+description = "Abgewetzter Wanderrucksack. Nicht viel Platz, aber besser als die Taschen. Wer mehr mitnehmen will, wird langsamer - und friert schneller fest, wenn er stehen bleibt."
+category = 7
+grid_width = 4
+grid_height = 4
+can_rotate = false
+container_width = 5
+container_height = 4
+weight_kg = 1.2
+max_stack = 1
+base_price = 8200

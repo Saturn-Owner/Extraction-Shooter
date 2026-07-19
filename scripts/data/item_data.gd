@@ -52,6 +52,16 @@ enum Category {
 ## Ob der Spieler das Item im Inventar drehen darf (90°).
 @export var can_rotate: bool = true
 
+@export_group("Container")
+
+## Innenraster für Rucksäcke, Westen und Taschen.
+## 0 = dieser Gegenstand kann nichts enthalten (der Normalfall).
+## Ein Rucksack mit 6x5 hat innen 30 Felder — unabhängig davon,
+## wie viel Platz er selbst im Inventar belegt.
+@export_range(0, 12) var container_width: int = 0
+
+@export_range(0, 12) var container_height: int = 0
+
 @export_group("Physik & Wert")
 
 ## Gewicht in Kilogramm. Beeinflusst Ausdauer und Bewegungstempo —
@@ -70,6 +80,11 @@ enum Category {
 ## und für die Preis-pro-Platz-Anzeige.
 func get_grid_area() -> int:
 	return grid_width * grid_height
+
+
+## Ob dieser Gegenstand andere aufnehmen kann (Rucksack, Weste, Tasche).
+func is_container() -> bool:
+	return container_width > 0 and container_height > 0
 
 
 ## Kleine Selbstprüfung. Gibt eine Liste von Problemen zurück,

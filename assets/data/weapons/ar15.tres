@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_weapon_data"]
+
+[resource]
+script = ExtResource("1_weapon_data")
+id = &"weapon_ar15"
+display_name = "AR-15"
+description = "Halbautomatisches Sturmgewehr in 5.56x45. Zuverlaessig, leicht zu warten, weit verbreitet. Der Standard, an dem sich alles andere messen lassen muss."
+category = 2
+grid_width = 5
+grid_height = 2
+can_rotate = true
+weight_kg = 3.1
+max_stack = 1
+base_price = 24000
+caliber = &"5.56x45"
+magazine_size = 30
+fire_rate_rpm = 750
+burst_count = 3
+muzzle_velocity_modifier = 1.0
+recoil_vertical = 118.0
+recoil_horizontal = 42.0
+ergonomics = 54
+accuracy_moa = 2.4
+wear_per_shot = 0.012
+base_jam_chance = 0.0012
