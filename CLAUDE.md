@@ -5,7 +5,7 @@ Diese Datei gilt für alle, die mit Claude an diesem Projekt arbeiten (Tim + Kol
 ## Projekt
 
 - **Spiel:** Extraction-Shooter
-- **Engine:** Godot 4.5 (Standard-Version, nicht .NET) — beide nutzen exakt dieselbe Version
+- **Engine:** Godot 4.7.1 (Standard-Version, nicht .NET) — beide nutzen exakt dieselbe Version
 - **Sprache im Chat und in Commits:** Deutsch. Code (Variablen, Funktionen, Klassen) auf Englisch.
 
 ## Wer arbeitet gerade?

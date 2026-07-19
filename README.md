@@ -1,10 +1,10 @@
 # Extraction Shooter
 
-Ein Extraction-Shooter, gebaut mit [Godot 4.5](https://godotengine.org/download/).
+Ein Extraction-Shooter, gebaut mit [Godot 4.7.1](https://godotengine.org/download/).
 
 ## Setup (für neue Teammitglieder)
 
-1. **Godot 4.5** (Standard-Version, nicht .NET) herunterladen: https://godotengine.org/download/
+1. **Godot 4.7.1** (Standard-Version, nicht .NET) herunterladen: https://godotengine.org/download/
 2. Repo klonen:
    ```
    git clone https://github.com/Saturn-Owner/Extraction-Shooter.git
