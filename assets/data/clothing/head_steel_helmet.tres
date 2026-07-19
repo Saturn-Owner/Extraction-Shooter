@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_37y5e"]
+
+[resource]
+script = ExtResource("1_37y5e")
+id = &"head_steel_helmet"
+display_name = "Stahlhelm"
+description = "Alt, schwer, verbeult. Faengt Splitter ab - gegen ein Gewehr hilft er nicht, und kalt ist er obendrein."
+category = 5
+equip_slot = 1
+insulation = 0.2
+grid_width = 2
+grid_height = 2
+can_rotate = false
+weight_kg = 1.4
+base_price = 4200

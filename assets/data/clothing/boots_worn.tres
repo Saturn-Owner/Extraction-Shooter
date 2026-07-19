@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_yom7x"]
+
+[resource]
+script = ExtResource("1_yom7x")
+id = &"boots_worn"
+display_name = "Abgelaufene Stiefel"
+description = "Sohle duenn, Naht offen. Schnee kommt durch - und nasse Fuesse frieren am schnellsten."
+category = 5
+equip_slot = 6
+insulation = 0.8
+grid_width = 2
+grid_height = 2
+can_rotate = false
+weight_kg = 0.9
+base_price = 160

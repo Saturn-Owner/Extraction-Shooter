@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_k7pe8"]
+
+[resource]
+script = ExtResource("1_k7pe8")
+id = &"belt_utility"
+display_name = "Koppelgurt"
+description = "Breites Leder mit Metallschnalle. Traegt Gewicht an der Huefte statt an den Schultern."
+category = 5
+equip_slot = 3
+insulation = 0.1
+grid_width = 2
+weight_kg = 0.4
+base_price = 540

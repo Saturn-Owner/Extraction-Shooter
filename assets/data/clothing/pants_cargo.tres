@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_g2qeg"]
+
+[resource]
+script = ExtResource("1_g2qeg")
+id = &"pants_cargo"
+display_name = "Arbeitshose"
+description = "Robust, viele Taschen, null Waerme. Besser als nichts, schlechter als alles andere."
+category = 5
+equip_slot = 5
+insulation = 1.0
+grid_width = 2
+grid_height = 2
+can_rotate = false
+weight_kg = 0.6
+base_price = 210

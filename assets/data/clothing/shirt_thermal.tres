@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_aecxo"]
+
+[resource]
+script = ExtResource("1_aecxo")
+id = &"shirt_thermal"
+display_name = "Thermounterhemd"
+description = "Unscheinbar und unbezahlbar. Die Schicht, die man zuerst anzieht und zuletzt auszieht."
+category = 5
+equip_slot = 4
+insulation = 2.2
+grid_width = 2
+grid_height = 2
+can_rotate = false
+weight_kg = 0.3
+base_price = 380

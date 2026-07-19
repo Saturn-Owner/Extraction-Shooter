@@ -48,6 +48,29 @@ enum Rarity {
 
 @export var category: Category = Category.MISC
 
+## In welchen Ausrüstungsplatz dieser Gegenstand gehört.
+##
+## Getrennt von `category`, weil beides Verschiedenes beantwortet:
+## Die Kategorie sagt, WAS es ist (für Händler und Sortierung), der Platz
+## sagt, WO man es trägt. Eine Schutzplatte und ein Plattenträger sind
+## unterschiedliche Kategorien, aber beide gehören an den Oberkörper.
+enum EquipSlot {
+	NONE,      ## nicht anlegbar, liegt nur im Inventar
+	HEAD,      ## Helm
+	CHEST,     ## Schutzplatte, Plattenträger
+	BELT,      ## Gürtel
+	SHIRT,     ## Oberbekleidung
+	PANTS,     ## Hose
+	BOOTS,     ## Schuhe
+	BACKPACK,  ## Rucksack
+}
+
+@export var equip_slot: EquipSlot = EquipSlot.NONE
+
+## Wärmedämmung. Zählt nur, solange der Gegenstand ANGELEGT ist —
+## eine Jacke im Rucksack wärmt niemanden.
+@export_range(0.0, 10.0) var insulation: float = 0.0
+
 ## Icon im Inventar. Darf am Anfang leer bleiben (Graybox).
 @export var icon: Texture2D
 

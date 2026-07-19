@@ -123,6 +123,13 @@ var _recoil_yaw: float = 0.0
 @onready var weapon: Weapon = $CameraPivot/Weapon
 @onready var inventory: PlayerInventory = $Inventory
 @onready var interaction: PlayerInteraction = $CameraPivot/Interaction
+@onready var health: HealthSystem = $Health
+@onready var survival: SurvivalStats = $Survival
+@onready var equipment: Equipment = $Equipment
+
+## Sammelt Sekundenbruchteile, damit Hunger- und Kaelteschaden einmal pro
+## Sekunde wirkt statt in jedem Frame ein Krümelchen.
+var _survival_damage_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -133,13 +140,33 @@ func _ready() -> void:
 	if inventory != null:
 		inventory.changed.connect(_on_inventory_changed)
 		_on_inventory_changed()
+	if equipment != null:
+		equipment.changed.connect(_on_equipment_changed)
+		_on_equipment_changed()
 
 
 ## Das Gewicht kommt jetzt aus dem Inventar statt von Hand gesetzt zu werden.
 ## Ein voller Rucksack bremst dadurch wirklich.
 func _on_inventory_changed() -> void:
+	_update_carried_weight()
+
+
+## Getragene Kleidung waermt und wiegt — beides muss sofort greifen.
+func _on_equipment_changed() -> void:
+	if survival != null and equipment != null:
+		survival.insulation = equipment.get_total_insulation()
+	_update_carried_weight()
+
+
+## Angelegte Ausruestung zaehlt zum Gewicht: Man traegt sie ja. Sie belegt
+## nur keine Rasterfelder — genau das ist der Anreiz, etwas anzuziehen.
+func _update_carried_weight() -> void:
+	var total := 0.0
 	if inventory != null:
-		carried_weight_kg = inventory.get_total_weight()
+		total += inventory.get_total_weight()
+	if equipment != null:
+		total += equipment.get_total_weight()
+	carried_weight_kg = total
 
 
 ## Nimmt eine Waffe aus dem Inventar in die Hand und laedt sie mit der
@@ -300,6 +327,7 @@ func _capture_mouse(capture: bool) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_update_survival(delta)
 	_update_crouch(delta)
 	_update_stamina(delta)
 	_update_movement(delta)
@@ -307,6 +335,27 @@ func _physics_process(delta: float) -> void:
 	_handle_weapon_input()
 
 	move_and_slide()
+
+
+## Hunger, Durst und Kaelte fortschreiben — und ihren Schaden anwenden.
+##
+## Der Schaden wirkt einmal pro Sekunde statt in jedem Frame. Bei 60 Bildern
+## waeren es sonst 60 winzige Ereignisse pro Sekunde, und jede Anzeige, die
+## am Schadenssignal haengt, wuerde flackern.
+func _update_survival(delta: float) -> void:
+	if survival == null or health == null or health.is_dead:
+		return
+
+	survival.metabolism_multiplier = health.get_metabolism_multiplier()
+	survival.tick(delta)
+
+	_survival_damage_timer += delta
+	if _survival_damage_timer < 1.0:
+		return
+	_survival_damage_timer -= 1.0
+
+	for entry in survival.get_damage_this_second():
+		health.apply_damage(entry.part, entry.amount)
 
 
 func _update_crouch(delta: float) -> void:
@@ -375,13 +424,27 @@ func can_sprint(input_dir: Vector2) -> bool:
 	return input_dir.y < -0.1
 
 
+## Wie stark Verletzungen und Kaelte das Tempo druecken.
+##
+## Multiplikativ verrechnet, nicht addiert: Zwei Strafen von je 35 % ergeben
+## 42 % Resttempo, nicht 30 %. So kann der Spieler nie auf null fallen und
+## voellig handlungsunfaehig werden — er wird langsam, aber bleibt spielbar.
+func get_condition_factor() -> float:
+	var factor := 1.0
+	if health != null:
+		factor *= 1.0 - health.get_movement_penalty()
+	if survival != null:
+		factor *= 1.0 - survival.get_cold_movement_penalty()
+	return maxf(0.15, factor)
+
+
 func get_current_max_speed() -> float:
 	var base := walk_speed
 	if is_crouching:
 		base = crouch_speed
 	elif is_sprinting:
 		base = sprint_speed
-	return base * get_weight_factor()
+	return base * get_weight_factor() * get_condition_factor()
 
 
 func _update_movement(delta: float) -> void:

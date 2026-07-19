@@ -19,6 +19,7 @@ extends Node3D
 @onready var _prompt: Label = $HUD/PromptLabel
 @onready var _loot_window: LootWindow = $HUD/LootWindow
 @onready var _inventory_window: InventoryWindow = $HUD/InventoryWindow
+@onready var _character_window: CharacterWindow = $HUD/CharacterWindow
 
 ## Was der Spieler in den ersten Raid mitnimmt.
 ##
@@ -48,9 +49,12 @@ func _ready() -> void:
 	# Jedes Fenster legt beim Öffnen die Steuerung still und gibt sie beim
 	# Schliessen wieder frei. Ein Ort dafür, damit kein Fenster den Spieler
 	# gelähmt zurücklassen kann.
-	for window in [_loot_window, _inventory_window]:
+	for window in [_loot_window, _inventory_window, _character_window]:
 		window.opened.connect(_on_window_opened)
 		window.closed.connect(_on_window_closed)
+
+	# Wer im Raid stirbt, verliert alles — auch durch Hunger oder Kaelte.
+	_player.health.died.connect(_on_player_died)
 
 	_give_starting_kit()
 	_raid.start_raid()
@@ -91,7 +95,16 @@ func _on_window_closed() -> void:
 
 
 func _any_window_open() -> bool:
-	return _loot_window.is_open() or _inventory_window.is_open()
+	return _loot_window.is_open() or _inventory_window.is_open() \
+		or _character_window.is_open()
+
+
+## Tod durch Verletzung, Hunger, Durst oder Kaelte — das Ergebnis ist gleich.
+func _on_player_died(part: HealthSystem.Part) -> void:
+	if _raid.state != RaidManager.State.LAEUFT:
+		return
+	_show_message("Toedlich getroffen: %s" % HealthSystem.get_part_name(part), 30.0)
+	_raid.die()
 
 
 func _on_raid_ended(survived: bool, secured: int) -> void:
@@ -99,6 +112,8 @@ func _on_raid_ended(survived: bool, secured: int) -> void:
 		_loot_window.close()
 	if _inventory_window.is_open():
 		_inventory_window.close()
+	if _character_window.is_open():
+		_character_window.close()
 	if survived:
 		_show_message("EXTRAHIERT — %d Gegenstaende ins Lager gebracht. [Enter] fuer neuen Raid" % secured, 30.0)
 	else:
@@ -126,6 +141,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					else "Inventar voll — %d Gegenstaende bleiben liegen" % left)
 			else:
 				_toggle_inventory_window()
+		KEY_C:
+			_toggle_character_window()
 		KEY_K:
 			if _raid.state == RaidManager.State.LAEUFT:
 				_raid.die()
@@ -137,13 +154,29 @@ func _unhandled_input(event: InputEvent) -> void:
 				_loot_window.close()
 			elif _inventory_window.is_open():
 				_inventory_window.close()
+			elif _character_window.is_open():
+				_character_window.close()
 
 
 func _toggle_inventory_window() -> void:
 	if _inventory_window.is_open():
 		_inventory_window.close()
-	else:
-		_inventory_window.open_for(_player)
+		return
+	if _character_window.is_open():
+		_character_window.close()
+	_inventory_window.open_for(_player)
+
+
+func _toggle_character_window() -> void:
+	if _character_window.is_open():
+		_character_window.close()
+		return
+	# Nicht zwei Fenster uebereinander.
+	if _inventory_window.is_open():
+		_inventory_window.close()
+	if _loot_window.is_open():
+		_loot_window.close()
+	_character_window.open_for(_player)
 
 
 ## F öffnet die Kiste, vor der man steht — oder schliesst das Fenster.
@@ -164,6 +197,11 @@ func _toggle_loot_window() -> void:
 func _restart_raid() -> void:
 	_player.global_position = _spawn
 	_player.velocity = Vector3.ZERO
+
+	# Ohne das startet man mit dem Zustand, in dem man gestorben ist —
+	# also tot, verhungert oder erfroren.
+	_player.health.reset()
+	_player.survival.reset()
 
 	# Ohne Ausruestung startet man mit dem Grundset — sonst ist man nach
 	# einem Tod handlungsunfaehig. Spaeter kommt hier die Ausruestung aus
@@ -227,6 +265,6 @@ func _update_info() -> void:
 	lines.append("Dabei:     %d Gegenstaende" % _player.inventory.grid.get_item_count())
 	lines.append("Lager:     %d Gegenstaende" % _raid.stash.get_item_count())
 	lines.append("")
-	lines.append("F Kiste  Tab Inventar  K sterben  Enter neu")
+	lines.append("F Kiste  Tab Inventar  C Koerper  K sterben  Enter neu")
 
 	_label.text = "\n".join(lines)
