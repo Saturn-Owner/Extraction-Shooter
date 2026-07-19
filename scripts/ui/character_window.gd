@@ -48,6 +48,13 @@ const RIGHT_SLOTS := [
 	ItemData.EquipSlot.BACKPACK,
 ]
 
+## Die Waffenplätze stehen unter der Figur, nebeneinander — wie in der
+## Vorlage, und weil 1 und 2 nebeneinander liegende Tasten sind.
+const WEAPON_SLOTS := [
+	ItemData.EquipSlot.PRIMARY,
+	ItemData.EquipSlot.SECONDARY,
+]
+
 var player: PlayerController = null
 
 var _tab: Tab = Tab.AUSRUESTUNG
@@ -62,6 +69,10 @@ var _slot_buttons: Dictionary = {}
 @onready var _right_column: VBoxContainer = $Layout/Inhalt/Mitte/Rechts
 @onready var _figure: Control = $Layout/Inhalt/Mitte/Figur/Zeichnung
 @onready var _figure_hint: Label = $Layout/Inhalt/Mitte/Figur/Hinweis
+@onready var _weapons_row: HBoxContainer = $Layout/Inhalt/Mitte/Figur/Waffen
+@onready var _inventory_column: VBoxContainer = $Layout/Inhalt/Mitte/Inventar
+@onready var _inventory_view: InventoryGridView = $Layout/Inhalt/Mitte/Inventar/Raster
+@onready var _inventory_title: Label = $Layout/Inhalt/Mitte/Inventar/Titel
 @onready var _stats: HBoxContainer = $Layout/Inhalt/Werte
 @onready var _effects: Label = $Layout/Inhalt/Auswirkung
 
@@ -78,6 +89,10 @@ func _ready() -> void:
 
 func open_for(p_player: PlayerController) -> void:
 	player = p_player
+	# Das Raster liegt direkt neben der Ausruestung: Was man anzieht und was
+	# man dabeihat, gehoert auf einen Blick zusammen.
+	if player.inventory != null:
+		_inventory_view.setup(player.inventory.grid, "Inventar")
 	show()
 	_refresh()
 	opened.emit()
@@ -106,6 +121,8 @@ func _switch_tab(tab: Tab) -> void:
 	# Koerper, und halb ausgeblendete Knoepfe daneben lenken nur ab.
 	_left_column.visible = tab == Tab.AUSRUESTUNG
 	_right_column.visible = tab == Tab.AUSRUESTUNG
+	_weapons_row.visible = tab == Tab.AUSRUESTUNG
+	_inventory_column.visible = tab == Tab.AUSRUESTUNG
 	_effects.visible = tab == Tab.GESUNDHEIT
 
 	_figure_hint.text = "Klicken zeigt Einzelheiten" if tab == Tab.GESUNDHEIT else ""
@@ -121,6 +138,8 @@ func _build_slots() -> void:
 		_left_column.add_child(_make_slot(slot))
 	for slot in RIGHT_SLOTS:
 		_right_column.add_child(_make_slot(slot))
+	for slot in WEAPON_SLOTS:
+		_weapons_row.add_child(_make_slot(slot))
 
 
 ## Ein Platz: Beschriftung darüber, darunter das Feld — wie in der Vorlage.
@@ -129,7 +148,14 @@ func _make_slot(slot: ItemData.EquipSlot) -> Control:
 	box.add_theme_constant_override("separation", 2)
 
 	var caption := Label.new()
-	caption.text = Equipment.get_slot_name(slot)
+	# Die Taste steht dabei: Wer die Waffe im Fenster sieht, soll wissen,
+	# womit er sie im Gefecht zieht, ohne erst zu probieren.
+	var key := ""
+	if slot == ItemData.EquipSlot.PRIMARY:
+		key = "  [1]"
+	elif slot == ItemData.EquipSlot.SECONDARY:
+		key = "  [2]"
+	caption.text = Equipment.get_slot_name(slot) + key
 	caption.add_theme_font_size_override("font_size", 11)
 	caption.add_theme_color_override("font_color", Color(0.60, 0.63, 0.67))
 	box.add_child(caption)
@@ -157,6 +183,16 @@ func _on_slot_pressed(slot: ItemData.EquipSlot) -> void:
 	var worn := player.equipment.get_item(slot)
 	if worn == null:
 		return
+
+	# Ein Klick auf einen Waffenplatz ZIEHT die Waffe, statt sie abzulegen.
+	# Das ist der haeufigere Wunsch, und Ablegen bleibt ueber das Raster
+	# moeglich. Umgekehrt waere es eine Falle: Wer im Gefecht wechseln will,
+	# steht ploetzlich mit leeren Haenden da.
+	if Equipment.is_weapon_slot(slot):
+		player.select_weapon_slot(slot)
+		_refresh()
+		return
+
 	if not player.inventory.grid.add_item(worn):
 		return
 
@@ -172,6 +208,9 @@ func _refresh_slots() -> void:
 		var button: Button = _slot_buttons[slot]
 		var worn: ItemStack = player.equipment.get_item(slot)
 
+		var is_weapon := Equipment.is_weapon_slot(slot)
+		var is_active: bool = is_weapon and player.active_weapon_slot == slot
+
 		if worn == null:
 			button.text = "leer"
 			button.disabled = true
@@ -181,12 +220,21 @@ func _refresh_slots() -> void:
 
 		var data := worn.get_data()
 		button.disabled = false
-		button.text = data.display_name if data != null else "?"
+
+		# Die Waffe in der Hand wird markiert — sonst weiss man nach einem
+		# Wechsel nicht mehr, welche man gerade traegt.
+		var label := data.display_name if data != null else "?"
+		button.text = ("> " + label) if is_active else label
+
 		if data != null:
-			button.tooltip_text = "%s\n%s\n\nKlicken legt ab" % [
-				data.display_name, data.get_type_label()]
+			button.tooltip_text = "%s\n%s\n\n%s" % [
+				data.display_name,
+				data.get_type_label(),
+				"Klicken nimmt sie in die Hand" if is_weapon else "Klicken legt ab",
+			]
+			var color := ItemTooltip.get_rarity_color(data.get_rarity())
 			button.add_theme_color_override("font_color",
-				ItemTooltip.get_rarity_color(data.get_rarity()))
+				color if not is_active else color.lerp(Color.WHITE, 0.45))
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +377,12 @@ func _refresh() -> void:
 	_figure.queue_redraw()
 	_refresh_slots()
 	_refresh_stats()
+
+	if player.inventory != null and player.inventory.grid != null:
+		var grid := player.inventory.grid
+		_inventory_title.text = "Inventar  —  %d von %d Feldern frei" % [
+			grid.get_free_cell_count(), grid.width * grid.height]
+		_inventory_view.queue_redraw()
 
 	if _tab == Tab.GESUNDHEIT:
 		_effects.text = _describe_condition()

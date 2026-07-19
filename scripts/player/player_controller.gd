@@ -131,6 +131,16 @@ var _recoil_yaw: float = 0.0
 ## Sekunde wirkt statt in jedem Frame ein Krümelchen.
 var _survival_damage_timer: float = 0.0
 
+## Welcher Waffenplatz gerade in der Hand liegt.
+var active_weapon_slot: ItemData.EquipSlot = ItemData.EquipSlot.PRIMARY
+
+## Was in den Magazinen der NICHT getragenen Waffen steckt.
+##
+## Ohne das waere jeder Waffenwechsel ein Munitionsverlust: Die Patronen im
+## Lauf gehoeren zu DIESER Waffe, nicht zur Hand. Genau dieser Fehler hat
+## uns schon einmal bei der Extraction Munition gekostet.
+var _magazines: Dictionary = {}
+
 
 func _ready() -> void:
 	stamina = max_stamina
@@ -160,24 +170,99 @@ func _on_equipment_changed() -> void:
 
 ## Angelegte Ausruestung zaehlt zum Gewicht: Man traegt sie ja. Sie belegt
 ## nur keine Rasterfelder — genau das ist der Anreiz, etwas anzuziehen.
+## Das Raster plus alles am Koerper.
+##
+## Die Waffe in der Hand steckt immer in einem Waffenplatz und ist damit
+## Teil der Ausruestung — sie darf hier nicht ein zweites Mal dazukommen.
+## Deshalb `grid` statt `inventory.get_total_weight()`.
 func _update_carried_weight() -> void:
 	var total := 0.0
-	if inventory != null:
-		total += inventory.get_total_weight()
+	if inventory != null and inventory.grid != null:
+		total += inventory.grid.get_total_weight()
 	if equipment != null:
 		total += equipment.get_total_weight()
 	carried_weight_kg = total
 
 
-## Nimmt eine Waffe aus dem Inventar in die Hand und laedt sie mit der
-## ersten passenden Munition, die der Spieler dabei hat.
-func equip_from_inventory(stack: ItemStack) -> bool:
-	if inventory == null or weapon == null or stack == null:
+## Legt eine Waffe aus dem Inventar auf einen Waffenplatz.
+##
+## Ohne `slot` wird der erste freie genommen; sind beide belegt, ersetzt sie
+## die Waffe im gerade aktiven Platz — was dort lag, wandert ins Raster.
+func assign_weapon(stack: ItemStack, slot: ItemData.EquipSlot = ItemData.EquipSlot.NONE) -> bool:
+	if equipment == null or inventory == null or stack == null:
 		return false
-	if not inventory.equip_weapon(stack):
+	if not equipment.can_equip(stack, ItemData.EquipSlot.PRIMARY):
 		return false
 
+	var target := slot
+	if target == ItemData.EquipSlot.NONE:
+		target = equipment.get_free_weapon_slot()
+		if target == ItemData.EquipSlot.NONE:
+			target = active_weapon_slot
+
+	# Erst pruefen, ob die verdraengte Waffe ins Raster passt. Sonst
+	# verschwindet sie beim Tauschen stillschweigend.
+	var displaced := equipment.get_item(target)
+	if displaced != null and displaced != stack:
+		if not inventory.grid.can_place_or_merge(displaced, 0, 0) \
+				and inventory.grid.find_free_position(displaced).x < 0:
+			return false
+
+	if inventory.grid.get_stack(stack.instance_id) != null:
+		inventory.grid.remove_item(stack.instance_id)
+
+	equipment.equip(stack, target)
+	if displaced != null and displaced != stack:
+		inventory.grid.add_item(displaced)
+
+	# Der Platz, auf den gerade gelegt wurde, kommt auch in die Hand.
+	select_weapon_slot(target)
+	return true
+
+
+## Wechselt zwischen Primaer- und Sekundaerwaffe (Tasten 1 und 2).
+##
+## Die Munition im Magazin der bisherigen Waffe bleibt dort — sie steckt ja
+## in DIESER Waffe. Beim Wechsel zurueck ist sie wieder da.
+func select_weapon_slot(slot: ItemData.EquipSlot) -> bool:
+	if equipment == null or weapon == null:
+		return false
+	if not Equipment.is_weapon_slot(slot):
+		return false
+
+	var stack := equipment.get_item(slot)
+	if stack == null:
+		return false
+
+	# Was noch im Lauf steckt, gehoert zur alten Waffe. Merken, damit es
+	# beim Zurueckwechseln nicht verschwunden ist.
+	if active_weapon_slot != slot:
+		_magazines[active_weapon_slot] = {
+			"rounds": weapon.rounds_in_magazine,
+			"ammo": weapon.ammo_id,
+		}
+
+	active_weapon_slot = slot
+	inventory.equipped_weapon = stack
+	_put_in_hand(stack)
+	return true
+
+
+## Baut die Waffe in der Hand auf und laedt sie.
+func _put_in_hand(stack: ItemStack) -> void:
 	var weapon_data := stack.get_data() as WeaponData
+	if weapon_data == null:
+		return
+
+	var saved: Dictionary = _magazines.get(active_weapon_slot, {})
+	var saved_rounds := int(saved.get("rounds", 0))
+	var saved_ammo: StringName = saved.get("ammo", &"")
+
+	if saved_rounds > 0 and saved_ammo != &"":
+		weapon.setup(stack.item_id, saved_ammo)
+		weapon.load_rounds(saved_rounds)
+		return
+
 	var compatible := inventory.get_compatible_ammo(weapon_data)
 	var chosen: StringName = compatible[0] if not compatible.is_empty() else &""
 
@@ -186,11 +271,16 @@ func equip_from_inventory(stack: ItemStack) -> bool:
 		# aber sie bleibt leer. Das ist eine gueltige Notlage.
 		weapon.data = weapon_data
 		weapon.rounds_in_magazine = 0
-		return true
+		return
 
 	weapon.setup(stack.item_id, chosen)
 	try_reload()
-	return true
+
+
+## Nimmt eine Waffe aus dem Inventar in die Hand.
+## Kurzform fuer assign_weapon() auf den ersten freien Platz.
+func equip_from_inventory(stack: ItemStack) -> bool:
+	return assign_weapon(stack)
 
 
 ## Entlaedt das Magazin zurueck ins Inventar.

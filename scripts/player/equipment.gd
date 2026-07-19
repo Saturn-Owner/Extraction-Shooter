@@ -26,6 +26,8 @@ const SLOT_ORDER := [
 	ItemData.EquipSlot.PANTS,
 	ItemData.EquipSlot.BOOTS,
 	ItemData.EquipSlot.BACKPACK,
+	ItemData.EquipSlot.PRIMARY,
+	ItemData.EquipSlot.SECONDARY,
 ]
 
 const SLOT_NAMES := {
@@ -36,7 +38,16 @@ const SLOT_NAMES := {
 	ItemData.EquipSlot.PANTS: "Hose",
 	ItemData.EquipSlot.BOOTS: "Schuhe",
 	ItemData.EquipSlot.BACKPACK: "Rucksack",
+	ItemData.EquipSlot.PRIMARY: "Primaerwaffe",
+	ItemData.EquipSlot.SECONDARY: "Sekundaerwaffe",
 }
+
+## Die beiden Waffenplätze, in der Reihenfolge der Tasten 1 und 2.
+const WEAPON_SLOTS := [ItemData.EquipSlot.PRIMARY, ItemData.EquipSlot.SECONDARY]
+
+
+static func is_weapon_slot(slot: ItemData.EquipSlot) -> bool:
+	return slot in WEAPON_SLOTS
 
 ## Slot -> ItemStack (oder nicht vorhanden, wenn leer).
 var _slots: Dictionary = {}
@@ -55,11 +66,31 @@ func is_empty(slot: ItemData.EquipSlot) -> bool:
 
 
 ## Ob dieser Gegenstand in diesen Platz gehört.
+##
+## Waffen sind ein Sonderfall: Jede Schusswaffe passt in BEIDE Waffenplätze,
+## und welcher es wird, entscheidet der Spieler. Deshalb wird das aus der
+## Kategorie abgeleitet, statt in zwölf Waffendateien ein Feld zu pflegen,
+## das ohnehin immer dasselbe sagen würde.
 func can_equip(stack: ItemStack, slot: ItemData.EquipSlot) -> bool:
 	if stack == null or slot == ItemData.EquipSlot.NONE:
 		return false
+
 	var data := stack.get_data()
-	return data != null and data.equip_slot == slot
+	if data == null:
+		return false
+
+	if is_weapon_slot(slot):
+		return data.category == ItemData.Category.WEAPON
+
+	return data.equip_slot == slot
+
+
+## Der erste freie Waffenplatz, oder NONE wenn beide belegt sind.
+func get_free_weapon_slot() -> ItemData.EquipSlot:
+	for slot in WEAPON_SLOTS:
+		if is_empty(slot):
+			return slot
+	return ItemData.EquipSlot.NONE
 
 
 ## Legt einen Gegenstand an. Gibt zurueck, was vorher dort war (oder null).

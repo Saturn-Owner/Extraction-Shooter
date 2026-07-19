@@ -143,6 +143,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_toggle_inventory_window()
 		KEY_C:
 			_toggle_character_window()
+		KEY_1:
+			_select_weapon(ItemData.EquipSlot.PRIMARY)
+		KEY_2:
+			_select_weapon(ItemData.EquipSlot.SECONDARY)
 		KEY_K:
 			if _raid.state == RaidManager.State.LAEUFT:
 				_raid.die()
@@ -165,6 +169,20 @@ func _toggle_inventory_window() -> void:
 	if _character_window.is_open():
 		_character_window.close()
 	_inventory_window.open_for(_player)
+
+
+## Waffenwechsel. Ist der Platz leer, passiert nichts — kein Wechsel auf
+## leere Haende, das waere im Gefecht toedlich und nie gewollt.
+func _select_weapon(slot: ItemData.EquipSlot) -> void:
+	if _player.select_weapon_slot(slot):
+		var stack := _player.equipment.get_item(slot)
+		var data := stack.get_data() if stack != null else null
+		_show_message("%s: %s" % [
+			Equipment.get_slot_name(slot),
+			data.display_name if data != null else "?",
+		], 1.5)
+	else:
+		_show_message("%s ist leer" % Equipment.get_slot_name(slot), 1.5)
 
 
 func _toggle_character_window() -> void:

@@ -40,7 +40,88 @@ func _run_all() -> void:
 	_test_weapon_switching_keeps_gear()
 	await _test_ammo_switch_returns_rounds()
 	await _test_in_level()
+	await _test_weapon_slots()
 	_finish()
+
+
+## Primaer- und Sekundaerwaffe auf den Tasten 1 und 2.
+##
+## Der heikle Teil ist das MAGAZIN: Die Patronen im Lauf gehoeren zu DIESER
+## Waffe. Gehen sie beim Wechsel verloren, faellt das im Spiel kaum auf und
+## kostet trotzdem jedes Mal Munition — genau dieser Fehler hat uns schon
+## einmal bei jeder Extraction ein volles Magazin gekostet.
+func _test_weapon_slots() -> void:
+	_section("Waffenplaetze")
+
+	var packed: PackedScene = load("res://scenes/player/player.tscn")
+	var player: PlayerController = packed.instantiate()
+	root.add_child(player)
+	await process_frame
+
+	player.inventory.add(&"weapon_rifle_ar15", 1)
+	player.inventory.add(&"weapon_pistol_g17", 1)
+	player.inventory.add(&"ammo_556x45_m855a1", 60)
+	player.inventory.add(&"ammo_9x19_fmj", 34)
+
+	var weapons := player.inventory.get_carried_weapons()
+	var rifle: ItemStack = null
+	var pistol: ItemStack = null
+	for stack in weapons:
+		if stack.item_id == &"weapon_rifle_ar15":
+			rifle = stack
+		elif stack.item_id == &"weapon_pistol_g17":
+			pistol = stack
+
+	_check(rifle != null and pistol != null, "beide Waffen liegen im Inventar")
+	if rifle == null or pistol == null:
+		player.free()
+		return
+
+	_check(player.assign_weapon(rifle), "Gewehr auf den ersten Platz")
+	_check(player.equipment.get_item(ItemData.EquipSlot.PRIMARY) == rifle,
+		"es liegt auf der Primaerwaffe")
+	_check(player.active_weapon_slot == ItemData.EquipSlot.PRIMARY,
+		"und ist in der Hand")
+
+	_check(player.assign_weapon(pistol), "Pistole auf den zweiten Platz")
+	_check(player.equipment.get_item(ItemData.EquipSlot.SECONDARY) == pistol,
+		"sie liegt auf der Sekundaerwaffe")
+
+	# Waffen liegen jetzt am Koerper, nicht mehr im Raster.
+	_check(player.inventory.grid.get_stack(rifle.instance_id) == null,
+		"das Gewehr belegt keine Rasterfelder mehr")
+
+	# Das Gewicht darf NICHT doppelt zaehlen, nur weil die Waffe sowohl
+	# "in der Hand" als auch "am Koerper" ist.
+	var expected := player.inventory.grid.get_total_weight() + player.equipment.get_total_weight()
+	_check(is_equal_approx(player.carried_weight_kg, expected),
+		"das Gewicht zaehlt jede Waffe genau einmal (%.2f)" % player.carried_weight_kg)
+
+	# Magazin fuellen, wechseln, zurueckwechseln.
+	player.select_weapon_slot(ItemData.EquipSlot.PRIMARY)
+	player.try_reload()
+	var rifle_rounds := player.weapon.rounds_in_magazine
+	var rifle_ammo := player.weapon.ammo_id
+	_check(rifle_rounds > 0, "das Gewehr ist geladen (%d)" % rifle_rounds)
+
+	_check(player.select_weapon_slot(ItemData.EquipSlot.SECONDARY), "Wechsel auf die Pistole")
+	_check(player.weapon.data.id == &"weapon_pistol_g17", "die Pistole ist in der Hand")
+	_check(player.weapon.rounds_in_magazine != rifle_rounds
+		or player.weapon.ammo_id != rifle_ammo, "mit eigener Munition")
+
+	_check(player.select_weapon_slot(ItemData.EquipSlot.PRIMARY), "zurueck auf das Gewehr")
+	_check(player.weapon.rounds_in_magazine == rifle_rounds,
+		"das Magazin ist noch so voll wie vorher (%d)" % player.weapon.rounds_in_magazine)
+	_check(player.weapon.ammo_id == rifle_ammo, "und mit derselben Munition")
+
+	# Ein leerer Platz darf keinen Wechsel auf leere Haende ausloesen.
+	player.equipment.unequip(ItemData.EquipSlot.SECONDARY)
+	_check(not player.select_weapon_slot(ItemData.EquipSlot.SECONDARY),
+		"ein leerer Platz wechselt nicht")
+	_check(player.weapon.data.id == &"weapon_rifle_ar15",
+		"das Gewehr bleibt in der Hand")
+
+	player.free()
 
 
 func _check(condition: bool, label: String) -> void:

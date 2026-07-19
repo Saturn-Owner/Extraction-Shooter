@@ -63,6 +63,8 @@ enum EquipSlot {
 	PANTS,     ## Hose
 	BOOTS,     ## Schuhe
 	BACKPACK,  ## Rucksack
+	PRIMARY,   ## Primärwaffe — Taste 1
+	SECONDARY, ## Sekundärwaffe — Taste 2
 }
 
 @export var equip_slot: EquipSlot = EquipSlot.NONE
