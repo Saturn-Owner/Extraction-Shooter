@@ -28,6 +28,7 @@ func _initialize() -> void:
 	_check_damage_penetration_tradeoff()
 	_check_rarity_tiers()
 	_check_info_lines()
+	_check_find_sounds()
 	_print_caliber_overview()
 
 	print("\n=== ERGEBNIS: %s ===" % ("FEHLGESCHLAGEN" if _failed else "ALLES OK"))
@@ -210,6 +211,76 @@ func _check_info_lines() -> void:
 			else:
 				print("  OK  %s wird als Schrot gefuehrt" % a.id)
 			break
+
+
+## Fundgeraeusche: Krimskrams still, alles andere hoerbar.
+##
+## Wie es KLINGT kann hier niemand pruefen — das muss ein Mensch hoeren.
+## Pruefbar ist, dass ueberhaupt Klang im Puffer steht: Ein Rechenfehler
+## in der Synthese ergaebe Stille, und die faellt im Spiel nicht auf,
+## weil Stille bei COMMON ja richtig waere.
+func _check_find_sounds() -> void:
+	print("\n--- Fundgeraeusche")
+	ItemRegistry.ensure_loaded()
+
+	var billig := ItemRegistry.get_item(&"ammo_9x19_fmj")
+	if billig != null and SearchAudio.get_stream(billig) != null:
+		_fail("COMMON sollte still bleiben, liefert aber einen Klang")
+	else:
+		print("  OK  COMMON bleibt still")
+
+	# Je Kategorie eine Stichprobe, damit jeder Zweig der Synthese laeuft.
+	var geprueft := {}
+	for item in ItemRegistry.get_all():
+		if item.get_rarity() == ItemData.Rarity.COMMON:
+			continue
+		if geprueft.has(item.category):
+			continue
+		geprueft[item.category] = true
+
+		var stream := SearchAudio.get_stream(item) as AudioStreamWAV
+		if stream == null:
+			_fail("%s (%s) liefert keinen Klang" % [item.id, ItemData.Category.keys()[item.category]])
+			continue
+
+		var peak := _peak_of(stream)
+		var laenge := float(stream.data.size() / 2) / float(SearchAudio.SAMPLE_RATE)
+
+		if peak < 0.05:
+			_fail("%s klingt praktisch still (Spitze %.3f)" % [item.id, peak])
+		elif peak > 0.999:
+			_fail("%s uebersteuert (Spitze %.3f)" % [item.id, peak])
+		else:
+			print("  OK  %-12s %.2f s, Spitze %.2f"
+				% [ItemData.Category.keys()[item.category], laenge, peak])
+
+	# Seltener muss lauter sein als weniger selten — sonst traegt die
+	# Abstufung keine Information.
+	var m995 := ItemRegistry.get_item(&"ammo_556x45_m995")
+	var m855 := ItemRegistry.get_item(&"ammo_556x45_m855a1")
+	if m995 != null and m855 != null and m995.get_rarity() > m855.get_rarity():
+		var lauter := _peak_of(SearchAudio.get_stream(m995) as AudioStreamWAV)
+		var leiser := _peak_of(SearchAudio.get_stream(m855) as AudioStreamWAV)
+		if lauter <= leiser:
+			_fail("der seltenere Fund ist nicht lauter (%.2f vs %.2f)" % [lauter, leiser])
+		else:
+			print("  OK  seltener klingt deutlicher (%.2f vs %.2f)" % [lauter, leiser])
+
+
+## Groesster Ausschlag im Puffer, 0 bis 1.
+func _peak_of(stream: AudioStreamWAV) -> float:
+	if stream == null:
+		return 0.0
+	var data := stream.data
+	var peak := 0
+	var i := 0
+	while i < data.size() - 1:
+		var value := data[i] | (data[i + 1] << 8)
+		if value >= 32768:
+			value -= 65536
+		peak = maxi(peak, absi(value))
+		i += 2
+	return float(peak) / 32767.0
 
 
 func _fail(msg: String) -> void:

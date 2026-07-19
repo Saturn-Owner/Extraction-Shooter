@@ -109,8 +109,9 @@ func _on_item_revealed(stack: ItemStack, _remaining: int) -> void:
 	_play_find_sound(stack)
 
 
-## Der Fund bekommt einen Klang nach seiner Seltenheit — Krimskrams bleibt
-## bewusst still, sonst waere jede Kiste ein Dauergeklingel.
+## Man hoert den Gegenstand selbst: der Schluessel klimpert, die Waffe setzt
+## sich schwer. Krimskrams bleibt still, sonst waere jede Kiste ein
+## Dauergeklapper.
 func _play_find_sound(stack: ItemStack) -> void:
 	if stack == null or _find_sound == null:
 		return
@@ -118,7 +119,7 @@ func _play_find_sound(stack: ItemStack) -> void:
 	if data == null:
 		return
 
-	var stream := SearchAudio.get_stream(data.get_rarity())
+	var stream := SearchAudio.get_stream(data)
 	if stream == null:
 		return
 
