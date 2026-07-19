@@ -18,6 +18,8 @@ var _done := false
 
 func _initialize() -> void:
 	ItemRegistry.ensure_loaded()
+	# Platte, Rucksack und Kleidung gibt es im Spiel gerade nicht mehr.
+	TestItems.install()
 	print("=== Raid-Schleife pruefen ===\n")
 	_run_all()
 

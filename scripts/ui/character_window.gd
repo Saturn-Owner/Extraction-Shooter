@@ -70,6 +70,11 @@ var _drag_stack: ItemStack = null
 var _drag_offset: Vector2i = Vector2i.ZERO
 var _drag_target_cell: Vector2i = Vector2i(-1, -1)
 
+## Aus welchem Ausruestungsplatz gezogen wird (NONE = aus dem Raster),
+## und auf welchen gerade gezielt wird.
+var _drag_from_slot: ItemData.EquipSlot = ItemData.EquipSlot.NONE
+var _drag_target_slot: ItemData.EquipSlot = ItemData.EquipSlot.NONE
+
 ## Ob beim Anfassen Strg gedrueckt war — dann wird nach der Menge gefragt.
 var _drag_ctrl: bool = false
 
@@ -150,7 +155,10 @@ func _process(_delta: float) -> void:
 	if _drag_stack != null:
 		_update_drag_target()
 		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			drop_at(_drag_target_cell)
+			if _drag_target_slot != ItemData.EquipSlot.NONE:
+				drop_on_slot(_drag_target_slot)
+			else:
+				drop_at(_drag_target_cell)
 
 	if player != null:
 		_refresh()
@@ -216,10 +224,36 @@ func _make_slot(slot: ItemData.EquipSlot) -> Control:
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button.add_theme_font_size_override("font_size", 12)
 	button.pressed.connect(_on_slot_pressed.bind(slot))
+	# Gedrueckt halten und ziehen holt den Gegenstand heraus. Der Klick
+	# (pressed) kommt erst beim Loslassen und weiss dann schon, ob gezogen
+	# wurde — siehe _on_slot_pressed.
+	button.button_down.connect(_on_slot_grabbed.bind(slot))
 	box.add_child(button)
 
 	_slot_buttons[slot] = button
 	return box
+
+
+## Anfassen: Gedrueckt halten und ziehen holt heraus, was im Platz steckt.
+func _on_slot_grabbed(slot: ItemData.EquipSlot) -> void:
+	if player == null or player.equipment == null or _split_prompt.is_open():
+		return
+
+	var worn := player.equipment.get_item(slot)
+	if worn == null:
+		return
+
+	_drag_stack = worn
+	_drag_from_slot = slot
+	_drag_ctrl = false
+	_drag_original_rotated = worn.rotated
+	_drag_offset = Vector2i.ZERO
+	_tooltip.clear()
+
+	# Der Gegenstand haengt mittig am Zeiger: Aus einem Platz gibt es kein
+	# Feld, an dem man ihn "angefasst" haette.
+	var step := InventoryGridView.CELL_SIZE + InventoryGridView.CELL_GAP
+	_ghost.show_stack(worn, Vector2(worn.get_size()) * step * 0.5)
 
 
 ## Klick auf einen belegten Platz legt ab — zurueck ins Inventar.
@@ -229,6 +263,14 @@ func _make_slot(slot: ItemData.EquipSlot) -> Control:
 func _on_slot_pressed(slot: ItemData.EquipSlot) -> void:
 	if player == null or player.equipment == null:
 		return
+
+	# Wurde gezogen, ist das kein Klick: Das Ablegen erledigt _process, sobald
+	# es die Maustaste losgelassen sieht.
+	if _drag_stack != null:
+		if _drag_target_slot != slot or _drag_target_cell.x >= 0:
+			return
+		# Nicht weggezogen — also doch nur ein Klick.
+		_cancel_drag()
 
 	var worn := player.equipment.get_item(slot)
 	if worn == null:
@@ -594,13 +636,93 @@ func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 
 
 func _update_drag_target() -> void:
+	var mouse := get_global_mouse_position()
+
+	# Die Plaetze haben Vorrang: Sie liegen ueber dem Raster, und wer auf einen
+	# Platz zielt, meint auch den Platz.
+	_drag_target_slot = _slot_under(mouse)
+
 	_drag_target_cell = Vector2i(-1, -1)
-	if _inventory_view.get_global_rect().has_point(get_global_mouse_position()):
+	if _drag_target_slot == ItemData.EquipSlot.NONE \
+			and _inventory_view.get_global_rect().has_point(mouse):
 		var cell := _inventory_view.position_to_cell(_inventory_view.get_local_mouse_position())
 		if cell.x >= 0:
 			_drag_target_cell = cell - _drag_offset
+
 	_inventory_view.preview_cell = _drag_target_cell
 	_inventory_view.queue_redraw()
+	_highlight_slots()
+
+
+## Welcher Ausruestungsplatz unter diesem Punkt liegt.
+func _slot_under(global_point: Vector2) -> ItemData.EquipSlot:
+	for slot: ItemData.EquipSlot in _slot_buttons:
+		var button: Button = _slot_buttons[slot]
+		if button.is_visible_in_tree() and button.get_global_rect().has_point(global_point):
+			return slot
+	return ItemData.EquipSlot.NONE
+
+
+## Faerbt den Platz unter dem Zeiger ein, solange etwas am Zeiger haengt.
+## Gruen heisst "passt hier rein", Rot "passt nicht" — sonst probiert man
+## blind herum, weil ein leerer Platz aussieht wie jeder andere.
+func _highlight_slots() -> void:
+	for slot: ItemData.EquipSlot in _slot_buttons:
+		var button: Button = _slot_buttons[slot]
+		if _drag_stack == null or slot != _drag_target_slot:
+			button.modulate = Color.WHITE
+		elif player != null and player.equipment.can_equip(_drag_stack, slot):
+			button.modulate = Color(0.70, 1.15, 0.70)
+		else:
+			button.modulate = Color(1.15, 0.65, 0.60)
+
+
+## Ablegen auf einem Ausruestungsplatz.
+##
+## Waffen gehen ueber assign_weapon(), damit die verdraengte Waffe geprueft
+## im Raster landet statt zu verschwinden.
+func drop_on_slot(slot: ItemData.EquipSlot) -> bool:
+	if _drag_stack == null or player == null:
+		return false
+
+	var stack := _drag_stack
+	var from := _drag_from_slot
+	_cancel_drag()
+
+	# Auf den eigenen Platz zurueck: nichts zu tun.
+	if from == slot:
+		return true
+	if not player.equipment.can_equip(stack, slot):
+		return false
+
+	if Equipment.is_weapon_slot(slot):
+		# Aus einem anderen Platz heraus: erst abnehmen, sonst haengt dieselbe
+		# Waffe an zwei Stellen.
+		if from != ItemData.EquipSlot.NONE:
+			player.equipment.unequip(from)
+		var ok := player.assign_weapon(stack, slot)
+		if not ok and from != ItemData.EquipSlot.NONE:
+			player.equipment.equip(stack, from)
+		_refresh()
+		return ok
+
+	# Alles andere: Der verdraengte Gegenstand muss ins Raster passen, sonst
+	# bleibt alles, wie es war.
+	var displaced := player.equipment.get_item(slot)
+	if displaced != null and player.inventory.grid.find_free_position(displaced).x < 0:
+		return false
+
+	if from != ItemData.EquipSlot.NONE:
+		player.equipment.unequip(from)
+	else:
+		player.inventory.grid.remove_item(stack.instance_id)
+
+	player.equipment.equip(stack, slot)
+	if displaced != null:
+		player.inventory.grid.add_item(displaced)
+
+	_refresh()
+	return true
 
 
 func drop_at(cell: Vector2i) -> void:
@@ -608,6 +730,14 @@ func drop_at(cell: Vector2i) -> void:
 		return
 	if cell.x < 0 or cell.y < 0:
 		_cancel_drag()
+		return
+
+	# Vom Koerper ins Raster: Der Spieler packt etwas weg.
+	if _drag_from_slot != ItemData.EquipSlot.NONE:
+		var slot := _drag_from_slot
+		_cancel_drag()
+		player.stow_equipment(slot, cell.x, cell.y)
+		_refresh()
 		return
 
 	# Mit Strg wird nach der Menge gefragt, statt alles zu verschieben.
@@ -716,7 +846,10 @@ func _cancel_drag() -> void:
 	_drag_stack = null
 	_drag_offset = Vector2i.ZERO
 	_drag_target_cell = Vector2i(-1, -1)
+	_drag_from_slot = ItemData.EquipSlot.NONE
+	_drag_target_slot = ItemData.EquipSlot.NONE
 	_drag_ctrl = false
+	_highlight_slots()
 	if _ghost != null:
 		_ghost.clear()
 	if _inventory_view != null:

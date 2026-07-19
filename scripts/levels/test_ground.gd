@@ -26,9 +26,8 @@ extends Node3D
 ## Startausrüstung. Bewusst knapp gehalten, damit man merkt, dass Munition
 ## eine begrenzte Ressource ist und nicht selbstverständlich.
 ## Reihenfolge ist wichtig: Grosse Gegenstaende zuerst, sonst zerstueckeln
-## die kleinen das Raster und der Rucksack findet keinen Platz mehr.
+## die kleinen das Raster und die Gewehre finden keinen Platz mehr.
 const LOADOUT := [
-	{id = &"backpack_small", count = 1},
 	{id = &"weapon_rifle_ar15", count = 1},
 	{id = &"weapon_shotgun_m870", count = 1},
 	{id = &"weapon_pistol_g17", count = 1},
@@ -147,9 +146,11 @@ func _unhandled_input(event: InputEvent) -> void:
 					inventory.add(entry.id, entry.count)
 			_last_action = "Munition aufgefüllt"
 		KEY_Z:
-			# Ballast, um die Gewichtsbremse zu spüren.
-			if inventory.add(&"plate_class4_front", 1):
-				_last_action = "Platte eingepackt (+3.4 kg)"
+			# Ballast, um die Gewichtsbremse zu spüren. Frueher war das eine
+			# Schutzplatte; solange es nur Waffen und Munition gibt, tut es
+			# ein Schwung Gewehrmunition genauso.
+			if inventory.add(&"ammo_762x51_m80", 40):
+				_last_action = "40 Patronen eingepackt"
 			else:
 				_last_action = "kein Platz mehr"
 		KEY_0:

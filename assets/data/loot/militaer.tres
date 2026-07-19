@@ -5,35 +5,10 @@
 [resource]
 script = ExtResource("1_7xfwf")
 entries = Array[Dictionary]([{
-"id": "med_bandage",
-"max": 4,
-"min": 2,
-"weight": 34
-}, {
 "id": "ammo_556x45_m855a1",
 "max": 60,
 "min": 20,
 "weight": 32
-}, {
-"id": "med_tourniquet",
-"max": 2,
-"min": 1,
-"weight": 26
-}, {
-"id": "med_splint",
-"max": 1,
-"min": 1,
-"weight": 18
-}, {
-"id": "med_painkillers",
-"max": 3,
-"min": 1,
-"weight": 16
-}, {
-"id": "med_first_aid_kit",
-"max": 1,
-"min": 1,
-"weight": 6
 }, {
 "id": "ammo_762x51_m80",
 "max": 30,
@@ -44,11 +19,6 @@ entries = Array[Dictionary]([{
 "max": 60,
 "min": 20,
 "weight": 22
-}, {
-"id": "plate_class4_front",
-"max": 2,
-"min": 1,
-"weight": 20
 }, {
 "id": "ammo_762x39_bp",
 "max": 40,

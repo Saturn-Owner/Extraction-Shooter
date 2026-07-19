@@ -13,6 +13,9 @@ var _passed := 0
 
 
 func _initialize() -> void:
+	ItemRegistry.ensure_loaded()
+	# Kleidung gibt es im Spiel gerade nicht mehr — siehe test_items.gd.
+	TestItems.install()
 	print("=== Gesundheit, Zustand und Ausruestung pruefen ===\n")
 	_test_body_parts()
 	_test_death_rules()

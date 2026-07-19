@@ -18,6 +18,8 @@ var _done := false
 
 func _initialize() -> void:
 	ItemRegistry.ensure_loaded()
+	# Platte, Rucksack und Kleidung gibt es im Spiel gerade nicht mehr.
+	TestItems.install()
 	print("=== Inventar, Waffe und Gewicht ===\n")
 	_run_all()
 
@@ -120,6 +122,50 @@ func _test_weapon_slots() -> void:
 		"ein leerer Platz wechselt nicht")
 	_check(player.weapon.data.id == &"weapon_rifle_ar15",
 		"das Gewehr bleibt in der Hand")
+
+	# --- Wegpacken: vom Koerper zurueck ins Raster (Ziehen mit der Maus) ---
+
+	# Die Pistole wieder anlegen, damit es etwas zum Wechseln gibt.
+	player.assign_weapon(pistol, ItemData.EquipSlot.SECONDARY)
+	player.select_weapon_slot(ItemData.EquipSlot.PRIMARY)
+	rifle_rounds = player.weapon.rounds_in_magazine
+
+	_check(player.stow_equipment(ItemData.EquipSlot.PRIMARY, 0, 0),
+		"das Gewehr wandert ins Raster")
+	_check(player.equipment.get_item(ItemData.EquipSlot.PRIMARY) == null,
+		"der Waffenplatz ist wieder leer")
+	_check(player.inventory.grid.get_stack(rifle.instance_id) == rifle,
+		"und es liegt jetzt im Raster")
+
+	# Wer seine Waffe wegpackt, soll nicht mit leeren Haenden dastehen,
+	# solange er eine zweite hat.
+	_check(player.weapon.data != null and player.weapon.data.id == &"weapon_pistol_g17",
+		"die Pistole rutscht automatisch in die Hand")
+
+	# Das Magazin haengt an der WAFFE, nicht am Platz. Sonst waeren die
+	# Patronen weg, sobald die Waffe einmal im Rucksack war.
+	_check(player.assign_weapon(rifle, ItemData.EquipSlot.PRIMARY),
+		"das Gewehr kommt zurueck auf den Platz")
+	_check(player.weapon.rounds_in_magazine == rifle_rounds,
+		"das Magazin hat den Rucksack ueberlebt (%d von %d)" % [
+			player.weapon.rounds_in_magazine, rifle_rounds])
+
+	# Letzte Waffe weggepackt: leere Haende sind erlaubt, aber dann darf auch
+	# nicht mehr geschossen werden.
+	player.stow_equipment(ItemData.EquipSlot.SECONDARY)
+	player.stow_equipment(ItemData.EquipSlot.PRIMARY)
+	_check(player.weapon.data == null, "ohne Waffe sind die Haende leer")
+	_check(not player.weapon.try_fire(true, true), "und es faellt kein Schuss")
+
+	# Passt es nicht ins Raster, bleibt es angelegt — kein stiller Verlust.
+	player.assign_weapon(rifle, ItemData.EquipSlot.PRIMARY)
+	var filler := player.inventory.grid
+	while filler.add_item(ItemStack.create(&"ammo_556x45_m855a1", 1)):
+		pass
+	_check(not player.stow_equipment(ItemData.EquipSlot.PRIMARY),
+		"im vollen Raster bleibt die Waffe am Koerper")
+	_check(player.equipment.get_item(ItemData.EquipSlot.PRIMARY) == rifle,
+		"sie haengt noch im Platz")
 
 	player.free()
 

@@ -421,7 +421,15 @@ func _check_loot_variety() -> void:
 			names.append(ItemData.Category.keys()[c])
 		names.sort()
 
-		if categories.size() < 3:
+		# Frueher waren hier drei Kategorien Pflicht: Eine Kiste, in der nur
+		# Munition liegt, ist keine Entscheidung wert. Solange es im Spiel
+		# ueberhaupt nur Waffen und Munition GIBT, kann keine Tabelle das
+		# erfuellen — die Forderung waere nur noch ein Dauerfehler.
+		#
+		# Geprueft wird stattdessen, dass jede Tabelle beides fuehrt. Sobald
+		# Verpflegung und Werkzeug zurueckkommen, gehoert die 3 wieder her.
+		var required := 2
+		if categories.size() < required:
 			_fail("%s bietet nur %d Kategorien: %s" % [table_name, categories.size(), ", ".join(names)])
 		else:
 			print("  OK  %-10s %d Eintraege, %d Kategorien: %s" % [

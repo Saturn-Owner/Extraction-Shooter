@@ -12,6 +12,8 @@ var _passed := 0
 
 func _initialize() -> void:
 	ItemRegistry.ensure_loaded()
+	# Platte, Rucksack und Kleidung gibt es im Spiel gerade nicht mehr.
+	TestItems.install()
 	print("=== Raster-Inventar prüfen ===")
 	print("(%d Item-Vorlagen geladen)\n" % ItemRegistry.get_count())
 	_test_basic_placement()

@@ -134,11 +134,16 @@ var _survival_damage_timer: float = 0.0
 ## Welcher Waffenplatz gerade in der Hand liegt.
 var active_weapon_slot: ItemData.EquipSlot = ItemData.EquipSlot.PRIMARY
 
-## Was in den Magazinen der NICHT getragenen Waffen steckt.
+## Was in den Magazinen der NICHT getragenen Waffen steckt,
+## nach `instance_id` der Waffe.
 ##
 ## Ohne das waere jeder Waffenwechsel ein Munitionsverlust: Die Patronen im
 ## Lauf gehoeren zu DIESER Waffe, nicht zur Hand. Genau dieser Fehler hat
 ## uns schon einmal bei der Extraction Munition gekostet.
+##
+## Der Schluessel ist bewusst die Waffe und nicht der Platz. Sonst waere das
+## Magazin weg, sobald die Waffe einmal in den Rucksack wandert — und genau
+## das kann man jetzt mit der Maus tun.
 var _magazines: Dictionary = {}
 
 
@@ -237,15 +242,25 @@ func select_weapon_slot(slot: ItemData.EquipSlot) -> bool:
 	# Was noch im Lauf steckt, gehoert zur alten Waffe. Merken, damit es
 	# beim Zurueckwechseln nicht verschwunden ist.
 	if active_weapon_slot != slot:
-		_magazines[active_weapon_slot] = {
-			"rounds": weapon.rounds_in_magazine,
-			"ammo": weapon.ammo_id,
-		}
+		_remember_magazine()
 
 	active_weapon_slot = slot
 	inventory.equipped_weapon = stack
 	_put_in_hand(stack)
 	return true
+
+
+## Merkt sich, was im Magazin der Waffe steckt, die gerade in der Hand liegt.
+func _remember_magazine() -> void:
+	if weapon == null or equipment == null:
+		return
+	var held := equipment.get_item(active_weapon_slot)
+	if held == null:
+		return
+	_magazines[held.instance_id] = {
+		"rounds": weapon.rounds_in_magazine,
+		"ammo": weapon.ammo_id,
+	}
 
 
 ## Baut die Waffe in der Hand auf und laedt sie.
@@ -254,7 +269,7 @@ func _put_in_hand(stack: ItemStack) -> void:
 	if weapon_data == null:
 		return
 
-	var saved: Dictionary = _magazines.get(active_weapon_slot, {})
+	var saved: Dictionary = _magazines.get(stack.instance_id, {})
 	var saved_rounds := int(saved.get("rounds", 0))
 	var saved_ammo: StringName = saved.get("ammo", &"")
 
@@ -281,6 +296,61 @@ func _put_in_hand(stack: ItemStack) -> void:
 ## Kurzform fuer assign_weapon() auf den ersten freien Platz.
 func equip_from_inventory(stack: ItemStack) -> bool:
 	return assign_weapon(stack)
+
+
+## Packt weg, was in einem Platz steckt: vom Koerper zurueck ins Raster.
+##
+## Mit `x`/`y` landet es auf einem bestimmten Feld — das ist der Fall beim
+## Ziehen mit der Maus. Passt es dort nicht, sucht es sich selbst einen Platz.
+##
+## Passt es NIRGENDS hin, bleibt es angelegt und die Funktion gibt `false`
+## zurueck. Etwas fallen zu lassen, weil kein Platz ist, waere im Raid ein
+## stiller Verlust — und zwar meist der teuerste Gegenstand, den man hat.
+func stow_equipment(slot: ItemData.EquipSlot, x: int = -1, y: int = -1) -> bool:
+	if equipment == null or inventory == null:
+		return false
+
+	var stack := equipment.get_item(slot)
+	if stack == null:
+		return false
+
+	# Das Magazin gehoert zur Waffe und muss mitwandern, bevor die Hand
+	# leer wird.
+	if Equipment.is_weapon_slot(slot) and slot == active_weapon_slot:
+		_remember_magazine()
+
+	var placed := false
+	if x >= 0 and y >= 0 and inventory.grid.can_place(stack, x, y):
+		placed = inventory.grid.place(stack, x, y)
+	if not placed:
+		placed = inventory.grid.add_item(stack)
+	if not placed:
+		return false
+
+	equipment.unequip(slot)
+
+	# Die Waffe, die gerade in der Hand lag, ist jetzt im Rucksack. Statt mit
+	# leeren Haenden dazustehen, greift der Spieler zur zweiten Waffe — hat er
+	# keine, sind die Haende eben leer.
+	if Equipment.is_weapon_slot(slot) and slot == active_weapon_slot:
+		var other := ItemData.EquipSlot.SECONDARY \
+			if slot == ItemData.EquipSlot.PRIMARY else ItemData.EquipSlot.PRIMARY
+		if equipment.get_item(other) != null:
+			select_weapon_slot(other)
+		else:
+			_empty_hands()
+
+	return true
+
+
+## Leere Haende. Schiessen ist damit unmoeglich (Weapon.try_fire prueft `data`).
+func _empty_hands() -> void:
+	if weapon != null:
+		weapon.data = null
+		weapon.loaded_ammo = null
+		weapon.rounds_in_magazine = 0
+	if inventory != null:
+		inventory.equipped_weapon = null
 
 
 ## Entlaedt das Magazin zurueck ins Inventar.

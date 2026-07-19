@@ -41,7 +41,9 @@ func _ready() -> void:
 			plate = res as ArmorPlateData
 			plate_durability = plate.max_durability
 		else:
-			push_warning("[TargetDummy] Unbekannte Platte: %s" % plate_id)
+			# Kein Fehler, sondern der Normalfall, solange es nur Waffen und
+			# Munition gibt: Die Scheibe steht dann eben ungeschuetzt da.
+			push_warning("[TargetDummy] Platte '%s' gibt es nicht — Scheibe bleibt ungeschuetzt" % plate_id)
 
 	_update_visuals()
 
