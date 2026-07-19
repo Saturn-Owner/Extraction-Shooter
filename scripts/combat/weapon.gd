@@ -23,6 +23,10 @@ signal unjam_started(duration: float)
 signal unjammed()
 signal fire_mode_changed(mode: WeaponData.FireMode)
 
+## Eine andere Waffe liegt in der Hand. Die Darstellung muss ihr Modell
+## austauschen — jede Waffe hat ihr eigenes.
+signal weapon_changed(new_data: WeaponData)
+
 const PROJECTILE_SCENE := preload("res://scenes/combat/projectile.tscn")
 
 ## Wie stark Verschleiss die Ladehemmungen hochtreibt.
@@ -118,6 +122,9 @@ func setup(p_weapon_id: StringName, p_ammo_id: StringName) -> bool:
 	_reload_time_left = 0.0
 	_unjam_time_left = 0.0
 	current_fire_mode = data.fire_modes[0] if not data.fire_modes.is_empty() else WeaponData.FireMode.SINGLE
+
+	# Die Darstellung muss ihr Modell austauschen — jede Waffe hat ihr eigenes.
+	weapon_changed.emit(data)
 	fire_mode_changed.emit(current_fire_mode)
 
 	# Sucht zuerst eine echte Audiodatei für diese Waffe, sonst Synthese.
@@ -324,6 +331,29 @@ func _emit_recoil() -> void:
 ## Abzug losgelassen — Rueckstossaufbau zuruecksetzen.
 func release_trigger() -> void:
 	_shots_since_release = 0
+
+
+## Waffe ohne passende Munition in die Hand nehmen.
+##
+## Eine gueltige Notlage: Man findet ein Gewehr, hat aber kein Kaliber dafuer.
+## Braucht einen eigenen Weg, weil setup() eine gueltige Munitionssorte
+## verlangt — und weil sonst das Modell nicht gewechselt wuerde und man mit
+## der alten Waffe in der Hand dastuende.
+func equip_without_ammo(new_data: WeaponData) -> void:
+	if new_data == null:
+		return
+	data = new_data
+	weapon_id = new_data.id
+	loaded_ammo = null
+	rounds_in_magazine = 0
+	round_chambered = false
+	is_jammed = false
+	_reload_time_left = 0.0
+	_unjam_time_left = 0.0
+	current_fire_mode = data.fire_modes[0] if not data.fire_modes.is_empty() else WeaponData.FireMode.SINGLE
+
+	weapon_changed.emit(data)
+	fire_mode_changed.emit(current_fire_mode)
 
 
 ## Muendungspunkt des sichtbaren Modells anmelden.

@@ -1,9 +1,11 @@
 [gd_resource type="Resource" script_class="WeaponData" format=3]
 
 [ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_pxkba"]
+[ext_resource type="Script" path="res://scripts/weapons/akm_viewmodel.gd" id="2_view"]
 
 [resource]
 script = ExtResource("1_pxkba")
+viewmodel = ExtResource("2_view")
 caliber = &"7.62x39"
 fire_rate_rpm = 600
 recoil_vertical = 158.0

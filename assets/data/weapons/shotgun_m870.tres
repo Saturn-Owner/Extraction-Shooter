@@ -1,9 +1,11 @@
 [gd_resource type="Resource" script_class="WeaponData" format=3]
 
 [ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1_md80f"]
+[ext_resource type="Script" path="res://scripts/weapons/m870_viewmodel.gd" id="2_view"]
 
 [resource]
 script = ExtResource("1_md80f")
+viewmodel = ExtResource("2_view")
 caliber = &"12/70"
 magazine_size = 7
 fire_modes = Array[int]([0])

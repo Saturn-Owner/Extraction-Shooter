@@ -30,7 +30,7 @@ Regeln:
 
 ## Architektur — Grundsatzentscheidungen
 
-Diese vier Punkte wurden bewusst festgelegt und dürfen nicht beiläufig geändert werden.
+Diese fünf Punkte wurden bewusst festgelegt und dürfen nicht beiläufig geändert werden.
 Der vollständige Entwicklungsplan liegt außerhalb des Repos beim jeweiligen Entwickler.
 
 ### 1. Alles ist datengetrieben
@@ -66,6 +66,35 @@ sollen, muss diese Entscheidung neu bewertet werden.
 Kugel durch die Platte kommt. Rüstung hat **kein** Stufensystem: Platten decken
 nur Flächen ab, nutzen sich ab, und starke Munition geht durch. Der Spieler soll
 jederzeit sterblich bleiben.
+
+### 5. Jede Waffe hat ihr eigenes Modell und ihre eigenen Animationen
+
+Pro Waffe eine eigene Datei unter `scripts/weapons/`, abgeleitet von
+`WeaponViewmodel`. Verknüpft wird über das Feld `viewmodel` in der `.tres`
+der Waffe — datengetrieben, siehe Punkt 1.
+
+**Es gibt bewusst keine Einheitswaffe mit ausgetauschten Werten.** Eine
+Pistole hat einen Schlitten, eine Vorderschaftrepetierflinte eine Pumpe, ein
+Sturmgewehr einen Verschluss. Das sind unterschiedliche Bewegungen, keine
+Varianten derselben. Jede Waffe soll sich einzigartig anfühlen und aussehen.
+
+Arbeitsteilung:
+- `scripts/combat/weapon_view.gd` — was im Kameraraum für **jede** Waffe
+  gleich ist: Haltung, Zielen, Nachschwingen, Laufwackeln, Rückstossfeder.
+  Diese Datei kennt kein einziges Waffenteil beim Namen.
+- `scripts/weapons/*.gd` — Geometrie und Mechanik **dieser einen** Waffe.
+- `scripts/combat/viewmodel_parts.gd` — gemeinsame Bauteile (Quader,
+  Zylinder, Schienen), damit nicht jede Waffe ihre eigenen Helfer schreibt.
+
+`GenericViewmodel` ist nur eine Notlösung, damit eine Waffe ohne eigenes
+Modell spielbar bleibt statt unsichtbar zu sein. Welche Waffen noch daran
+hängen, listet `verify_weapon_handling` bei jedem Lauf auf — die Liste soll
+irgendwann leer sein.
+
+Modelle werden im Code gebaut, nicht als `.tscn`: Szenen lassen sich bei
+Konflikten nicht mergen, und bei zwölf Waffen und zwei Entwicklern wäre das
+eine dauerhafte Konfliktquelle. `tools/render_viewmodel.gd` rendert die
+Modelle in PNGs, damit man sie ansehen kann, ohne das Spiel zu starten.
 
 ## Was Claude testen kann — und was nicht
 

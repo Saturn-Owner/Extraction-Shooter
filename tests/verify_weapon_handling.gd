@@ -28,9 +28,15 @@ func _initialize() -> void:
 	_test_jam_chance_grows_with_wear()
 	_test_jam_never_loses_ammo()
 	_test_aiming_reduces_spread()
-	_test_viewmodel_parts()
-	_test_sight_line_is_straight()
+	_test_every_weapon_builds()
+	_test_viewmodels_are_unique()
 
+	# Laeuft asynchron weiter und ruft am Ende _finish() auf: Der Waffenwechsel
+	# braucht einen echten Frame, damit _ready() im Szenenbaum durchlaeuft.
+	_test_weapon_switch_swaps_model()
+
+
+func _finish() -> void:
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
 
@@ -330,48 +336,150 @@ func _average_deviation(weapon: Weapon, forward: Vector3, samples: int) -> float
 	return total / float(samples)
 
 
-func _test_viewmodel_parts() -> void:
-	_section("Modell wird gebaut")
+## Prueft JEDE Waffe im Arsenal, nicht nur die AR-15.
+##
+## Der Grundsatz lautet: jede Waffe eigenes Modell, eigene Datei, eigene
+## Mechanik. Ein Test, der nur eine Waffe anfasst, kann diesen Grundsatz nicht
+## absichern — er wuerde erst im Spiel auffallen, wenn jemand die Flinte in
+## die Hand nimmt und sie unsichtbar ist.
+func _test_every_weapon_builds() -> void:
+	_section("Jede Waffe baut ihr Modell")
 
-	var model := ViewmodelBuilder.build_ar15()
+	var weapons := ItemRegistry.get_by_category(ItemData.Category.WEAPON)
+	_check(weapons.size() > 0, "Waffen im Arsenal gefunden (%d)" % weapons.size())
 
-	# weapon_view.gd findet die beweglichen Teile ausschliesslich ueber diese
-	# Namen. Wer sie umbenennt, ohne den Animator anzupassen, bekommt eine
-	# stumme Waffe — deshalb hier festgenagelt.
-	for part in ["Bolt", "Magazine", "Trigger", "Selector", "ChargingHandle",
-			"MuzzlePoint", "EjectPoint", "RearSight", "FrontSight", "Barrel"]:
-		_check(model.get_node_or_null(part) != null, "Teil vorhanden: %s" % part)
+	var own := 0
+	var placeholder: Array[String] = []
 
-	var muzzle := model.get_node_or_null("MuzzlePoint") as Node3D
-	_check(muzzle != null and muzzle.position.z < -0.4,
-		"Muendung sitzt vorne am Lauf (z = %.3f)" % (muzzle.position.z if muzzle else 0.0))
+	for item in weapons:
+		var weapon_data := item as WeaponData
+		if weapon_data == null:
+			continue
 
-	model.free()
+		var model := weapon_data.create_viewmodel()
+		model.build()
+
+		var label := weapon_data.display_name
+
+		# weapon_view.gd findet die beweglichen Teile ausschliesslich ueber
+		# diese Namen. Wer sie umbenennt, bekommt eine stumme Waffe.
+		# Action, Abzug und Muendung hat jede Waffe — Magazin und
+		# Feuerwahlhebel bewusst nicht: Eine Flinte hat kein abnehmbares
+		# Magazin, eine Pistole keinen Feuerwahlhebel.
+		_check(model.action != null, "%s: Verschluss/Schlitten vorhanden" % label)
+		_check(model.trigger != null, "%s: Abzug vorhanden" % label)
+		_check(model.muzzle_point != null, "%s: Muendungspunkt vorhanden" % label)
+
+		if model.muzzle_point != null:
+			_check(is_equal_approx(model.muzzle_point.position.z, model.muzzle_z),
+				"%s: Muendungspunkt sitzt bei muzzle_z (%.3f / %.3f)"
+					% [label, model.muzzle_point.position.z, model.muzzle_z])
+
+		_check_sight_line(model, label)
+
+		if weapon_data.has_own_viewmodel():
+			own += 1
+		else:
+			placeholder.append(label)
+
+		model.free()
+
+	print("\n  %d von %d Waffen haben ein eigenes Modell." % [own, weapons.size()])
+	if not placeholder.is_empty():
+		# Kein Fehler, sondern eine Arbeitsliste: Der Grundsatz ist, dass hier
+		# irgendwann nichts mehr steht.
+		print("  Noch am Platzhalter: ", ", ".join(placeholder))
 
 
 ## Der subtilste Fehler ueberhaupt: Wenn Kimme und Korn nicht auf einer Hoehe
 ## liegen, zielt der Spieler an seinem eigenen Visier vorbei — und niemand
-## merkt, warum die Schuesse danebengehen.
-func _test_sight_line_is_straight() -> void:
-	_section("Visierlinie ist gerade")
-
-	var model := ViewmodelBuilder.build_ar15()
+## merkt, warum die Schuesse danebengehen. Weil weapon_view.gd das Modell
+## beim Zielen um genau sight_height absenkt, muss dieser Wert auch stimmen.
+func _check_sight_line(model: WeaponViewmodel, label: String) -> void:
 	var rear := model.get_node_or_null("RearSight") as Node3D
 	var front := model.get_node_or_null("FrontSight") as Node3D
 
 	if rear == null or front == null:
-		_check(false, "Kimme und Korn vorhanden")
-		model.free()
+		_check(false, "%s: Kimme und Korn vorhanden" % label)
 		return
 
 	_check(is_equal_approx(rear.position.y, front.position.y),
-		"Kimme und Korn liegen auf gleicher Hoehe (%.4f / %.4f)" % [rear.position.y, front.position.y])
-	_check(is_equal_approx(rear.position.y, ViewmodelBuilder.SIGHT_HEIGHT),
-		"Visierhoehe stimmt mit SIGHT_HEIGHT ueberein (%.4f / %.4f)"
-			% [rear.position.y, ViewmodelBuilder.SIGHT_HEIGHT])
+		"%s: Kimme und Korn auf gleicher Hoehe (%.4f / %.4f)"
+			% [label, rear.position.y, front.position.y])
+	_check(is_equal_approx(rear.position.y, model.sight_height),
+		"%s: Visierhoehe stimmt mit sight_height ueberein (%.4f / %.4f)"
+			% [label, rear.position.y, model.sight_height])
 	_check(is_zero_approx(rear.position.x) and is_zero_approx(front.position.x),
-		"Visierung steht mittig")
+		"%s: Visierung steht mittig" % label)
 	_check(front.position.z < rear.position.z,
-		"das Korn sitzt vor der Kimme")
+		"%s: das Korn sitzt vor der Kimme" % label)
 
-	model.free()
+
+## Der Kern des Ganzen: Nimmt der Spieler eine andere Waffe, muss auch ein
+## anderes Modell in der Hand liegen. Ohne diesen Test faellt ein fehlendes
+## Signal erst auf, wenn jemand im Spiel die Pistole zieht und weiter ein
+## Sturmgewehr sieht.
+func _test_weapon_switch_swaps_model() -> void:
+	_section("Waffenwechsel tauscht das Modell")
+
+	var scene: PackedScene = load("res://scenes/player/player.tscn")
+	var player := scene.instantiate() as PlayerController
+	root.add_child(player)
+	# Ein Frame, damit _ready() und @onready im ganzen Baum durchlaufen.
+	await process_frame
+
+	var view := player.weapon_view
+	_check(view != null, "Waffenansicht ist in der Szene verbaut")
+	if view == null:
+		player.free()
+		_finish()
+		return
+
+	var first := view.get_viewmodel()
+	_check(first is AR15Viewmodel,
+		"Startwaffe zeigt das AR-15-Modell (%s)" % (first.get_model_name() if first else "-"))
+
+	# Auf die Pistole wechseln — voellig andere Mechanik, anderes Modell.
+	player.weapon.setup(&"weapon_pistol_g17", &"ammo_9x19_fmj")
+	var second := view.get_viewmodel()
+	_check(second is Glock17Viewmodel,
+		"nach dem Wechsel liegt das Glock-Modell in der Hand (%s)"
+			% (second.get_model_name() if second else "-"))
+	_check(first != second, "es ist wirklich ein neues Modell, kein umgebautes")
+
+	# Die Muendung muss mitwandern, sonst blitzt es dort, wo die alte Waffe war.
+	_check(player.weapon._visual_muzzle == second.muzzle_point,
+		"das Muendungsfeuer haengt an der neuen Waffe")
+
+	# Und eine Waffe ohne passende Munition darf das Modell ebenfalls wechseln.
+	var shotgun := ItemRegistry.get_item(&"weapon_shotgun_m870") as WeaponData
+	player.weapon.equip_without_ammo(shotgun)
+	_check(view.get_viewmodel() is M870Viewmodel,
+		"auch ohne passende Munition wird das Modell gewechselt")
+
+	player.free()
+	_finish()
+
+
+## Jede Waffe muss ihr eigenes Modell bekommen — verschiedene Waffen duerfen
+## sich nicht dieselbe Klasse teilen. Genau das waere der schleichende Rueckfall
+## in die Einheitswaffe.
+func _test_viewmodels_are_unique() -> void:
+	_section("Kein geteiltes Modell")
+
+	var seen := {}
+	var shared: Array[String] = []
+
+	for item in ItemRegistry.get_by_category(ItemData.Category.WEAPON):
+		var weapon_data := item as WeaponData
+		if weapon_data == null or not weapon_data.has_own_viewmodel():
+			continue
+		var path: String = weapon_data.viewmodel.resource_path
+		if seen.has(path):
+			shared.append("%s teilt sich %s mit %s" % [weapon_data.display_name, path, seen[path]])
+		else:
+			seen[path] = weapon_data.display_name
+
+	_check(shared.is_empty(),
+		"keine zwei Waffen teilen sich ein Modell%s"
+			% ("" if shared.is_empty() else ": " + ", ".join(shared)))

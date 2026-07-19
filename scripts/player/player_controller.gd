@@ -176,8 +176,7 @@ func equip_from_inventory(stack: ItemStack) -> bool:
 	if chosen == &"":
 		# Waffe ohne passende Munition: trotzdem in die Hand nehmen,
 		# aber sie bleibt leer. Das ist eine gueltige Notlage.
-		weapon.data = weapon_data
-		weapon.rounds_in_magazine = 0
+		weapon.equip_without_ammo(weapon_data)
 		return true
 
 	weapon.setup(stack.item_id, chosen)

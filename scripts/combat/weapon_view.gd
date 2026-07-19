@@ -1,18 +1,34 @@
-## Das sichtbare Modell der Waffe in der Hand des Spielers.
+## Haelt und bewegt das sichtbare Waffenmodell in der Hand des Spielers.
 ##
-## Diese Klasse enthaelt KEINE Spiellogik. Sie liest den Zustand der Waffe
-## und stellt ihn dar. Ob geschossen werden darf, entscheidet weapon.gd —
-## hier wird nur gezeigt, was passiert ist. Das ist wichtig fuer den spaeteren
-## Multiplayer: Die Darstellung darf nie zur Quelle der Wahrheit werden.
+## ARBEITSTEILUNG — das ist der Kern dieser Datei:
+##
+##   weapon_view.gd  (hier)   Alles, was im Kameraraum passiert und fuer JEDE
+##                            Waffe gleich funktioniert: Haltung, Zielen,
+##                            Nachschwingen, Laufwackeln, Rueckstossfeder.
+##
+##   scripts/weapons/*.gd     Alles, was diese eine Waffe ausmacht: ihre
+##                            Geometrie und ihre Mechanik. Der Schlitten einer
+##                            Pistole, die Pumpe einer Flinte, der Verschluss
+##                            eines Sturmgewehrs — das sind verschiedene
+##                            Bewegungen, keine Varianten derselben.
+##
+## Diese Klasse kennt deshalb kein einziges Waffenteil beim Namen. Sie sagt
+## dem Modell nur, WAS passiert ist ("ein Schuss ist gefallen", "Nachladen
+## laeuft zu 40 %"), und das Modell entscheidet, wie es das zeigt.
+##
+## Diese Klasse enthaelt KEINE Spiellogik. Ob geschossen werden darf,
+## entscheidet weapon.gd — hier wird nur dargestellt, was passiert ist. Das
+## ist wichtig fuer den spaeteren Multiplayer: Die Darstellung darf nie zur
+## Quelle der Wahrheit werden.
 ##
 ## AUFBAU DER KNOTEN — jede Animationsart bekommt einen eigenen Knoten,
 ## damit sie sich nicht gegenseitig ueberschreiben:
 ##
 ##   WeaponView
-##    └ Pose     Huefte <-> Zielen, Sprint-Wegklappen
-##       └ Sway  Nachschwingen bei Mausbewegung, Laufwackeln
-##          └ Recoil  Rueckstossfeder
-##             └ Model  die eigentlichen Teile
+##    └ Pose       Huefte <-> Zielen, Sprint, Nachladehaltung
+##       └ Sway    Nachschwingen bei Mausbewegung, Laufwackeln
+##          └ Recoil   Rueckstossfeder
+##             └ Viewmodel   das Modell dieser Waffe
 ##
 ## WAS HIER FEHLT: Haende und Arme. Die Waffe schwebt frei. Das ist fuer ein
 ## Blockout normal — sichtbare Haende brauchen Rigging und handgemachte
@@ -22,28 +38,10 @@ extends Node3D
 
 @export_group("Haltung")
 
-## Ruheposition an der Huefte, leicht nach rechts versetzt.
-@export var hip_position: Vector3 = Vector3(0.115, -0.125, -0.22)
-@export var hip_rotation_degrees: Vector3 = Vector3(0.0, -3.5, 0.0)
-
-## Wie weit die Waffe beim Sprinten weggeklappt wird.
-@export var sprint_position: Vector3 = Vector3(0.16, -0.20, -0.16)
-@export var sprint_rotation_degrees: Vector3 = Vector3(-26.0, 24.0, -14.0)
-
 ## Wie schnell zwischen den Haltungen gewechselt wird.
+## Die Haltungen selbst kommen aus dem jeweiligen Modell — eine Pistole
+## liegt anders in der Hand als ein Praezisionsgewehr.
 @export var pose_speed: float = 11.0
-
-@export_group("Nachladehaltung")
-
-## Beim Nachladen kippt die Waffe schraeg nach oben und dreht sich zum
-## Spieler. Sonst passiert der ganze Magazinwechsel unten ausserhalb des
-## Bildes und man sieht von der Animation praktisch nichts.
-@export var reload_position: Vector3 = Vector3(0.075, -0.150, -0.235)
-
-## Nach oben kippen (X), zur Mitte drehen (Y), zum Spieler rollen (Z).
-## Das Rollen ist der wichtigste Teil — erst dadurch zeigt der
-## Magazinschacht in Richtung Kamera.
-@export var reload_rotation_degrees: Vector3 = Vector3(24.0, 17.0, -34.0)
 
 ## Anteil der Nachladezeit, in dem die Waffe hoch- bzw. wieder zurueckwandert.
 @export_range(0.05, 0.45) var reload_pose_blend: float = 0.16
@@ -86,34 +84,15 @@ extends Node3D
 ## Daempfung — niedrig = schwingt nach.
 @export var recoil_damping: float = 17.0
 
-@export_group("Mechanik")
-
-## Wie lange der Verschluss fuer einen Zyklus braucht.
-@export var bolt_cycle_time: float = 0.055
-
-## Wie weit der Verschluss zurueckfaehrt (Meter).
-@export var bolt_travel: float = 0.075
-
 var _weapon: Weapon
 
 # Knoten der Animationsebenen
 var _pose: Node3D
 var _sway: Node3D
 var _recoil: Node3D
-var _model: Node3D
 
-# Bewegliche Teile
-var _bolt: Node3D
-var _magazine: Node3D
-var _trigger: Node3D
-var _selector: Node3D
-var _charging_handle: Node3D
-var _muzzle_point: Node3D
-
-# Ruhelagen der beweglichen Teile, damit wir immer dorthin zurueckkehren
-var _bolt_home: Vector3
-var _magazine_home: Vector3
-var _charging_handle_home: Vector3
+## Das Modell der Waffe, die gerade in der Hand liegt.
+var _viewmodel: WeaponViewmodel
 
 # Zustand von aussen
 var _aiming: bool = false
@@ -131,14 +110,11 @@ var _recoil_velocity: Vector3 = Vector3.ZERO
 var _recoil_angle: float = 0.0
 var _recoil_angular_velocity: float = 0.0
 
-var _bolt_timer: float = 0.0
-var _bolt_locked_back: bool = false
-var _trigger_pull: float = 0.0
-
 # Nachladen und Ladehemmung laufen als Zeitleiste von 1.0 auf 0.0
 var _sequence_time_left: float = 0.0
 var _sequence_duration: float = 0.0
 var _sequence_kind: StringName = &""
+var _sequence_from_empty: bool = false
 
 
 func _ready() -> void:
@@ -158,26 +134,6 @@ func _build_hierarchy() -> void:
 	_recoil.name = "Recoil"
 	_sway.add_child(_recoil)
 
-	_model = ViewmodelBuilder.build_ar15()
-	_recoil.add_child(_model)
-
-	_bolt = _model.get_node_or_null("Bolt") as Node3D
-	_magazine = _model.get_node_or_null("Magazine") as Node3D
-	_trigger = _model.get_node_or_null("Trigger") as Node3D
-	_selector = _model.get_node_or_null("Selector") as Node3D
-	_charging_handle = _model.get_node_or_null("ChargingHandle") as Node3D
-	_muzzle_point = _model.get_node_or_null("MuzzlePoint") as Node3D
-
-	if _bolt != null:
-		_bolt_home = _bolt.position
-	if _magazine != null:
-		_magazine_home = _magazine.position
-	if _charging_handle != null:
-		_charging_handle_home = _charging_handle.position
-
-	_pose.position = hip_position
-	_pose.rotation_degrees = hip_rotation_degrees
-
 
 ## Waffe anmelden. Ab hier reagiert die Darstellung auf ihre Signale.
 func attach_weapon(weapon: Weapon) -> void:
@@ -196,14 +152,58 @@ func attach_weapon(weapon: Weapon) -> void:
 	_weapon.unjam_started.connect(_on_unjam_started)
 	_weapon.unjammed.connect(_on_unjammed)
 	_weapon.fire_mode_changed.connect(_on_fire_mode_changed)
+	_weapon.weapon_changed.connect(_on_weapon_changed)
 
-	_on_fire_mode_changed(_weapon.current_fire_mode)
+	_on_weapon_changed(_weapon.data)
+
+
+## Eine andere Waffe liegt in der Hand — Modell austauschen.
+##
+## Es wird bewusst komplett neu gebaut statt Teile umzuhaengen: Die Waffen
+## haben unterschiedliche Teile, nicht dieselben in anderer Form.
+func _on_weapon_changed(new_data: WeaponData) -> void:
+	if _viewmodel != null:
+		_viewmodel.queue_free()
+		_viewmodel = null
+
+	if new_data == null:
+		return
+
+	_viewmodel = new_data.create_viewmodel()
+	_viewmodel.name = "Viewmodel"
+	_recoil.add_child(_viewmodel)
+
+	# Ruhelage sofort setzen, sonst schwingt die neue Waffe aus der alten
+	# Haltung heran, als haette man sie geworfen.
+	_pose.position = _viewmodel.hip_position
+	_pose.rotation_degrees = _viewmodel.hip_rotation_degrees
+	_reset_animation_state()
+
+	# Das Muendungsfeuer gehoert an die Muendung DIESER Waffe.
+	if _weapon != null:
+		_weapon.set_visual_muzzle(_viewmodel.muzzle_point)
+		_viewmodel.notify_fire_mode(_weapon.current_fire_mode)
+
+
+func _reset_animation_state() -> void:
+	_recoil_offset = Vector3.ZERO
+	_recoil_velocity = Vector3.ZERO
+	_recoil_angle = 0.0
+	_recoil_angular_velocity = 0.0
+	_sequence_time_left = 0.0
+	_sequence_kind = &""
+	_aim_progress = 0.0
+
+
+## Das Modell, das gerade in der Hand liegt. Fuer Tests und Werkzeuge.
+func get_viewmodel() -> WeaponViewmodel:
+	return _viewmodel
 
 
 ## Wohin das Muendungsfeuer gehoert. Wandert mit dem Modell mit, damit der
 ## Blitz beim Zielen nicht neben der Waffe in der Luft haengt.
 func get_muzzle_point() -> Node3D:
-	return _muzzle_point
+	return _viewmodel.muzzle_point if _viewmodel != null else null
 
 
 ## Bewegungszustand vom PlayerController. Treibt Laufwackeln und Sprinthaltung.
@@ -234,8 +234,9 @@ func _process(delta: float) -> void:
 	_update_sway(delta)
 	_update_bob(delta)
 	_update_recoil(delta)
-	_update_bolt(delta)
-	_update_trigger(delta)
+	# Die beweglichen Teile bewegt die Waffe selbst.
+	if _viewmodel != null:
+		_viewmodel.update_mechanics(delta)
 
 
 ## Zielen ist eine reine Zeitinterpolation. Die Ergonomie der Waffe bestimmt
@@ -268,31 +269,34 @@ func _get_reload_pose_weight() -> float:
 
 
 func _update_pose(delta: float) -> void:
-	var target_pos := hip_position
-	var target_rot := hip_rotation_degrees
+	if _viewmodel == null:
+		return
+
+	var target_pos := _viewmodel.hip_position
+	var target_rot := _viewmodel.hip_rotation_degrees
+	var weight := clampf(pose_speed * delta, 0.0, 1.0)
 
 	var reload_weight := _get_reload_pose_weight()
 	if reload_weight > 0.0:
 		# Nachladen schlaegt alles andere: Wer nachlaedt, zielt nicht.
-		target_pos = target_pos.lerp(reload_position, reload_weight)
-		target_rot = target_rot.lerp(reload_rotation_degrees, reload_weight)
-		var reload_step := clampf(pose_speed * delta, 0.0, 1.0)
-		_pose.position = _pose.position.lerp(target_pos, reload_step)
-		_pose.rotation_degrees = _pose.rotation_degrees.lerp(target_rot, reload_step)
+		target_pos = target_pos.lerp(_viewmodel.reload_position, reload_weight)
+		target_rot = target_rot.lerp(_viewmodel.reload_rotation_degrees, reload_weight)
+		_pose.position = _pose.position.lerp(target_pos, weight)
+		_pose.rotation_degrees = _pose.rotation_degrees.lerp(target_rot, weight)
 		return
 
 	if _sprinting:
-		target_pos = sprint_position
-		target_rot = sprint_rotation_degrees
+		target_pos = _viewmodel.sprint_position
+		target_rot = _viewmodel.sprint_rotation_degrees
 	elif _aim_progress > 0.0:
 		# Zielpose: Die Visierlinie muss exakt auf der Kameramitte landen.
-		# Deshalb wird das Modell genau um seine Visierhoehe abgesenkt und
-		# seitlich mittig gestellt — nicht nach Gefuehl geschoben.
-		var ads_pos := Vector3(0.0, -ViewmodelBuilder.SIGHT_HEIGHT, -0.16)
+		# Deshalb wird das Modell genau um SEINE Visierhoehe abgesenkt —
+		# die ist je Waffe verschieden, eine Pistole zielt tiefer als ein
+		# Gewehr mit hoher Schiene.
+		var ads_pos := Vector3(0.0, -_viewmodel.sight_height, -_viewmodel.ads_distance)
 		target_pos = target_pos.lerp(ads_pos, _aim_progress)
 		target_rot = target_rot.lerp(Vector3.ZERO, _aim_progress)
 
-	var weight := clampf(pose_speed * delta, 0.0, 1.0)
 	_pose.position = _pose.position.lerp(target_pos, weight)
 	_pose.rotation_degrees = _pose.rotation_degrees.lerp(target_rot, weight)
 
@@ -348,34 +352,12 @@ func _update_recoil(delta: float) -> void:
 	_recoil.rotation_degrees.x = _recoil_angle
 
 
-## Verschluss: faehrt zurueck und schnappt vor. Bei leerem Magazin bleibt er
-## hinten stehen — das ist die sichtbare Ansage "du musst nachladen".
-func _update_bolt(delta: float) -> void:
-	if _bolt == null:
-		return
-
-	if _bolt_timer > 0.0:
-		_bolt_timer = maxf(0.0, _bolt_timer - delta)
-
-	var travel := 0.0
-	if _bolt_locked_back:
-		travel = 1.0
-	elif _bolt_timer > 0.0:
-		# Sinus: hinten in der Mitte des Zyklus, vorn an beiden Enden.
-		travel = sin((1.0 - _bolt_timer / bolt_cycle_time) * PI)
-
-	_bolt.position = _bolt_home + Vector3(0.0, 0.0, travel * bolt_travel)
-
-
-func _update_trigger(delta: float) -> void:
-	if _trigger == null:
-		return
-	_trigger_pull = maxf(0.0, _trigger_pull - delta * 9.0)
-	_trigger.rotation_degrees.x = -_trigger_pull * 14.0
-
-
-## Zeitleiste fuer Nachladen und Ladehemmung. Beides bewegt dieselben Teile,
-## nur in unterschiedlicher Reihenfolge.
+## Zeitleiste fuer Nachladen und Ladehemmung.
+##
+## Der Fortschritt wird nur ausgerechnet und weitergereicht — was dabei
+## sichtbar passiert, entscheidet das Modell der jeweiligen Waffe. Deshalb
+## kann die Flinte hier Patronen einzeln nachschieben, waehrend das Gewehr
+## ein Magazin wechselt, ohne dass diese Datei davon etwas wissen muss.
 func _update_sequence(delta: float) -> void:
 	if _sequence_time_left <= 0.0:
 		return
@@ -383,55 +365,17 @@ func _update_sequence(delta: float) -> void:
 	_sequence_time_left = maxf(0.0, _sequence_time_left - delta)
 	var progress := 1.0 - _sequence_time_left / maxf(0.01, _sequence_duration)
 
-	match _sequence_kind:
-		&"reload_tactical":
-			_animate_magazine_swap(progress)
-		&"reload_empty":
-			_animate_magazine_swap(progress)
-			# Zum Schluss den Verschluss vorlassen.
-			if progress > 0.85:
-				_pull_charging_handle(_ramp(progress, 0.85, 1.0))
-			else:
-				_pull_charging_handle(0.0)
-		&"unjam":
-			# Ladehemmung: kraeftig am Ladehebel reissen.
-			_pull_charging_handle(sin(progress * PI))
+	if _viewmodel != null:
+		match _sequence_kind:
+			&"reload":
+				_viewmodel.notify_reload(progress, _sequence_from_empty)
+			&"unjam":
+				_viewmodel.notify_unjam(progress)
 
 	if _sequence_time_left <= 0.0:
 		_sequence_kind = &""
-		_pull_charging_handle(0.0)
-		if _magazine != null:
-			_magazine.position = _magazine_home
-			_magazine.rotation_degrees = Vector3.ZERO
-			_magazine.visible = true
-
-
-## Magazin faellt raus, Pause, neues kommt rein.
-func _animate_magazine_swap(progress: float) -> void:
-	if _magazine == null:
-		return
-
-	if progress < 0.30:
-		# Rausfallen: nach unten und leicht nach vorn kippen.
-		var t := _ramp(progress, 0.0, 0.30)
-		_magazine.visible = true
-		_magazine.position = _magazine_home + Vector3(0.0, -0.34 * t, 0.02 * t)
-		_magazine.rotation_degrees = Vector3(18.0 * t, 0.0, 6.0 * t)
-	elif progress < 0.45:
-		# Kurz gar kein Magazin — das macht den Wechsel lesbar.
-		_magazine.visible = false
-	else:
-		# Neues Magazin von unten einfuehren.
-		var t := _ramp(progress, 0.45, 0.85)
-		_magazine.visible = true
-		_magazine.position = _magazine_home + Vector3(0.0, -0.30 * (1.0 - t), 0.0)
-		_magazine.rotation_degrees = Vector3(12.0 * (1.0 - t), 0.0, 0.0)
-
-
-func _pull_charging_handle(amount: float) -> void:
-	if _charging_handle == null:
-		return
-	_charging_handle.position = _charging_handle_home + Vector3(0.0, 0.0, amount * 0.075)
+		if _viewmodel != null:
+			_viewmodel.notify_sequence_ended()
 
 
 ## Rechnet einen Abschnitt einer Zeitleiste auf 0..1 um.
@@ -453,43 +397,47 @@ func _on_fired(_ammo: AmmoData, rounds_left: int) -> void:
 		strength *= 1.0 - float(_weapon.data.ergonomics) / 250.0
 	# Beim Zielen liegt die Waffe ruhiger an der Schulter.
 	strength *= lerpf(1.0, 0.72, _aim_progress)
+	# Und jede Waffe springt anders — eine Pistole kippt, ein schweres
+	# Praezisionsgewehr schiebt.
+	if _viewmodel != null:
+		strength *= _viewmodel.recoil_scale
 
 	_recoil_velocity.z += recoil_kick_back * strength * 26.0
 	_recoil_velocity.y += recoil_kick_back * strength * 5.0
 	_recoil_angular_velocity += recoil_kick_up * strength * 26.0
 
-	_bolt_timer = bolt_cycle_time
-	_bolt_locked_back = rounds_left <= 0 and not _has_chambered_round()
-	_trigger_pull = 1.0
+	if _viewmodel != null:
+		_viewmodel.notify_shot()
+		_viewmodel.notify_action_locked(rounds_left <= 0 and not _has_chambered_round())
 
 
 func _on_dry_fire() -> void:
-	_trigger_pull = 1.0
+	if _viewmodel != null:
+		_viewmodel.notify_shot_dry()
 
 
 func _on_reload_started(duration: float, from_empty: bool) -> void:
-	_sequence_kind = &"reload_empty" if from_empty else &"reload_tactical"
+	_sequence_kind = &"reload"
+	_sequence_from_empty = from_empty
 	_sequence_duration = duration
 	_sequence_time_left = duration
 
 
 func _on_reload_finished(_rounds: int) -> void:
-	_bolt_locked_back = false
+	if _viewmodel != null:
+		_viewmodel.notify_action_locked(false)
 
 
 func _on_sequence_cancelled() -> void:
 	_sequence_time_left = 0.0
 	_sequence_kind = &""
-	_pull_charging_handle(0.0)
-	if _magazine != null:
-		_magazine.position = _magazine_home
-		_magazine.rotation_degrees = Vector3.ZERO
-		_magazine.visible = true
+	if _viewmodel != null:
+		_viewmodel.notify_sequence_ended()
 
 
 func _on_jammed() -> void:
-	# Verschluss klemmt sichtbar auf halbem Weg.
-	_bolt_locked_back = true
+	if _viewmodel != null:
+		_viewmodel.notify_action_locked(true)
 
 
 func _on_unjam_started(duration: float) -> void:
@@ -499,21 +447,13 @@ func _on_unjam_started(duration: float) -> void:
 
 
 func _on_unjammed() -> void:
-	_bolt_locked_back = false
+	if _viewmodel != null:
+		_viewmodel.notify_action_locked(false)
 
 
-## Feuerwahlhebel dreht sich sichtbar mit — kleine Sache, aber man sieht
-## sofort, in welchem Modus man steht, ohne aufs HUD zu schauen.
 func _on_fire_mode_changed(mode: WeaponData.FireMode) -> void:
-	if _selector == null:
-		return
-	match mode:
-		WeaponData.FireMode.BURST:
-			_selector.rotation_degrees.x = -45.0
-		WeaponData.FireMode.AUTO:
-			_selector.rotation_degrees.x = -90.0
-		_:
-			_selector.rotation_degrees.x = 0.0
+	if _viewmodel != null:
+		_viewmodel.notify_fire_mode(mode)
 
 
 func _has_chambered_round() -> bool:

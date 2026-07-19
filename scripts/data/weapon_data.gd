@@ -53,6 +53,20 @@ enum FireMode {
 ## Nur bei Präzisionsgewehren wirklich spürbar.
 @export_range(0.5, 15.0) var accuracy_moa: float = 3.0
 
+@export_group("Darstellung")
+
+## Das sichtbare Modell dieser Waffe.
+##
+## GRUNDSATZ: Jede Waffe hat ihr eigenes Modell und ihre eigene Mechanik in
+## einer eigenen Datei unter scripts/weapons/, abgeleitet von WeaponViewmodel.
+## Es gibt bewusst keine Einheitswaffe mit ausgetauschten Werten — eine
+## Pistole hat einen Schlitten, eine Flinte eine Pumpe, ein Sturmgewehr einen
+## Verschluss. Das sind unterschiedliche Bewegungen.
+##
+## Bleibt das Feld leer, greift GenericViewmodel als sichtbarer Platzhalter,
+## damit die Waffe spielbar bleibt statt unsichtbar zu sein.
+@export var viewmodel: Script
+
 @export_group("Nachladen")
 
 ## Magazinwechsel mit Patrone im Lauf. Schneller, weil der Verschluss
@@ -112,6 +126,22 @@ func get_muzzle_velocity(ammo: AmmoData) -> float:
 ## Ob diese Munition in diese Waffe passt.
 func accepts_ammo(ammo: AmmoData) -> bool:
 	return ammo.caliber == caliber
+
+
+## Modell dieser Waffe erzeugen. Faellt auf den Platzhalter zurueck, wenn
+## noch kein eigenes gebaut wurde.
+func create_viewmodel() -> WeaponViewmodel:
+	if viewmodel != null:
+		var instance: Object = viewmodel.new()
+		if instance is WeaponViewmodel:
+			return instance as WeaponViewmodel
+		push_error("[WeaponData] %s: viewmodel erbt nicht von WeaponViewmodel" % id)
+	return GenericViewmodel.new()
+
+
+## Ob diese Waffe schon ein eigenes Modell hat.
+func has_own_viewmodel() -> bool:
+	return viewmodel != null
 
 
 func validate() -> Array[String]:
