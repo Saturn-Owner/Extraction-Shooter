@@ -63,8 +63,14 @@ static func beveled_box_mesh(size: Vector3, bevel: float = BEVEL) -> ArrayMesh:
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
 	var hz := size.z * 0.5
-	# Fase nie groesser als die duennste Seite vertraegt.
-	var b: float = minf(bevel, minf(hx, minf(hy, hz)) * 0.7)
+	# Fase deutlich kleiner als die duennste Seite.
+	#
+	# Vorher waren 70 % erlaubt. Bei einem Schienenzahn von 6 mm Tiefe frass
+	# die Fase ueber die Haelfte der Materialstaerke — aus einem scharfen Zahn
+	# wurde ein weiches Kloesschen, und die ganze Waffe sah rundgelutscht und
+	# unfertig aus. Eine Fase soll die Kante brechen, nicht das Teil auffressen:
+	# grosse Teile bekommen den vollen Wert, duenne nur einen Bruchteil.
+	var b: float = minf(bevel, minf(hx, minf(hy, hz)) * 0.22)
 
 	if b <= 0.0001:
 		var plain := BoxMesh.new()
@@ -199,7 +205,12 @@ static func _mesh_from_triangles(tris: Array, centre: Vector3) -> ArrayMesh:
 		var b: Vector3 = tri[1]
 		var c: Vector3 = tri[2]
 		var normal := (b - a).cross(c - a)
-		if normal.length_squared() < 1e-12:
+		# Schwelle sehr niedrig ansetzen. Das Kreuzprodukt waechst mit dem
+		# QUADRAT der Kantenlaenge: Bei einer Fase von 0,4 mm sind die acht
+		# Eckdreiecke voellig in Ordnung, ihr Kreuzprodukt liegt aber schon bei
+		# 2e-7. Mit einer zu groben Schwelle fliegen genau diese Dreiecke raus
+		# und der Koerper bekommt acht Loecher in den Ecken.
+		if normal.length_squared() < 1e-20:
 			continue
 		normal = normal.normalized()
 		if normal.dot((a + b + c) / 3.0 - centre) < 0.0:

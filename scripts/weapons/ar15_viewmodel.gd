@@ -169,7 +169,10 @@ func _build_stock() -> void:
 	# von aussen sah man ein nacktes Rohr statt eines Schafts.
 	add_child(ViewmodelParts.box("StockBody", Vector3(0.038, 0.054, 0.086), Vector3(0.0, 0.012, 0.062), polymer))
 	add_child(ViewmodelParts.box("StockCheek", Vector3(0.028, 0.014, 0.078), Vector3(0.0, 0.043, 0.060), polymer))
-	add_child(ViewmodelParts.box("ButtPad", Vector3(0.040, 0.062, 0.012), Vector3(0.0, 0.012, 0.110), black))
+	# Buendig mit dem Schaft. Vorher stand die Kappe ringsum ueber und bildete
+	# einen Rand — der Schaft sah dadurch aus wie eine offene Wanne, in der
+	# das Pufferrohr liegt.
+	add_child(ViewmodelParts.box("ButtPad", Vector3(0.038, 0.054, 0.012), Vector3(0.0, 0.012, 0.108), black))
 	add_child(ViewmodelParts.box("StockLever", Vector3(0.018, 0.012, 0.024), Vector3(0.0, -0.018, 0.056), polymer))
 
 
