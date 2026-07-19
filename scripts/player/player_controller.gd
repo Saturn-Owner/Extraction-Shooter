@@ -111,20 +111,47 @@ var _recoil_yaw: float = 0.0
 @export_group("Rückstoß")
 @export var recoil_recovery_speed: float = 6.0
 
+## Ob der Spieler gerade ueber Kimme und Korn zielt.
+var is_aiming: bool = false
+
 @onready var _camera_pivot: Node3D = $CameraPivot
 @onready var _collision: CollisionShape3D = $CollisionShape3D
 @onready var weapon: Weapon = $CameraPivot/Weapon
 @onready var inventory: PlayerInventory = $Inventory
+@onready var _camera: Camera3D = $CameraPivot/Camera3D
+
+## Sichtbares Waffenmodell. Darf fehlen — dann laeuft alles wie vorher,
+## nur eben unsichtbar.
+@onready var weapon_view: WeaponView = get_node_or_null("CameraPivot/Weapon/WeaponView")
+
+## Sichtfeld aus der Szene, auf das nach dem Zielen zurueckgekehrt wird.
+var _base_fov: float = 75.0
 
 
 func _ready() -> void:
 	stamina = max_stamina
 	_capture_mouse(true)
+	if _camera != null:
+		_base_fov = _camera.fov
 	if weapon != null:
 		weapon.recoil_kick.connect(_on_recoil_kick)
+		# Die Waffe holt sich ihre Patronen selbst, wenn das Nachladen
+		# durchgelaufen ist — aber immer nur ueber diesen einen Weg.
+		weapon.ammo_supplier = _supply_ammo
+		if weapon_view != null:
+			weapon_view.attach_weapon(weapon)
+			weapon.set_visual_muzzle(weapon_view.get_muzzle_point())
 	if inventory != null:
 		inventory.changed.connect(_on_inventory_changed)
 		_on_inventory_changed()
+
+
+## Munitionsquelle fuers Nachladen. Die Waffe ruft das am Ende der
+## Nachladezeit auf — vorher wird dem Inventar nichts entnommen.
+func _supply_ammo(id: StringName, count: int) -> int:
+	if inventory == null:
+		return 0
+	return inventory.take_ammo(id, count)
 
 
 ## Das Gewicht kommt jetzt aus dem Inventar statt von Hand gesetzt zu werden.
@@ -179,9 +206,14 @@ func switch_ammo(new_ammo_id: StringName) -> bool:
 	if candidate == null or not weapon.data.accepts_ammo(candidate):
 		return false
 
-	if weapon.rounds_in_magazine > 0 and weapon.ammo_id != new_ammo_id:
-		inventory.add(weapon.ammo_id, weapon.rounds_in_magazine)
+	if weapon.ammo_id != new_ammo_id:
+		# Auch die Patrone im Lauf wandert zurueck — sonst verschwindet bei
+		# jedem Munitionswechsel stillschweigend eine Patrone.
+		var returning := weapon.get_total_rounds()
+		if returning > 0:
+			inventory.add(weapon.ammo_id, returning)
 		weapon.rounds_in_magazine = 0
+		weapon.round_chambered = false
 
 	weapon.setup(weapon.weapon_id, new_ammo_id)
 	try_reload()
@@ -218,13 +250,21 @@ func _handle_weapon_input() -> void:
 
 	if Input.is_action_just_pressed("fire_mode"):
 		weapon.cycle_fire_mode()
-	if Input.is_action_just_pressed("reload"):
-		try_reload()
 	if Input.is_action_just_released("fire"):
 		weapon.release_trigger()
 
+	# Dieselbe Taste raeumt die Ladehemmung weg und laedt nach. Der Spieler
+	# soll in der Panik nicht ueberlegen muessen, welche Taste jetzt dran ist.
+	if Input.is_action_just_pressed("reload"):
+		if weapon.is_jammed:
+			weapon.request_unjam()
+		else:
+			weapon.request_reload()
+
 	# Sprinten und Schiessen schliessen sich aus — die Waffe ist weggeklappt.
+	# Losrennen bricht auch das Nachladen ab.
 	if is_sprinting:
+		weapon.cancel_reload()
 		return
 
 	weapon.try_fire(
@@ -233,9 +273,48 @@ func _handle_weapon_input() -> void:
 	)
 
 
+## Zielen. Waehrend Sprint und Nachladen nicht moeglich — beides braucht
+## die Waffe woanders.
+func _update_aiming(delta: float) -> void:
+	if weapon == null:
+		is_aiming = false
+		return
+
+	is_aiming = (
+		Input.is_action_pressed("aim")
+		and not is_sprinting
+		and not weapon.is_busy()
+	)
+	weapon.aiming = is_aiming
+
+	if weapon_view != null:
+		weapon_view.set_aiming(is_aiming)
+
+	# Sichtfeld folgt der Zielbewegung der Waffe, damit Zoom und Modell
+	# gleichzeitig ankommen statt versetzt.
+	if _camera != null:
+		var progress := weapon_view.get_aim_progress() if weapon_view != null else (1.0 if is_aiming else 0.0)
+		var target_fov := _base_fov
+		if weapon.data != null:
+			target_fov = lerpf(_base_fov, weapon.data.ads_fov, progress)
+		_camera.fov = move_toward(_camera.fov, target_fov, 240.0 * delta)
+
+
+## Meldet dem Waffenmodell, wie schnell sich der Spieler bewegt.
+func _update_weapon_view(_delta: float) -> void:
+	if weapon_view == null:
+		return
+	var horizontal := Vector3(velocity.x, 0.0, velocity.z).length()
+	var reference := maxf(0.1, sprint_speed)
+	weapon_view.set_movement(horizontal / reference, is_sprinting)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var motion := event as InputEventMouseMotion
+		# Die Waffe haengt der Blickbewegung hinterher.
+		if weapon_view != null:
+			weapon_view.add_look_delta(motion.relative * mouse_sensitivity)
 		# Waagerecht dreht die ganze Figur, senkrecht nur den Kopf.
 		rotate_y(deg_to_rad(-motion.relative.x * mouse_sensitivity))
 		_pitch = clampf(
@@ -258,7 +337,10 @@ func _physics_process(delta: float) -> void:
 	_update_stamina(delta)
 	_update_movement(delta)
 	_update_recoil(delta)
+	# Nach _update_movement, weil is_sprinting erst dort gesetzt wird.
+	_update_aiming(delta)
 	_handle_weapon_input()
+	_update_weapon_view(delta)
 	move_and_slide()
 
 
@@ -334,7 +416,13 @@ func get_current_max_speed() -> float:
 		base = crouch_speed
 	elif is_sprinting:
 		base = sprint_speed
-	return base * get_weight_factor()
+
+	var speed := base * get_weight_factor()
+	# Zielen bremst. Sonst waere es ein reiner Gewinn und man wuerde
+	# dauerhaft im Anschlag laufen.
+	if is_aiming and weapon != null and weapon.data != null:
+		speed *= weapon.data.ads_move_multiplier
+	return speed
 
 
 func _update_movement(delta: float) -> void:

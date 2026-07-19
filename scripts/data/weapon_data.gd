@@ -53,6 +53,30 @@ enum FireMode {
 ## Nur bei Präzisionsgewehren wirklich spürbar.
 @export_range(0.5, 15.0) var accuracy_moa: float = 3.0
 
+@export_group("Nachladen")
+
+## Magazinwechsel mit Patrone im Lauf. Schneller, weil der Verschluss
+## nicht vorgelassen werden muss.
+@export_range(0.5, 8.0) var reload_time_tactical: float = 2.3
+
+## Magazinwechsel bei leergeschossener Waffe. Langsamer — der Verschluss
+## steht hinten und muss zusaetzlich geloest werden.
+@export_range(0.5, 10.0) var reload_time_empty: float = 3.1
+
+## Wie lange das Beheben einer Ladehemmung dauert.
+@export_range(0.5, 8.0) var jam_clear_time: float = 1.7
+
+@export_group("Zielen")
+
+## Sichtfeld beim Zielen ueber Kimme und Korn. Kleiner = mehr Zoom.
+@export_range(20.0, 75.0) var ads_fov: float = 52.0
+
+## Wieviel Streuung beim Zielen uebrig bleibt.
+@export_range(0.05, 1.0) var ads_spread_multiplier: float = 0.35
+
+## Wie stark das Zielen bremst (0.6 = 60 % Tempo).
+@export_range(0.2, 1.0) var ads_move_multiplier: float = 0.62
+
 @export_group("Zustand")
 
 ## Wie schnell die Waffe verschleißt. Abgenutzte Waffen sollen
@@ -66,6 +90,18 @@ enum FireMode {
 ## Zeit zwischen zwei Schüssen in Sekunden.
 func get_shot_interval() -> float:
 	return 60.0 / float(fire_rate_rpm)
+
+
+## Wie lange ein Magazinwechsel dauert.
+##
+## Die Ergonomie zieht die Zeit spürbar zusammen: Eine handliche Waffe
+## (Ergonomie 100) lädt rund 20 % schneller nach als eine sperrige (0).
+## Damit ist Ergonomie nicht nur eine Zahl im Datenblatt, sondern etwas,
+## das man im Gefecht merkt.
+func get_reload_duration(from_empty: bool) -> float:
+	var base := reload_time_empty if from_empty else reload_time_tactical
+	var ergonomics_factor := 1.1 - 0.2 * (float(ergonomics) / 100.0)
+	return base * ergonomics_factor
 
 
 ## Effektive Mündungsgeschwindigkeit mit dieser Munition.

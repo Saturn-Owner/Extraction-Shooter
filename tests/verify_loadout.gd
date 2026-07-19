@@ -157,14 +157,16 @@ func _test_ammo_switch_returns_rounds() -> void:
 
 	var loaded := player.try_reload()
 	_check(loaded == 30, "Nachladen zieht 30 Patronen (%d)" % loaded)
-	_check(weapon.rounds_in_magazine == 30, "Magazin ist voll")
+	# Eine der 30 Patronen sitzt im Lauf, nicht im Magazin — deshalb wird
+	# hier die Gesamtzahl geprueft und nicht nur der Magazininhalt.
+	_check(weapon.get_total_rounds() == 30, "Magazin ist voll")
 	_check(inv.count_ammo(&"ammo_556x45_m855a1") == 30, "Inventar hat 30 weniger")
 
 	# Jetzt auf M995 wechseln: die 30 M855A1 muessen zurueck.
 	_check(player.switch_ammo(&"ammo_556x45_m995"), "Wechsel auf M995 gelingt")
 	_check(inv.count_ammo(&"ammo_556x45_m855a1") == 60, "die geladenen Patronen sind zurueck im Inventar")
 	_check(weapon.ammo_id == &"ammo_556x45_m995", "M995 ist geladen")
-	_check(weapon.rounds_in_magazine == 30, "Magazin mit M995 gefuellt")
+	_check(weapon.get_total_rounds() == 30, "Magazin mit M995 gefuellt")
 	_check(inv.count_ammo(&"ammo_556x45_m995") == 0, "M995-Vorrat aufgebraucht")
 
 	# Falsches Kaliber muss abgelehnt werden.

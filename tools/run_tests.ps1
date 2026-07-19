@@ -74,7 +74,8 @@ $suites = @(
     "verify_player",
     "verify_ballistics",
     "verify_feedback",
-    "verify_loadout"
+    "verify_loadout",
+    "verify_weapon_handling"
 )
 
 $failed = @()

@@ -200,10 +200,16 @@ func _test_firing_in_level() -> void:
 	_check(projectiles_after > projectiles_before,
 		"Geschoss wurde erzeugt (%d -> %d)" % [projectiles_before, projectiles_after])
 
-	# Leerschiessen darf nicht knallen und nicht ins Minus laufen.
+	# Die Patrone im Lauf zaehlt getrennt vom Magazin: Ein leeres Magazin
+	# heisst nicht, dass die Waffe leer ist — ein Schuss steckt noch drin.
 	weapon.rounds_in_magazine = 0
+	_check(weapon.round_chambered, "nach dem Schuss steckt wieder eine Patrone im Lauf")
+	var fired_last := weapon._shoot()
+	_check(fired_last, "die Patrone im Lauf laesst sich noch verschiessen")
+
+	# Erst jetzt ist die Waffe wirklich leer.
 	var fired_empty := weapon._shoot()
-	_check(not fired_empty, "leeres Magazin schiesst nicht")
+	_check(not fired_empty, "leere Waffe schiesst nicht")
 	_check(weapon.rounds_in_magazine == 0, "Munition geht nicht ins Minus")
 
 	weapon.fill_magazine()
