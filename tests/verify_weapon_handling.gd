@@ -370,6 +370,59 @@ func _test_generated_meshes_are_closed() -> void:
 	var straight := ViewmodelParts.curved_body_mesh(0.02, 0.02, 0.06, 0.0, 4)
 	_check_mesh_closed(straight, "ungekruemmter Koerper")
 
+	_check_winding(box_mesh, "angefaster Quader")
+	_check_winding(curved, "gekruemmter Koerper")
+
+
+## Prueft die Umlaufrichtung gegen Godots eigene Meshes.
+##
+## DAS IST DER FIESESTE FEHLER IN DIESER GANZEN DATEI. Godot entscheidet
+## ueber Vorder- und Rueckseite anhand der REIHENFOLGE der Eckpunkte, nicht
+## anhand der Normale. Sind die Normalen richtig, aber die Wicklung
+## spiegelverkehrt, dann sieht die Waffe im Standbild fast normal aus — man
+## blickt naemlich durch die zugewandte Wand hindurch auf die Rueckseite der
+## abgewandten. Erst im Spiel faellt auf, dass die Waffe hohl wirkt.
+##
+## Genau das war der Fall: Alle erzeugten Koerper waren spiegelverkehrt
+## gewickelt, und im Spiel sah man von links in die Waffen hinein.
+##
+## Godots BoxMesh ist hier die Wahrheit, gegen die verglichen wird — statt
+## eine Konvention aus der Dokumentation abzuschreiben und zu hoffen.
+func _check_winding(mesh: ArrayMesh, label: String) -> void:
+	var reference := BoxMesh.new()
+	reference.size = Vector3.ONE
+	var expected := _winding_sign(reference.get_mesh_arrays())
+	var actual := _winding_sign(mesh.surface_get_arrays(0))
+
+	_check(expected != 0 and actual == expected,
+		"%s ist wie Godots Meshes gewickelt (erwartet %d, ist %d)" % [label, expected, actual])
+
+
+## +1 wenn das Kreuzprodukt der Kanten mit der Normale gleichgerichtet ist,
+## -1 wenn entgegengesetzt, 0 wenn uneinheitlich.
+func _winding_sign(arrays: Array) -> int:
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var indices: PackedInt32Array = PackedInt32Array()
+	if arrays[Mesh.ARRAY_INDEX] != null:
+		indices = arrays[Mesh.ARRAY_INDEX]
+
+	var count := indices.size() / 3 if indices.size() > 0 else vertices.size() / 3
+	var sign := 0
+
+	for t in range(count):
+		var ia := indices[t * 3] if indices.size() > 0 else t * 3
+		var ib := indices[t * 3 + 1] if indices.size() > 0 else t * 3 + 1
+		var ic := indices[t * 3 + 2] if indices.size() > 0 else t * 3 + 2
+		var cross := (vertices[ib] - vertices[ia]).cross(vertices[ic] - vertices[ia])
+		var current := 1 if cross.dot(normals[ia]) > 0.0 else -1
+		if sign == 0:
+			sign = current
+		elif sign != current:
+			return 0
+
+	return sign
+
 
 ## Zaehlt, wie oft jede Kante vorkommt. Bei einem geschlossenen Koerper
 ## genau zweimal. Zusaetzlich wird geprueft, dass alle Normalen nach aussen

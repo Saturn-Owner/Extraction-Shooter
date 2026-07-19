@@ -225,9 +225,24 @@ static func _mesh_from_triangles(tris: Array, centre: Vector3) -> ArrayMesh:
 			b = c
 			c = swap
 			normal = -normal
+
+		# UMLAUFRICHTUNG, NICHT NORMALE: Godot entscheidet ueber Vorder- und
+		# Rueckseite anhand der Reihenfolge der Eckpunkte, die Normale dient
+		# nur der Beleuchtung. Godots eigene Meshes sind so gewickelt, dass
+		# (b-a) x (c-a) der Normalen ENTGEGEN zeigt — deshalb hier b und c
+		# vertauscht ausgeben.
+		#
+		# Vorher stimmten die Normalen, aber die Wicklung war spiegelverkehrt:
+		# Jede zugewandte Flaeche wurde weggeschnitten und man sah von aussen
+		# ins Innere der Waffe. Im Spiel blickt man auf die linke Seite der
+		# Waffe, und genau dort fiel es auf.
+		#
+		# verify_weapon_handling prueft das gegen einen echten Godot-BoxMesh,
+		# damit hier niemand eine Konvention aus der Doku abschreiben und
+		# hoffen muss.
 		vertices.append(a)
-		vertices.append(b)
 		vertices.append(c)
+		vertices.append(b)
 		for i in range(3):
 			normals.append(normal)
 
