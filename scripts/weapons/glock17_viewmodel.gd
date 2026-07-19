@@ -102,12 +102,16 @@ func _build_slide() -> void:
 	slide.add_child(ViewmodelParts.box("EjectionPort", Vector3(0.006, 0.016, 0.038), Vector3(0.013, 0.020, -0.118), black))
 
 	# Griffrillen hinten. Wiederholung ist auch hier das billigste Detail.
+	#
+	# Schmaler als der Schlitten (0.026): Vorher waren sie mit 0.028 BREITER
+	# und standen auf beiden Seiten ueber — von links sah der Schlitten aus,
+	# als haette er Zaehne. Rillen sind eingefraest, nicht aufgesetzt.
 	for i in range(7):
 		slide.add_child(ViewmodelParts.box(
 			"SlideSerration%d" % i,
-			Vector3(0.028, 0.026, 0.0035),
+			Vector3(0.0235, 0.024, 0.0035),
 			Vector3(0.0, 0.014, -0.014 - float(i) * 0.0075),
-			black
+			_mats["recess"]
 		))
 
 	slide.add_child(ViewmodelParts.cylinder("Barrel", 0.0075, 0.030, Vector3(0.0, BORE_Y, -0.192), _mats["steel"]))

@@ -101,15 +101,18 @@ func _build_stock() -> void:
 	#
 	# Der Hals ragt bewusst ein Stueck ins Gehaeuse hinein. Auf Stoss gesetzt
 	# klafft bei der kleinsten Aenderung eine Fuge.
-	add_child(ViewmodelParts.box("StockWrist", Vector3(0.032, 0.046, 0.115), Vector3(0.0, -0.016, 0.028),
+	# WICHTIG IST DIE OBERKANTE: Das Gehaeuse endet bei y = 0.035. Vorher lag
+	# der Hals 2 cm tiefer, und dieser Absatz direkt hinter dem Gehaeuse las
+	# sich aus jeder Entfernung als Luecke — obwohl sich die Teile beruehrten.
+	# Der Ruecken laeuft jetzt fast auf einer Linie weiter und faellt erst
+	# nach hinten ab, so wie bei einer echten Flinte.
+	add_child(ViewmodelParts.box("StockWrist", Vector3(0.032, 0.058, 0.115), Vector3(0.0, 0.000, 0.028),
 		wood, Vector3(7.0, 0.0, 0.0)))
-	# Ruecken gerade nach hinten, Boden faellt ab — daraus entsteht die
-	# typische keilfoermige Schaftbacke.
-	add_child(ViewmodelParts.box("StockComb", Vector3(0.030, 0.032, 0.130), Vector3(0.0, 0.004, 0.100),
+	add_child(ViewmodelParts.box("StockComb", Vector3(0.030, 0.034, 0.130), Vector3(0.0, 0.010, 0.100),
 		wood, Vector3(7.0, 0.0, 0.0)))
-	add_child(ViewmodelParts.box("StockBody", Vector3(0.038, 0.060, 0.125), Vector3(0.0, -0.028, 0.108),
+	add_child(ViewmodelParts.box("StockBody", Vector3(0.038, 0.064, 0.125), Vector3(0.0, -0.020, 0.108),
 		wood, Vector3(7.0, 0.0, 0.0)))
-	add_child(ViewmodelParts.box("ButtPad", Vector3(0.040, 0.086, 0.014), Vector3(0.0, -0.020, 0.176),
+	add_child(ViewmodelParts.box("ButtPad", Vector3(0.040, 0.088, 0.014), Vector3(0.0, -0.014, 0.176),
 		black, Vector3(7.0, 0.0, 0.0)))
 
 

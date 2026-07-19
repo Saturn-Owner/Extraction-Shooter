@@ -37,6 +37,13 @@ static func materials() -> Dictionary:
 		"magazine": _material(Color(0.170, 0.178, 0.170), 0.80, 0.48),
 		"wood": _material(Color(0.205, 0.112, 0.048), 0.0, 0.50),
 		"blued": _material(Color(0.215, 0.222, 0.245), 0.96, 0.20),
+		# Fuer Schlitze, Nuten und Bohrungen. Ohne Boolesche Operationen kann
+		# nichts wirklich ausgeschnitten werden — ein sehr dunkles, mattes
+		# Teil buendig in der Oberflaeche liest sich aber als Vertiefung.
+		# Metallisch darf es dabei NICHT sein: Metall spiegelt den Himmel und
+		# leuchtet dann heller als seine Umgebung, wodurch aus dem Loch eine
+		# aufgesetzte Platte wird. Genau so sahen die M-LOK-Schlitze aus.
+		"recess": _material(Color(0.018, 0.018, 0.020), 0.0, 0.95),
 	}
 
 

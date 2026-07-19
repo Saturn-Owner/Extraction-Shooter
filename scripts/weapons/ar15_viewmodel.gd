@@ -135,12 +135,16 @@ func _build_handguard() -> void:
 	# M-LOK-Schlitze an beiden Seiten und unten. Ein glatter Handschutz ist
 	# die groesste zusammenhaengende Flaeche der Waffe — bleibt sie leer,
 	# faellt genau dort auf, dass das Modell unfertig ist.
+	# Mattes, sehr dunkles Material statt des metallischen: Metall spiegelt
+	# den Himmel und leuchtet heller als der Handschutz — die Schlitze sahen
+	# dadurch aus wie aufgesetzte Chromplaettchen statt wie Loecher.
+	var recess: Material = _mats["recess"]
 	for side in [-1.0, 1.0]:
 		add_child(ViewmodelParts.ribs("Mlok%s" % ("L" if side < 0.0 else "R"), 6,
 			Vector3(0.004, 0.009, 0.024),
-			Vector3(side * 0.0245, BORE_Y, -0.268), Vector3(0.0, 0.0, -0.030), black))
+			Vector3(side * 0.0245, BORE_Y, -0.268), Vector3(0.0, 0.0, -0.030), recess))
 	add_child(ViewmodelParts.ribs("MlokBottom", 6, Vector3(0.009, 0.004, 0.024),
-		Vector3(0.0, BORE_Y - 0.0245, -0.268), Vector3(0.0, 0.0, -0.030), black))
+		Vector3(0.0, BORE_Y - 0.0245, -0.268), Vector3(0.0, 0.0, -0.030), recess))
 
 
 func _build_barrel() -> void:

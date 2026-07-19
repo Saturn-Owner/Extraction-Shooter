@@ -36,6 +36,7 @@ func _process(delta: float) -> bool:
 
 func _run_all() -> void:
 	await process_frame
+	_test_weapon_cycling()
 	_test_ammo_accounting()
 	_test_weapon_switching_keeps_gear()
 	await _test_ammo_switch_returns_rounds()
@@ -62,10 +63,65 @@ func _finish() -> void:
 	quit(1 if _failed > 0 else 0)
 
 
+## Waffe ueber ihre ID holen statt ueber die Position in der Liste.
+func _find_weapon(inv: PlayerInventory, id: StringName) -> ItemStack:
+	for stack in inv.get_carried_weapons():
+		if stack.item_id == id:
+			return stack
+	return null
+
+
 func _make_inventory() -> PlayerInventory:
 	var inv := PlayerInventory.new()
 	root.add_child(inv)
 	return inv
+
+
+## Durchschalten mit Q/E muss jede Waffe genau einmal zeigen.
+##
+## Im Spiel kam die Glock zweimal hintereinander dran. Ursache: Die
+## ausgeruestete Waffe wird beim Anlegen aus dem Raster genommen, und
+## get_carried_weapons() las nur das Raster. Damit schrumpfte die Liste bei
+## jedem Wechsel um eins und der Zaehler im Testgelaende zeigte daneben.
+func _test_weapon_cycling() -> void:
+	_section("Waffen durchschalten")
+
+	var inv := _make_inventory()
+	var ids: Array[StringName] = [&"weapon_rifle_ar15", &"weapon_shotgun_m870", &"weapon_pistol_g17"]
+	for id in ids:
+		inv.add(id, 1)
+
+	var weapons := inv.get_carried_weapons()
+	_check(weapons.size() == ids.size(),
+		"alle %d Waffen werden aufgelistet (%d)" % [ids.size(), weapons.size()])
+
+	inv.equip_weapon(weapons[0])
+	_check(inv.get_carried_weapons().size() == ids.size(),
+		"die Waffe in der Hand bleibt in der Liste (%d)" % inv.get_carried_weapons().size())
+
+	# Einmal komplett durchschalten, so wie es das Testgelaende macht.
+	var seen: Array[StringName] = []
+	var index := 0
+	for step in range(ids.size()):
+		var list := inv.get_carried_weapons()
+		index = wrapi(index + 1, 0, list.size())
+		inv.equip_weapon(list[index])
+		seen.append(inv.equipped_weapon.item_id)
+
+	var unique := {}
+	for id in seen:
+		unique[id] = true
+	_check(unique.size() == ids.size(),
+		"jede Waffe kommt genau einmal dran (%s)" % str(seen))
+
+	# Dieselbe Waffe nochmal anlegen darf sie nicht verdoppeln.
+	var before := inv.get_carried_weapons().size()
+	inv.equip_weapon(inv.equipped_weapon)
+	_check(inv.get_carried_weapons().size() == before,
+		"dieselbe Waffe erneut anlegen verdoppelt sie nicht (%d -> %d)"
+			% [before, inv.get_carried_weapons().size()])
+
+	inv.free()
 
 
 ## Munition darf weder verschwinden noch sich vermehren.
@@ -105,23 +161,28 @@ func _test_weapon_switching_keeps_gear() -> void:
 	inv.add(&"weapon_rifle_ar15", 1)
 	inv.add(&"weapon_pistol_g17", 1)
 
-	var weapons := inv.get_carried_weapons()
-	_check(weapons.size() == 2, "zwei Waffen im Inventar")
+	_check(inv.get_carried_weapons().size() == 2, "zwei Waffen im Inventar")
 
-	var rifle := weapons[0]
+	# Waffen ueber ihre ID holen, nicht ueber die Position in der Liste:
+	# Die Liste ist nach ID sortiert, und "weapons[0]" war deshalb schon
+	# einmal stillschweigend die Pistole statt des Gewehrs.
+	var rifle := _find_weapon(inv, &"weapon_rifle_ar15")
+	var pistol := _find_weapon(inv, &"weapon_pistol_g17")
+	_check(rifle != null and pistol != null, "Gewehr und Pistole gefunden")
+
 	_check(inv.equip_weapon(rifle), "erste Waffe in die Hand genommen")
 	_check(inv.equipped_weapon == rifle, "Waffe ist in der Hand")
 	_check(inv.grid.get_stack(rifle.instance_id) == null, "und nicht mehr im Raster")
-	_check(inv.get_carried_weapons().size() == 1, "eine Waffe bleibt im Raster")
+	_check(inv.grid.get_stack(pistol.instance_id) != null, "die andere liegt weiter im Raster")
 
-	var pistol := inv.get_carried_weapons()[0]
 	_check(inv.equip_weapon(pistol), "zweite Waffe in die Hand genommen")
 	_check(inv.equipped_weapon == pistol, "Pistole ist in der Hand")
 	_check(inv.grid.get_stack(rifle.instance_id) != null, "das Gewehr ist zurueck im Raster")
 
-	# Nichts darf verloren gehen: beide Waffen sind noch da.
-	var total := inv.get_carried_weapons().size() + (1 if inv.equipped_weapon != null else 0)
-	_check(total == 2, "insgesamt weiterhin zwei Waffen (%d)" % total)
+	# Nichts darf verloren gehen. get_carried_weapons() zaehlt die Waffe in
+	# der Hand mit, deshalb ist die Gesamtzahl direkt die Listenlaenge.
+	_check(inv.get_carried_weapons().size() == 2,
+		"insgesamt weiterhin zwei Waffen (%d)" % inv.get_carried_weapons().size())
 
 	# Das Gewicht muss die Waffe in der Hand mitzaehlen.
 	_check(inv.get_total_weight() > 0.0, "Gewicht beruecksichtigt die gefuehrte Waffe (%.2f kg)" % inv.get_total_weight())

@@ -30,10 +30,25 @@ const SIZE := Vector2i(1280, 720)
 ##
 ## focus = "hinten" rueckt auf das hintere Stueck: Gehaeuse, Griff, Schaft.
 ## Genau dort sitzen die Fehler, die man in der Gesamtansicht nicht sieht.
+## ALLE SEITEN, nicht nur rechts.
+##
+## Vorher kamen saemtliche Ansichten von +X. Dadurch waren die Waffen rechts
+## ausgearbeitet und links unfertig — Auswurffenster und Ladehebel liegen
+## rechts, aber Feuerwahlhebel, Magazinhalter und Verschlussfang sitzen links.
+## Was man nie ansieht, baut man auch nicht.
+##
+## up: Fuer Ansichten von oben und unten muss eine andere Hochachse her,
+## sonst faellt die Kamerarechnung auf eine parallele Achse herein.
 const VIEWS := [
-	{name = "perspektive", dir = Vector3(0.62, 0.34, 0.71), margin = 1.18, focus = "alles"},
-	{name = "seite", dir = Vector3(1.0, 0.04, 0.0), margin = 1.15, focus = "alles"},
-	{name = "nah_gehaeuse", dir = Vector3(0.70, 0.34, 0.63), margin = 1.10, focus = "hinten"},
+	{name = "a_perspektive_rechts", dir = Vector3(0.62, 0.34, 0.71), margin = 1.16, focus = "alles", up = Vector3.UP},
+	{name = "b_perspektive_links", dir = Vector3(-0.62, 0.34, 0.71), margin = 1.16, focus = "alles", up = Vector3.UP},
+	{name = "c_seite_rechts", dir = Vector3(1.0, 0.04, 0.0), margin = 1.12, focus = "alles", up = Vector3.UP},
+	{name = "d_seite_links", dir = Vector3(-1.0, 0.04, 0.0), margin = 1.12, focus = "alles", up = Vector3.UP},
+	{name = "e_oben", dir = Vector3(0.0, 1.0, 0.02), margin = 1.12, focus = "alles", up = Vector3.FORWARD},
+	{name = "f_unten", dir = Vector3(0.0, -1.0, 0.02), margin = 1.12, focus = "alles", up = Vector3.FORWARD},
+	{name = "g_vorne", dir = Vector3(0.10, 0.22, -1.0), margin = 1.20, focus = "alles", up = Vector3.UP},
+	{name = "h_nah_rechts", dir = Vector3(0.70, 0.34, 0.63), margin = 1.08, focus = "hinten", up = Vector3.UP},
+	{name = "i_nah_links", dir = Vector3(-0.70, 0.34, 0.63), margin = 1.08, focus = "hinten", up = Vector3.UP},
 ]
 
 var _output_dir := ""
@@ -177,8 +192,9 @@ func _apply_job(index: int) -> void:
 	var bounds := _model_bounds(_model, view["focus"] == "hinten")
 	var centre := bounds.get_center()
 	var direction: Vector3 = (view["dir"] as Vector3).normalized()
-	var distance := _fit_distance(bounds, centre, direction, float(view["margin"]))
-	_camera.look_at_from_position(centre + direction * distance, centre, Vector3.UP)
+	var up: Vector3 = view["up"]
+	var distance := _fit_distance(bounds, centre, direction, float(view["margin"]), up)
+	_camera.look_at_from_position(centre + direction * distance, centre, up)
 
 
 ## Kameraabstand, bei dem die Waffe genau ins Bild passt.
@@ -189,10 +205,11 @@ func _apply_job(index: int) -> void:
 ## acht Ecken des Kastens einzeln in den Kameraraum gelegt und der Abstand
 ## gesucht, bei dem die aeusserste Ecke gerade noch im Bild liegt. Das
 ## breitere waagerechte Sichtfeld wird dabei mitgerechnet.
-func _fit_distance(bounds: AABB, centre: Vector3, direction: Vector3, margin: float) -> float:
-	var basis := Basis.looking_at(-direction, Vector3.UP)
+func _fit_distance(bounds: AABB, centre: Vector3, direction: Vector3, margin: float,
+		up: Vector3) -> float:
+	var basis := Basis.looking_at(-direction, up)
 	var right := basis.x
-	var up := basis.y
+	var camera_up := basis.y
 	var forward := -basis.z
 
 	var vertical_tan := tan(deg_to_rad(_camera.fov) * 0.5)
@@ -205,7 +222,7 @@ func _fit_distance(bounds: AABB, centre: Vector3, direction: Vector3, margin: fl
 		# brauchen mehr Abstand als weiter hinten liegende.
 		var depth := corner.dot(forward)
 		distance = maxf(distance, absf(corner.dot(right)) / horizontal_tan - depth)
-		distance = maxf(distance, absf(corner.dot(up)) / vertical_tan - depth)
+		distance = maxf(distance, absf(corner.dot(camera_up)) / vertical_tan - depth)
 
 	return maxf(0.05, distance * margin)
 

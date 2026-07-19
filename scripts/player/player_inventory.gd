@@ -69,6 +69,13 @@ func equip_weapon(stack: ItemStack) -> bool:
 	if stack == null or not (stack.get_data() is WeaponData):
 		return false
 
+	# Dieselbe Waffe nochmal anlegen ist ein gültiger Aufruf und muss folgenlos
+	# bleiben. Ohne diese Abkürzung würde sie unten als "vorherige" Waffe ins
+	# Raster zurückgelegt, während sie gleichzeitig in der Hand bleibt — die
+	# Waffe wäre danach doppelt vorhanden.
+	if stack == equipped_weapon:
+		return true
+
 	# Erst zurücklegen, dann herausnehmen — sonst kann die alte Waffe
 	# verloren gehen, wenn das Raster inzwischen voll ist.
 	var previous := equipped_weapon
@@ -89,12 +96,26 @@ func equip_weapon(stack: ItemStack) -> bool:
 	return true
 
 
-## Alle Waffen im Raster (ohne die in der Hand).
+## Alle Waffen, die der Spieler dabei hat — einschliesslich der in der Hand.
+##
+## DIE IN DER HAND GEHOERT DAZU, auch wenn sie nicht im Raster liegt.
+## Vorher fehlte sie: Beim Durchschalten mit Q/E schrumpfte die Liste dadurch
+## bei jedem Wechsel um eins, der Zaehler zeigte auf die falsche Stelle und
+## dieselbe Waffe kam zweimal hintereinander dran.
+##
+## Die Reihenfolge ist nach ID sortiert und damit stabil. Ohne das haengt sie
+## davon ab, welche Waffe gerade im Raster liegt und welche nicht — und dann
+## springt das Durchschalten bei jedem Wechsel neu durcheinander.
 func get_carried_weapons() -> Array[ItemStack]:
 	var result: Array[ItemStack] = []
 	for stack in grid.get_all_stacks():
 		if stack.get_data() is WeaponData:
 			result.append(stack)
+	if equipped_weapon != null:
+		result.append(equipped_weapon)
+
+	result.sort_custom(func(a: ItemStack, b: ItemStack) -> bool:
+		return String(a.item_id) < String(b.item_id))
 	return result
 
 
