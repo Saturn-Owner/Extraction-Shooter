@@ -176,12 +176,38 @@ func _apply_job(index: int) -> void:
 	var view: Dictionary = VIEWS[job["view"]]
 	var bounds := _model_bounds(_model, view["focus"] == "hinten")
 	var centre := bounds.get_center()
-	# Umkugel des Kastens als Mass, damit die Waffe aus jeder Richtung
-	# vollstaendig ins Bild passt.
-	var radius: float = maxf(0.02, bounds.size.length() * 0.5)
-	var distance: float = radius / tan(deg_to_rad(_camera.fov) * 0.5) * float(view["margin"])
 	var direction: Vector3 = (view["dir"] as Vector3).normalized()
+	var distance := _fit_distance(bounds, centre, direction, float(view["margin"]))
 	_camera.look_at_from_position(centre + direction * distance, centre, Vector3.UP)
+
+
+## Kameraabstand, bei dem die Waffe genau ins Bild passt.
+##
+## Ueber die Umkugel gerechnet passt zwar alles hinein, aber eine lange
+## schmale Waffe fuellt dann nur die Haelfte des Bildes — die Kugel misst die
+## Diagonale, nicht das, was man tatsaechlich sieht. Deshalb werden hier die
+## acht Ecken des Kastens einzeln in den Kameraraum gelegt und der Abstand
+## gesucht, bei dem die aeusserste Ecke gerade noch im Bild liegt. Das
+## breitere waagerechte Sichtfeld wird dabei mitgerechnet.
+func _fit_distance(bounds: AABB, centre: Vector3, direction: Vector3, margin: float) -> float:
+	var basis := Basis.looking_at(-direction, Vector3.UP)
+	var right := basis.x
+	var up := basis.y
+	var forward := -basis.z
+
+	var vertical_tan := tan(deg_to_rad(_camera.fov) * 0.5)
+	var horizontal_tan := vertical_tan * (float(SIZE.x) / float(SIZE.y))
+
+	var distance := 0.0
+	for i in range(8):
+		var corner := bounds.get_endpoint(i) - centre
+		# Tiefe der Ecke relativ zur Bildmitte: weiter vorn liegende Ecken
+		# brauchen mehr Abstand als weiter hinten liegende.
+		var depth := corner.dot(forward)
+		distance = maxf(distance, absf(corner.dot(right)) / horizontal_tan - depth)
+		distance = maxf(distance, absf(corner.dot(up)) / vertical_tan - depth)
+
+	return maxf(0.05, distance * margin)
 
 
 ## Ausdehnung des Modells, gemessen an den tatsaechlichen Meshes.

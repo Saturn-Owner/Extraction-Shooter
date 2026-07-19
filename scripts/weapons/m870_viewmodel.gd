@@ -93,13 +93,23 @@ func _build_stock() -> void:
 	var wood: Material = _mats["wood"]
 	var black: Material = _mats["black"]
 
-	add_child(ViewmodelParts.box("StockNeck", Vector3(0.036, 0.052, 0.090), Vector3(0.0, -0.014, 0.010),
+	# ACHTUNG, WIEDERHOLTER FEHLER: Diese Teile stehen bewusst an absoluten
+	# Positionen und tragen ihre Neigung jeweils selbst. Ein gemeinsamer,
+	# gedrehter Elternknoten sieht aufgeraeumter aus, dreht aber auch die
+	# POSITIONEN mit — beim ersten Versuch ist der Schaft dadurch nach hinten
+	# unten weggewandert und hing sichtbar neben dem Gehaeuse.
+	#
+	# Der Hals ragt bewusst ein Stueck ins Gehaeuse hinein. Auf Stoss gesetzt
+	# klafft bei der kleinsten Aenderung eine Fuge.
+	add_child(ViewmodelParts.box("StockWrist", Vector3(0.032, 0.046, 0.115), Vector3(0.0, -0.016, 0.028),
 		wood, Vector3(7.0, 0.0, 0.0)))
-	add_child(ViewmodelParts.box("StockComb", Vector3(0.032, 0.026, 0.130), Vector3(0.0, 0.014, 0.070),
+	# Ruecken gerade nach hinten, Boden faellt ab — daraus entsteht die
+	# typische keilfoermige Schaftbacke.
+	add_child(ViewmodelParts.box("StockComb", Vector3(0.030, 0.032, 0.130), Vector3(0.0, 0.004, 0.100),
 		wood, Vector3(7.0, 0.0, 0.0)))
-	add_child(ViewmodelParts.box("StockBody", Vector3(0.040, 0.062, 0.130), Vector3(0.0, -0.024, 0.080),
+	add_child(ViewmodelParts.box("StockBody", Vector3(0.038, 0.060, 0.125), Vector3(0.0, -0.028, 0.108),
 		wood, Vector3(7.0, 0.0, 0.0)))
-	add_child(ViewmodelParts.box("ButtPad", Vector3(0.042, 0.086, 0.014), Vector3(0.0, -0.020, 0.142),
+	add_child(ViewmodelParts.box("ButtPad", Vector3(0.040, 0.086, 0.014), Vector3(0.0, -0.020, 0.176),
 		black, Vector3(7.0, 0.0, 0.0)))
 
 
@@ -128,11 +138,24 @@ func _build_moving_parts() -> void:
 	# Der Vorderschaft ist die "Action" dieser Waffe. Er umschliesst das
 	# Roehrenmagazin und wird von Hand hin und her geschoben.
 	var pump := ViewmodelParts.pivot("Action", Vector3(0.0, BORE_Y - 0.026, -0.330))
-	pump.add_child(ViewmodelParts.box("PumpBody", Vector3(0.046, 0.042, 0.135), Vector3.ZERO, wood))
-	# Laengsrillen, an denen man den Vorderschaft ueberhaupt als solchen erkennt.
-	for i in range(9):
-		pump.add_child(ViewmodelParts.box("PumpGroove%d" % i, Vector3(0.050, 0.005, 0.008),
-			Vector3(0.0, -0.014 + float(i % 3) * 0.014, -0.050 + float(i / 3) * 0.038), _mats["black"]))
+	pump.add_child(ViewmodelParts.box("PumpBody", Vector3(0.046, 0.042, 0.140), Vector3.ZERO, wood))
+	# Vorn und hinten leicht schmaler — der Vorderschaft einer 870 laeuft an
+	# beiden Enden aus, statt ein Kasten zu sein.
+	pump.add_child(ViewmodelParts.box("PumpFront", Vector3(0.038, 0.034, 0.024), Vector3(0.0, 0.0, -0.078), wood))
+	pump.add_child(ViewmodelParts.box("PumpRear", Vector3(0.038, 0.034, 0.024), Vector3(0.0, 0.0, 0.078), wood))
+
+	# Laengsrillen an beiden Seiten und unten.
+	#
+	# Vorher waren das quer liegende Bloecke, die BREITER als der Schaft
+	# selbst waren — sie standen links und rechts als Flossen ab, und der
+	# Vorderschaft sah aus wie ein Blech mit Rippen. Rillen an einer
+	# Vorderschaftrepetierflinte laufen laengs, in Schubrichtung.
+	for side in [-1.0, 1.0]:
+		pump.add_child(ViewmodelParts.ribs("PumpRib%s" % ("L" if side < 0.0 else "R"), 5,
+			Vector3(0.004, 0.005, 0.120),
+			Vector3(side * 0.0225, -0.014, 0.0), Vector3(0.0, 0.007, 0.0), _mats["black"]))
+	pump.add_child(ViewmodelParts.ribs("PumpRibBottom", 4, Vector3(0.005, 0.004, 0.120),
+		Vector3(-0.0105, -0.0205, 0.0), Vector3(0.007, 0.0, 0.0), _mats["black"]))
 	add_child(pump)
 
 	var trigger_pivot := ViewmodelParts.pivot("Trigger", Vector3(0.0, -0.038, -0.084))
