@@ -26,6 +26,10 @@ signal closed()
 ## Die Bestückung einer Waffe hat sich geändert.
 signal build_changed(stack: ItemStack)
 
+## Zustand einer unbeschädigten Waffe. Steht hier und nicht als lose 100.0
+## im Code, damit Reparatur und Prüfung nie auseinanderlaufen können.
+const FULL_CONDITION := 100.0
+
 ## Wie weit man von der Bank weg sein darf. Wird bei JEDER Anfrage geprüft,
 ## nicht nur beim Öffnen — sonst könnte man die Bank öffnen, weglaufen und
 ## aus der Ferne weiterbauen.
@@ -201,6 +205,30 @@ func request_detach(instance_id: int, slot: AttachmentData.Slot) -> String:
 	return ""
 
 
+## Setzt die Waffe wieder instand.
+##
+## VORERST KOSTENLOS. Sobald es Geld und Ersatzteile gibt, gehört genau
+## hierher der Preis — die Stelle, an der geprüft und geändert wird, bleibt
+## dieselbe. Ohne Kosten ist eine abgenutzte Waffe allerdings folgenlos, und
+## damit auch die Ladehemmung: Das ist eine bewusste Zwischenstufe, kein
+## fertiger Zustand.
+func request_repair(instance_id: int) -> String:
+	var stack := _find_weapon(instance_id)
+	if stack == null:
+		return "Waffe nicht gefunden"
+	if not _in_range():
+		return "zu weit von der Werkbank entfernt"
+	if stack.durability >= FULL_CONDITION:
+		return "die Waffe ist in Ordnung"
+
+	stack.durability = FULL_CONDITION
+	if user != null and user.inventory != null and user.inventory.equipped_weapon == stack:
+		if user.weapon != null:
+			user.weapon.condition = FULL_CONDITION
+	build_changed.emit(stack)
+	return ""
+
+
 ## Alles ausser der Reichweite — reine Prüfung ohne Szenenbaum, damit sie
 ## headless testbar ist und später unverändert auf dem Server laufen kann.
 static func check_attach(stack: ItemStack, slot: AttachmentData.Slot, attachment_id: StringName) -> String:
@@ -286,8 +314,10 @@ func _in_range() -> bool:
 ## würde die Waffe neu aufsetzen und dabei das Magazin leeren und aus dem
 ## Inventar nachfüllen. Ein Rotpunkt anschrauben darf keine Munition kosten.
 func _after_change(stack: ItemStack) -> void:
-	if user != null and user.inventory != null and user.inventory.equipped_weapon == stack:
-		if user.weapon != null:
+	if user != null and user.inventory != null:
+		if user.inventory.equipped_weapon == stack and user.weapon != null:
 			user.weapon.build = WeaponBuild.from_stack(stack)
 			user.weapon.rebuild()
+		# Anbauteile wiegen mit — die Traglast muss neu gerechnet werden.
+		user.inventory.notify_changed()
 	build_changed.emit(stack)

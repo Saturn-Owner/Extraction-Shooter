@@ -119,6 +119,16 @@ func get_carried_weapons() -> Array[ItemStack]:
 	return result
 
 
+## Meldet eine Änderung, die nicht über das Raster gelaufen ist.
+##
+## Gebraucht von der Werkbank: Ein Anbauteil ändert weder Belegung noch
+## Stückzahl, wohl aber das Gewicht — und ohne diese Meldung würde der
+## Spieler erst beim nächsten Umpacken merken, dass ihn das Zielfernrohr
+## bremst.
+func notify_changed() -> void:
+	changed.emit()
+
+
 ## Wie viele Patronen dieser Sorte vorhanden sind.
 func count_ammo(ammo_id: StringName) -> int:
 	return grid.count_items(ammo_id, true)

@@ -94,6 +94,15 @@ func get_total_weight() -> float:
 	var w := data.weight_kg * float(quantity)
 	if container != null:
 		w += container.get_total_weight()
+	# Angebaute Teile wiegen mit. Ohne das wäre ein Zielfernrohr samt
+	# Schalldämpfer kostenlos: Beide verbessern die Waffe, und ein Rotpunkt
+	# hätte überhaupt keinen Nachteil — dann gäbe es nie einen Grund, ihn
+	# wegzulassen. Über das Gewicht bremst die Bestückung den Spieler, und
+	# damit hat jede Entscheidung an der Werkbank einen Preis.
+	for slot in attachments:
+		var part := ItemRegistry.get_item(attachments[slot])
+		if part != null:
+			w += part.weight_kg
 	return w
 
 

@@ -31,6 +31,7 @@ func _initialize() -> void:
 	_test_muzzle_follows_the_suppressor()
 	_test_workbench_rejects_nonsense()
 	_test_workbench_options_are_mountable()
+	_test_attachments_add_weight()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -542,3 +543,36 @@ func _test_workbench_options_are_mountable() -> void:
 					weapon_id, attachment.id])
 
 		_check(offered > 0, "Werkbank: %s hat ueberhaupt etwas zur Auswahl" % weapon_id)
+
+
+## Anbauteile muessen wiegen.
+##
+## Ohne das waere ein Rotpunktvisier ein reiner Gewinn: schneller im Anschlag,
+## bessere Ergonomie, kein Nachteil — dann gaebe es nie einen Grund, ohne zu
+## laufen. Ueber das Gewicht bremst jede Bestueckung den Spieler, und damit
+## hat die Entscheidung an der Werkbank einen Preis.
+func _test_attachments_add_weight() -> void:
+	_section("Anbauteile wiegen mit")
+
+	var stack := ItemStack.create(&"weapon_rifle_ar15")
+	var bare := stack.get_total_weight()
+
+	var scope := ItemRegistry.get_item(&"sight_scope4x") as AttachmentData
+	var suppressor := ItemRegistry.get_item(&"muzzle_suppressor_556") as AttachmentData
+
+	stack.attachments[int(AttachmentData.Slot.SIGHT)] = scope.id
+	_check(is_equal_approx(stack.get_total_weight(), bare + scope.weight_kg),
+		"Zielfernrohr wiegt mit (%.2f -> %.2f kg)" % [bare, stack.get_total_weight()])
+
+	stack.attachments[int(AttachmentData.Slot.MUZZLE)] = suppressor.id
+	_check(is_equal_approx(stack.get_total_weight(), bare + scope.weight_kg + suppressor.weight_kg),
+		"Daempfer kommt oben drauf (%.2f kg)" % stack.get_total_weight())
+
+	stack.attachments.clear()
+	_check(is_equal_approx(stack.get_total_weight(), bare),
+		"abgenommen wiegt die Waffe wieder wie vorher")
+
+	# Jedes Teil muss ein Gewicht haben, sonst ist es stillschweigend gratis.
+	for attachment in _attachments():
+		_check(attachment.weight_kg > 0.0, "%s hat ein Gewicht (%.2f kg)"
+			% [attachment.id, attachment.weight_kg])

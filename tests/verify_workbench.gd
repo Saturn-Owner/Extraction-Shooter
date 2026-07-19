@@ -83,7 +83,10 @@ func _run() -> void:
 		"an der Bank geht derselbe Anbau durch")
 
 	_test_ui(station, player, stack)
+	_test_preview(station, player)
+	_test_comparison(station)
 	_test_hand_follows(player, stack)
+	_test_repair(station, player, stack)
 	_test_detach(station, stack)
 	_test_open_and_close(station)
 
@@ -154,6 +157,121 @@ func _test_open_and_close(station: WorkbenchStation) -> void:
 	# Zweimal schliessen darf nichts kaputt machen.
 	station.close()
 	_check(not paused, "zweimal schliessen bleibt folgenlos")
+
+
+## Die Vorschau muss dasselbe Modell zeigen wie die Hand — und zwar für jede
+## Waffe und jede Bestückung, ohne dass beim Wechsel etwas stehen bleibt.
+func _test_preview(station: WorkbenchStation, player: PlayerController) -> void:
+	var ui := station.get_node_or_null("WerkbankUI") as WorkbenchUI
+	var preview := _find_preview(ui)
+	_check(preview != null, "Vorschau ist Teil der Oberfläche")
+	if preview == null:
+		return
+
+	for carried in player.inventory.get_carried_weapons():
+		ui._on_weapon_chosen(carried)
+		var weapon_data := carried.get_data() as WeaponData
+		var shown := _preview_model_name(preview)
+		_check(shown != "", "Vorschau zeigt ein Modell für %s (%s)"
+			% [weapon_data.display_name, shown])
+
+	# Bestückung anbauen und schauen, ob die Vorschau mehr Teile zeigt.
+	var rifle := _find_carried(player, &"weapon_rifle_ar15")
+	if rifle == null:
+		return
+	ui._on_weapon_chosen(rifle)
+	var bare := _count_meshes(preview)
+	station.request_attach(rifle.instance_id, AttachmentData.Slot.SIGHT, &"sight_reddot")
+	ui.refresh()
+	var kitted := _count_meshes(preview)
+	_check(kitted > bare, "Vorschau zeigt das angebaute Teil (%d -> %d Meshes)" % [bare, kitted])
+
+	station.request_detach(rifle.instance_id, AttachmentData.Slot.SIGHT)
+	ui.refresh()
+	_check(_count_meshes(preview) == bare, "nach dem Abnehmen ist die Vorschau wieder wie vorher")
+
+
+## Der Vergleich vorher/nachher ist der Grund, warum es die Bank gibt. Zeigt
+## er nichts an, kann man nur raten, ob ein Teil hilft.
+func _test_comparison(station: WorkbenchStation) -> void:
+	var ui := station.get_node_or_null("WerkbankUI") as WorkbenchUI
+	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var stack := ItemStack.create(&"weapon_rifle_ar15")
+
+	ui._stack = stack
+	ui._slot = int(AttachmentData.Slot.MUZZLE)
+
+	# Ohne Zeigen kein Vergleich.
+	ui._on_candidate_cleared()
+	_check(ui._candidate_data(ar15) == null, "ohne Zeigen wird nichts verglichen")
+
+	ui._on_candidate(&"muzzle_comp_556")
+	var with_comp := ui._candidate_data(ar15)
+	_check(with_comp != null and with_comp.recoil_vertical < ar15.recoil_vertical,
+		"Zeigen auf den Kompensator zeigt weniger Rückstoss")
+
+	# Zeigen darf nichts anbauen — sonst würde der Vergleich zur Änderung.
+	_check(stack.attachments.is_empty(), "Zeigen baut nichts an")
+
+	ui._on_candidate_cleared()
+
+
+## Instandsetzen muss beim Gegenstand ankommen, nicht nur in der Anzeige.
+func _test_repair(station: WorkbenchStation, player: PlayerController, stack: ItemStack) -> void:
+	stack.durability = 42.0
+	if player.weapon != null:
+		player.weapon.condition = 42.0
+
+	_check(station.request_repair(stack.instance_id) == "", "Instandsetzen wird angenommen")
+	_check(is_equal_approx(stack.durability, WorkbenchStation.FULL_CONDITION),
+		"der Gegenstand ist danach wieder heil (%.0f)" % stack.durability)
+	if player.inventory.equipped_weapon == stack and player.weapon != null:
+		_check(is_equal_approx(player.weapon.condition, WorkbenchStation.FULL_CONDITION),
+			"die Waffe in der Hand ist es auch")
+
+	_check(station.request_repair(stack.instance_id) != "",
+		"eine heile Waffe lässt sich nicht nochmal instandsetzen")
+
+
+func _find_carried(player: PlayerController, item_id: StringName) -> ItemStack:
+	for stack in player.inventory.get_carried_weapons():
+		if stack.item_id == item_id:
+			return stack
+	return null
+
+
+func _find_preview(node: Node) -> WeaponPreview:
+	if node is WeaponPreview:
+		return node as WeaponPreview
+	for child in node.get_children():
+		var found := _find_preview(child)
+		if found != null:
+			return found
+	return null
+
+
+func _preview_model_name(preview: WeaponPreview) -> String:
+	var model := _find_viewmodel(preview)
+	return model.get_model_name() if model != null else ""
+
+
+func _find_viewmodel(node: Node) -> WeaponViewmodel:
+	if node is WeaponViewmodel:
+		return node as WeaponViewmodel
+	for child in node.get_children():
+		var found := _find_viewmodel(child)
+		if found != null:
+			return found
+	return null
+
+
+func _count_meshes(node: Node) -> int:
+	var total := 0
+	if node is MeshInstance3D:
+		total += 1
+	for child in node.get_children():
+		total += _count_meshes(child)
+	return total
 
 
 func _count_buttons(node: Node) -> int:
