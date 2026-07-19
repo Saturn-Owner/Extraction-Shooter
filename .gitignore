@@ -1,0 +1,21 @@
+# Godot 4 – automatisch generierte Dateien
+.godot/
+*.translation
+
+# Exportierte Builds
+export/
+build/
+*.exe
+*.pck
+*.zip
+export_presets.cfg
+
+# Betriebssystem
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.tmp

@@ -1,0 +1,26 @@
+# Textdateien mit LF normalisieren (wichtig bei Windows + Teamarbeit)
+* text=auto eol=lf
+
+# Godot-Dateien sind Text
+*.gd text eol=lf
+*.tscn text eol=lf
+*.tres text eol=lf
+*.godot text eol=lf
+*.cfg text eol=lf
+*.import text eol=lf
+*.shader text eol=lf
+*.gdshader text eol=lf
+
+# Binärdateien nicht anfassen
+*.png binary
+*.jpg binary
+*.webp binary
+*.svg text eol=lf
+*.ogg binary
+*.wav binary
+*.mp3 binary
+*.ttf binary
+*.otf binary
+*.glb binary
+*.gltf text eol=lf
+*.blend binary
