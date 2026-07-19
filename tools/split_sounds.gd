@@ -173,5 +173,72 @@ func _write_event(samples: PackedFloat32Array, event: Dictionary, rate: int,
 	if not WavTools.write(path, cut, rate):
 		return false
 
-	print("  %-22s %.3f s" % [name, float(length) / float(rate)])
+	print("  %-22s %.3f s   %s" % [
+		name, float(length) / float(rate), _describe(cut, rate)])
 	return true
+
+
+## Beschreibt ein Geräusch mit messbaren Eigenschaften.
+##
+## Claude kann nicht hören. Diese Werte sind der Ersatz: Sie erlauben eine
+## begründete Zuordnung statt zu raten, welcher Schnipsel wozu passt.
+##
+##   Nulldurchgaenge  wie oft das Signal die Nulllinie kreuzt.
+##                    hoch = hell und rauschig (Papier, Folie, Kies)
+##                    niedrig = tief und tonal (Schlag, Dumpfes)
+##   Ausklingen       bis der Pegel auf ein Zehntel gefallen ist.
+##                    lang = Metall, das nachschwingt
+##                    kurz = Stoff, Holz, alles Gedaempfte
+func _describe(samples: PackedFloat32Array, rate: int) -> String:
+	if samples.is_empty():
+		return ""
+
+	# Nulldurchgaenge pro Sekunde.
+	var crossings := 0
+	for i in range(1, samples.size()):
+		if (samples[i] < 0.0) != (samples[i - 1] < 0.0):
+			crossings += 1
+	var zcr := float(crossings) * float(rate) / float(samples.size())
+
+	# Wann faellt der Pegel unter ein Zehntel der Spitze?
+	#
+	# Gemessen wird AB DEM LAUTESTEN PUNKT, nicht ab Dateianfang: Dort ist
+	# durch die Einblendung noch Stille, und die liegt bereits unter der
+	# Schwelle — das ergab vorher bei jedem Geraeusch 0,00 s.
+	var peak := WavTools.peak_of(samples)
+	var loudest := 0
+	for i in range(samples.size()):
+		if absf(samples[i]) >= peak:
+			loudest = i
+			break
+
+	var decay_frames := samples.size() - loudest
+	var block := maxi(1, int(0.005 * rate))
+	var pos := loudest
+	while pos < samples.size():
+		var stop := mini(pos + block, samples.size())
+		var block_peak := 0.0
+		for i in range(pos, stop):
+			block_peak = maxf(block_peak, absf(samples[i]))
+		if block_peak < peak * 0.1:
+			decay_frames = pos - loudest
+			break
+		pos = stop
+
+	var decay := float(decay_frames) / float(rate)
+
+	var art := "dumpf"
+	if zcr > 6000.0:
+		art = "hell/rauschig"
+	elif zcr > 2500.0:
+		art = "metallisch"
+	elif zcr > 1000.0:
+		art = "mittel"
+
+	var nachklang := "kurz"
+	if decay > 0.25:
+		nachklang = "lang"
+	elif decay > 0.10:
+		nachklang = "mittel"
+
+	return "%-14s Nachklang %-6s (%5.0f Hz, %.2f s)" % [art, nachklang, zcr, decay]

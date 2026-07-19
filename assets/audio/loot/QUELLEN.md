@@ -14,7 +14,24 @@ Dateien vor einer Veröffentlichung wieder raus.
 | `food.wav` | `essen finden variante 1.wav` | ? | ? |
 | `food_canned_meat.wav` | `essen finden variante 2 plastic verpackung.wav` | ? | ? |
 | `misc.wav` | `misc item finden zb schrauben.wav` | ? | ? |
-| `med_painkillers.wav` | MP3 mit Sammelaufnahme, Ausschnitt 0,48–0,78 s | ? | ? |
+| `medical.wav` | Sammel-MP3, Ereignis bei 9,39 s | ? | ? |
+| `med_painkillers.wav` | Sammel-MP3, Ereignis bei 0,66 s | ? | ? |
+| `tool.wav` | `eisen item finden ZB nahkampf waffe.mp3` | ? | ? |
+
+### Wie ausgewählt wurde
+
+Claude kann nicht hören. Die Auswahl stützt sich deshalb auf **gemessene
+Eigenschaften** der zerlegten Aufnahmen, nicht auf Gehör:
+
+| Datei | Messwerte | Begründung |
+| --- | --- | --- |
+| `tool.wav` | 816 Hz, Nachklang 0,22 s | tief mit echtem Nachschwingen — schweres Eisen |
+| `medical.wav` | 9323 Hz, 0,11 s | sehr hell und kurz — Blister, Folie |
+| `med_painkillers.wav` | 8441 Hz, 0,80 s | hell und rauschig — Tablettendose |
+
+Ob es *richtig klingt*, muss ein Mensch entscheiden. Alle 26 zerlegten
+Ereignisse liegen in `Klangproben/sammlung` zum Nachhören; tauschen heißt
+nur, eine andere Datei unter demselben Namen abzulegen.
 
 ## OpenGameArt (CC0)
 
@@ -40,6 +57,20 @@ einzelner Gegenstand herausheben, ohne den Rest anzufassen.
 
 Diese Kategorien greifen auf `default.ogg` zurück — ein Holzklopfen:
 
-- `medical` — bräuchte Blister, Folie, Papier
-- `backpack` / `clothing` — bräuchte Stoff
-- `tool` — bräuchte Metall auf Metall
+- `backpack` / `clothing` — bräuchte Stoff. In keiner der vorhandenen
+  Aufnahmen ist etwas Stoffartiges: Alle Ausschnitte sind entweder hell
+  und rauschig (Folie) oder metallisch, nichts davon klingt weich.
+
+## Warum die OpenGameArt-Dateien bleiben
+
+`key`, `weapon`, `armor_plate`, `ammo` und `default` stammen weiterhin von
+rubberduck. Diese Aufnahmen sind **benannt aufgenommen** — eine Datei
+heißt `keys_03`, weil dort Schlüssel klimpern.
+
+Die Ausschnitte aus der Sammel-MP3 sind dagegen unbeschriftet. Sie durch
+Fragmente zu ersetzen, von denen ich nur die Frequenz kenne, wäre ein
+Rückschritt: Ich könnte nicht begründen, dass ein Metallgeräusch bei
+5476 Hz nach Schlüsseln klingt und nicht nach einer Gabel.
+
+Wenn beim Anhören eine Stelle besser passt, sag welche Nummer — dann
+tausche ich.
