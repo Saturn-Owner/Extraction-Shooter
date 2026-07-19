@@ -157,14 +157,20 @@ func _build_stock() -> void:
 
 	add_child(ViewmodelParts.cylinder("BufferTube", 0.0150, 0.120, Vector3(0.0, 0.012, 0.040), steel))
 	add_child(ViewmodelParts.cylinder("CastleNut", 0.0205, 0.014, Vector3(0.0, 0.012, -0.014), black))
-	for i in range(3):
-		add_child(ViewmodelParts.cylinder("TubeRing%d" % i, 0.0170, 0.005,
-			Vector3(0.0, 0.012, 0.014 + float(i) * 0.024), black))
+	# Rastkerben nur auf dem freiliegenden Stueck zwischen Gehaeuse und Schaft.
+	# Weiter hinten steckt das Rohr im Schaft und die Ringe waeren nur
+	# Dreiecke, die niemand sieht — oder schlimmer, sie stechen durch.
+	for i in range(2):
+		add_child(ViewmodelParts.cylinder("TubeRing%d" % i, 0.0168, 0.005,
+			Vector3(0.0, 0.012, 0.002 + float(i) * 0.012), black))
 
-	add_child(ViewmodelParts.box("StockBody", Vector3(0.036, 0.046, 0.088), Vector3(0.0, 0.010, 0.058), polymer))
-	add_child(ViewmodelParts.box("StockCheek", Vector3(0.026, 0.012, 0.080), Vector3(0.0, 0.034, 0.056), polymer))
-	add_child(ViewmodelParts.box("ButtPad", Vector3(0.038, 0.054, 0.013), Vector3(0.0, 0.008, 0.106), black))
-	add_child(ViewmodelParts.box("StockLever", Vector3(0.018, 0.012, 0.026), Vector3(0.0, -0.019, 0.052), polymer))
+	# Der Schaft muss das Pufferrohr wirklich umschliessen. Vorher war er
+	# niedriger als das Rohr dick ist — die Rastringe stachen hindurch und
+	# von aussen sah man ein nacktes Rohr statt eines Schafts.
+	add_child(ViewmodelParts.box("StockBody", Vector3(0.038, 0.054, 0.086), Vector3(0.0, 0.012, 0.062), polymer))
+	add_child(ViewmodelParts.box("StockCheek", Vector3(0.028, 0.014, 0.078), Vector3(0.0, 0.043, 0.060), polymer))
+	add_child(ViewmodelParts.box("ButtPad", Vector3(0.040, 0.062, 0.012), Vector3(0.0, 0.012, 0.110), black))
+	add_child(ViewmodelParts.box("StockLever", Vector3(0.018, 0.012, 0.024), Vector3(0.0, -0.018, 0.056), polymer))
 
 
 func _build_moving_parts() -> void:
@@ -174,18 +180,14 @@ func _build_moving_parts() -> void:
 
 	# Magazin aus vier Segmenten mit sanfter Kruemmung. Ein gerader Kasten
 	# sieht sofort nach Platzhalter aus; zu viel Kruemmung nach Banane.
-	var mag := ViewmodelParts.pivot("Magazine", Vector3(0.0, -0.058, -0.132))
-	for i in range(4):
-		var t := float(i)
-		mag.add_child(ViewmodelParts.box(
-			"MagSegment%d" % i,
-			Vector3(0.025, 0.036, 0.046),
-			Vector3(0.0, -0.015 - t * 0.032, -0.001 - t * 0.0022),
-			mag_mat,
-			Vector3(-t * 1.5, 0.0, 0.0)
-		))
-	mag.add_child(ViewmodelParts.box("MagFloor", Vector3(0.029, 0.011, 0.050), Vector3(0.0, -0.128, -0.008),
-		black, Vector3(-6.0, 0.0, 0.0)))
+	# Magazin als durchgezogener, leicht gekruemmter Koerper.
+	# Frueher vier gestapelte Quader — das sah man erst, als die Kanten
+	# gebrochen wurden und jede Segmentgrenze zu einer Stufe wurde.
+	var mag := ViewmodelParts.pivot("Magazine", Vector3(0.0, -0.052, -0.130))
+	mag.add_child(ViewmodelParts.curved_body("MagBody", 0.025, 0.046, 0.132, 9.0,
+		Vector3.ZERO, mag_mat))
+	mag.add_child(ViewmodelParts.box("MagFloor", Vector3(0.029, 0.010, 0.050),
+		Vector3(0.0, -0.133, -0.011), black, Vector3(-9.0, 0.0, 0.0)))
 	add_child(mag)
 
 	# Verschluss im Auswurffenster.

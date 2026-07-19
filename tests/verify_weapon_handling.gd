@@ -28,6 +28,7 @@ func _initialize() -> void:
 	_test_jam_chance_grows_with_wear()
 	_test_jam_never_loses_ammo()
 	_test_aiming_reduces_spread()
+	_test_generated_meshes_are_closed()
 	_test_every_weapon_builds()
 	_test_viewmodels_are_unique()
 
@@ -334,6 +335,94 @@ func _average_deviation(weapon: Weapon, forward: Vector3, samples: int) -> float
 		var dir := weapon._apply_spread(forward, 0)
 		total += rad_to_deg(forward.angle_to(dir))
 	return total / float(samples)
+
+
+## Prueft die selbstgebauten Meshes auf Dichtheit.
+##
+## Seit die Modelle angefaste Quader und gekruemmte Koerper benutzen, werden
+## die Dreiecke im Code erzeugt statt von Godot. Ein Loch oder ein falsch
+## herum gewickeltes Dreieck sieht man am fertigen Bild oft nicht — man sieht
+## nur, dass "irgendwas komisch aussieht", und sucht dann an der falschen
+## Stelle. Diese Pruefung sagt es direkt.
+##
+## Dicht heisst: Jede Kante gehoert zu genau zwei Dreiecken. Fehlt eine
+## Flaeche, gehoert sie nur zu einer.
+func _test_generated_meshes_are_closed() -> void:
+	_section("Erzeugte Koerper sind dicht")
+
+	var box_size := Vector3(0.08, 0.05, 0.12)
+	var box_mesh := ViewmodelParts.beveled_box_mesh(box_size, 0.004)
+	_check_mesh_closed(box_mesh, "angefaster Quader")
+
+	var aabb := box_mesh.get_aabb()
+	_check(aabb.size.is_equal_approx(box_size),
+		"angefaster Quader behaelt seine Masse (%v statt %v)" % [aabb.size, box_size])
+	_check(aabb.get_center().length() < 0.0001,
+		"angefaster Quader ist um den Ursprung zentriert")
+
+	# Fase groesser als das Teil dick ist: darf nicht in sich zusammenfallen.
+	var thin := ViewmodelParts.beveled_box_mesh(Vector3(0.02, 0.004, 0.006), 0.01)
+	_check_mesh_closed(thin, "duennes Blech mit uebergrosser Fase")
+
+	var curved := ViewmodelParts.curved_body_mesh(0.025, 0.046, 0.13, 12.0, 8)
+	_check_mesh_closed(curved, "gekruemmter Koerper")
+
+	var straight := ViewmodelParts.curved_body_mesh(0.02, 0.02, 0.06, 0.0, 4)
+	_check_mesh_closed(straight, "ungekruemmter Koerper")
+
+
+## Zaehlt, wie oft jede Kante vorkommt. Bei einem geschlossenen Koerper
+## genau zweimal. Zusaetzlich wird geprueft, dass alle Normalen nach aussen
+## zeigen — nach innen gedrehte Flaechen sind unsichtbar und hinterlassen
+## genau denselben Eindruck wie ein echtes Loch.
+func _check_mesh_closed(mesh: ArrayMesh, label: String) -> void:
+	var arrays := mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+
+	if vertices.size() < 3 or vertices.size() % 3 != 0:
+		_check(false, "%s: Dreiecksliste ist gueltig (%d Punkte)" % [label, vertices.size()])
+		return
+
+	var edges := {}
+	var centre := Vector3.ZERO
+	for v in vertices:
+		centre += v
+	centre /= float(vertices.size())
+
+	var outward := true
+	for i in range(0, vertices.size(), 3):
+		var a := vertices[i]
+		var b := vertices[i + 1]
+		var c := vertices[i + 2]
+		for pair in [[a, b], [b, c], [c, a]]:
+			# Kanten richtungsunabhaengig zaehlen, sonst haengt das Ergebnis
+			# an der Wicklung statt an der Dichtheit.
+			var key := _edge_key(pair[0], pair[1])
+			edges[key] = int(edges.get(key, 0)) + 1
+		if normals[i].dot((a + b + c) / 3.0 - centre) <= 0.0:
+			outward = false
+
+	var open_edges := 0
+	for count in edges.values():
+		if count != 2:
+			open_edges += 1
+
+	_check(open_edges == 0,
+		"%s ist geschlossen (%d offene Kanten von %d)" % [label, open_edges, edges.size()])
+	_check(outward, "%s: alle Normalen zeigen nach aussen" % label)
+
+
+func _edge_key(a: Vector3, b: Vector3) -> String:
+	var first := _point_key(a)
+	var second := _point_key(b)
+	return first + "|" + second if first < second else second + "|" + first
+
+
+## Punkte auf ein feines Raster runden, damit Rechenungenauigkeiten zwei
+## eigentlich gleiche Ecken nicht zu verschiedenen machen.
+func _point_key(p: Vector3) -> String:
+	return "%.6f,%.6f,%.6f" % [p.x, p.y, p.z]
 
 
 ## Prueft JEDE Waffe im Arsenal, nicht nur die AR-15.

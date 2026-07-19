@@ -4,33 +4,229 @@
 ## Materialien. Damit bleibt in den einzelnen Waffendateien nur das stehen,
 ## was die jeweilige Waffe ausmacht — nicht der immer gleiche Kleinkram.
 ##
-## MATERIALIEN: Alle bewusst mit niedrigem metallic-Wert. Hohe metallic-Werte
-## rendern ohne Reflexionsumgebung fast schwarz, waehrend Kunststoff hell
-## bleibt — das Ergebnis ist dann genau verkehrt herum. Der Unterschied
-## zwischen Metall und Kunststoff kommt hier ueber die Rauheit.
+## MATERIALIEN: Echte PBR-Werte. Metall bekommt hohe metallic-Werte und eine
+## helle Grundfarbe — bei Metall ist die Albedo die Farbe der Spiegelung, nicht
+## die Oberflaechenfarbe. Das funktioniert nur, weil das Testgelaende einen
+## Himmel als Reflexionsquelle hat (WorldEnvironment, ambient_light_source =
+## Sky). Ohne Reflexionsumgebung rendert Metall schwarz — wer eine neue Szene
+## ohne Himmel baut, muss das mitbedenken.
 class_name ViewmodelParts
 extends RefCounted
 
+## Standard-Kantenbruch in Metern.
+##
+## DER GROESSTE EINZELNE OPTIK-GEWINN: Eine gebrochene Kante fangt Licht in
+## einem schmalen Streifen und macht daraus einen Glanzrand. Genau daran
+## erkennt das Auge gefertigtes Metall statt eines Klotzes. Ein Wuerfel mit
+## scharfen Kanten sieht immer nach Platzhalter aus, egal wie gut das Material
+## ist. Kostet knapp das Vierfache an Dreiecken — bei einer Waffe irrelevant.
+const BEVEL := 0.0016
+
 
 ## Gemeinsame Materialpalette. Jede Waffe darf eigene ergaenzen, aber diese
-## fuenf halten das Arsenal optisch zusammen.
+## halten das Arsenal optisch zusammen.
 static func materials() -> Dictionary:
 	return {
-		"steel": _material(Color(0.215, 0.215, 0.232), 0.35, 0.36),
-		"black": _material(Color(0.072, 0.072, 0.080), 0.25, 0.45),
-		"polymer": _material(Color(0.086, 0.086, 0.092), 0.0, 0.85),
-		"furniture": _material(Color(0.105, 0.105, 0.113), 0.08, 0.64),
-		"magazine": _material(Color(0.094, 0.099, 0.094), 0.05, 0.72),
-		"wood": _material(Color(0.135, 0.082, 0.042), 0.0, 0.72),
-		"blued": _material(Color(0.145, 0.148, 0.160), 0.40, 0.28),
+		"steel": _material(Color(0.340, 0.345, 0.360), 0.95, 0.34),
+		"black": _material(Color(0.145, 0.147, 0.155), 0.88, 0.42),
+		# Kunststoff bewusst nicht zu dunkel: Rein rechnerisch waere schwarzes
+		# Polymer noch dunkler, aber dann verschwinden Schaft und Griff im
+		# Spiel komplett und die Waffe verliert ihre Form.
+		"polymer": _material(Color(0.098, 0.098, 0.105), 0.0, 0.50),
+		"furniture": _material(Color(0.118, 0.118, 0.126), 0.0, 0.44),
+		"magazine": _material(Color(0.170, 0.178, 0.170), 0.80, 0.48),
+		"wood": _material(Color(0.205, 0.112, 0.048), 0.0, 0.50),
+		"blued": _material(Color(0.215, 0.222, 0.245), 0.96, 0.20),
 	}
 
 
+## Quader mit gebrochenen Kanten.
+##
+## bevel = 0.0 gibt einen scharfkantigen Quader — nur sinnvoll fuer Teile, die
+## ohnehin verdeckt sind. Der Kantenbruch begrenzt sich selbst, damit auch
+## duenne Bleche wie Schienenzaehne nicht in sich zusammenfallen.
 static func box(name: String, size: Vector3, pos: Vector3, mat: Material,
-		rotation_deg: Vector3 = Vector3.ZERO) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = size
+		rotation_deg: Vector3 = Vector3.ZERO, bevel: float = BEVEL) -> MeshInstance3D:
+	var mesh := beveled_box_mesh(size, bevel)
 	return instance(name, mesh, pos, mat, rotation_deg)
+
+
+## Erzeugt einen Quader mit umlaufender Fase.
+##
+## Aufbau: sechs verkleinerte Flaechen, zwoelf Fasenstreifen an den Kanten,
+## acht Dreiecke in den Ecken. Die Ausrichtung der Dreiecke wird nicht von Hand
+## festgelegt, sondern hinterher geprueft — der Koerper ist konvex und um den
+## Ursprung zentriert, also zeigt jede Normale nach aussen, wenn sie in
+## dieselbe Richtung wie der Schwerpunkt des Dreiecks weist. Das ist deutlich
+## weniger fehleranfaellig als 44 Dreiecke von Hand richtig herum zu wickeln.
+static func beveled_box_mesh(size: Vector3, bevel: float = BEVEL) -> ArrayMesh:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	# Fase nie groesser als die duennste Seite vertraegt.
+	var b: float = minf(bevel, minf(hx, minf(hy, hz)) * 0.7)
+
+	if b <= 0.0001:
+		var plain := BoxMesh.new()
+		plain.size = size
+		return _to_array_mesh(plain)
+
+	# Je Ecke drei Punkte, einer je angrenzender Flaeche.
+	var on_x := func(sx: float, sy: float, sz: float) -> Vector3:
+		return Vector3(sx * hx, sy * (hy - b), sz * (hz - b))
+	var on_y := func(sx: float, sy: float, sz: float) -> Vector3:
+		return Vector3(sx * (hx - b), sy * hy, sz * (hz - b))
+	var on_z := func(sx: float, sy: float, sz: float) -> Vector3:
+		return Vector3(sx * (hx - b), sy * (hy - b), sz * hz)
+
+	var quads: Array = []
+	var tris: Array = []
+
+	for s in [-1.0, 1.0]:
+		# Die sechs Hauptflaechen.
+		quads.append([on_x.call(s, -1, -1), on_x.call(s, 1, -1), on_x.call(s, 1, 1), on_x.call(s, -1, 1)])
+		quads.append([on_y.call(-1, s, -1), on_y.call(1, s, -1), on_y.call(1, s, 1), on_y.call(-1, s, 1)])
+		quads.append([on_z.call(-1, -1, s), on_z.call(1, -1, s), on_z.call(1, 1, s), on_z.call(-1, 1, s)])
+
+	for sa in [-1.0, 1.0]:
+		for sb in [-1.0, 1.0]:
+			# Die zwoelf Fasenstreifen, vier je Achsrichtung.
+			quads.append([on_x.call(sa, sb, -1), on_x.call(sa, sb, 1), on_y.call(sa, sb, 1), on_y.call(sa, sb, -1)])
+			quads.append([on_x.call(sa, -1, sb), on_x.call(sa, 1, sb), on_z.call(sa, 1, sb), on_z.call(sa, -1, sb)])
+			quads.append([on_y.call(-1, sa, sb), on_y.call(1, sa, sb), on_z.call(1, sa, sb), on_z.call(-1, sa, sb)])
+
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				# Die acht Eckdreiecke.
+				tris.append([on_x.call(sx, sy, sz), on_y.call(sx, sy, sz), on_z.call(sx, sy, sz)])
+
+	for quad in quads:
+		tris.append([quad[0], quad[1], quad[2]])
+		tris.append([quad[0], quad[2], quad[3]])
+
+	# Flache Normalen: harte Kanten sind bei Metall richtig, weiche wuerden
+	# die Fase wieder wegbuegeln. Der Quader ist um den Ursprung zentriert,
+	# also ist der Nullpunkt der Innenpunkt fuer die Ausrichtungspruefung.
+	return _mesh_from_triangles(tris, Vector3.ZERO)
+
+
+## Gekruemmter Koerper mit rechteckigem Querschnitt — fuer Magazine.
+##
+## WARUM NICHT GESTAPELTE QUADER: Genau so war es vorher, und solange die
+## Kanten scharf waren, fiel es nicht auf. Mit gebrochenen Kanten faengt jede
+## Segmentgrenze Licht und aus der Kruemmung wird eine sichtbare Treppe.
+## Ein durchgezogener Koerper hat diese Grenzen nicht.
+##
+## Der Querschnitt wandert von oben nach unten (-Y) und dreht sich dabei
+## schrittweise um die X-Achse nach vorn. Genau so ist ein Stangenmagazin
+## gebaut: gleichbleibender Querschnitt entlang eines Kreisbogens.
+static func curved_body(name: String, width: float, depth: float, length: float,
+		curve_degrees: float, pos: Vector3, mat: Material,
+		rotation_deg: Vector3 = Vector3.ZERO, segments: int = 10) -> MeshInstance3D:
+	var mesh := curved_body_mesh(width, depth, length, curve_degrees, segments)
+	return instance(name, mesh, pos, mat, rotation_deg)
+
+
+static func curved_body_mesh(width: float, depth: float, length: float,
+		curve_degrees: float, segments: int = 10) -> ArrayMesh:
+	segments = maxi(1, segments)
+	var half_w := width * 0.5
+	var half_d := depth * 0.5
+	var step_length := length / float(segments)
+	var step_angle := deg_to_rad(curve_degrees) / float(segments)
+
+	var profile := [
+		Vector3(-half_w, 0.0, -half_d),
+		Vector3(half_w, 0.0, -half_d),
+		Vector3(half_w, 0.0, half_d),
+		Vector3(-half_w, 0.0, half_d),
+	]
+
+	var rings: Array = []
+	var point := Vector3.ZERO
+	var frame := Basis.IDENTITY
+
+	for i in range(segments + 1):
+		var ring: Array = []
+		for corner in profile:
+			ring.append(point + frame * corner)
+		rings.append(ring)
+		if i < segments:
+			point += frame * Vector3(0.0, -step_length, 0.0)
+			frame = frame.rotated(Vector3.RIGHT, step_angle)
+
+	var tris: Array = []
+
+	# Mantel: vier Laengsseiten.
+	for i in range(segments):
+		var a: Array = rings[i]
+		var b: Array = rings[i + 1]
+		for k in range(4):
+			var n := (k + 1) % 4
+			tris.append([a[k], a[n], b[n]])
+			tris.append([a[k], b[n], b[k]])
+
+	# Deckel oben und unten.
+	var top: Array = rings[0]
+	var bottom: Array = rings[segments]
+	tris.append([top[0], top[1], top[2]])
+	tris.append([top[0], top[2], top[3]])
+	tris.append([bottom[0], bottom[1], bottom[2]])
+	tris.append([bottom[0], bottom[2], bottom[3]])
+
+	# Der Koerper ist gekruemmt, also ist der Ursprung kein verlaesslicher
+	# Innenpunkt — die Wicklung wird deshalb gegen den Schwerpunkt des
+	# gesamten Koerpers geprueft statt gegen den Nullpunkt.
+	var centre := Vector3.ZERO
+	for ring in rings:
+		for corner in ring:
+			centre += corner
+	centre /= float(rings.size() * 4)
+
+	return _mesh_from_triangles(tris, centre)
+
+
+## Baut aus einer Dreiecksliste ein Mesh mit flachen Normalen und dreht dabei
+## jedes Dreieck nach aussen. Spart es, 100 Dreiecke von Hand richtig herum zu
+## wickeln — der haeufigste und am schwersten zu findende Fehler dabei.
+static func _mesh_from_triangles(tris: Array, centre: Vector3) -> ArrayMesh:
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+
+	for tri in tris:
+		var a: Vector3 = tri[0]
+		var b: Vector3 = tri[1]
+		var c: Vector3 = tri[2]
+		var normal := (b - a).cross(c - a)
+		if normal.length_squared() < 1e-12:
+			continue
+		normal = normal.normalized()
+		if normal.dot((a + b + c) / 3.0 - centre) < 0.0:
+			var swap := b
+			b = c
+			c = swap
+			normal = -normal
+		vertices.append(a)
+		vertices.append(b)
+		vertices.append(c)
+		for i in range(3):
+			normals.append(normal)
+
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+
+static func _to_array_mesh(source: PrimitiveMesh) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, source.get_mesh_arrays())
+	return mesh
 
 
 ## Zylinder. Godot legt sie entlang Y an — fuer Laeufe drehen wir sie um
@@ -47,7 +243,10 @@ static func taper(name: String, top_radius: float, bottom_radius: float, length:
 	mesh.top_radius = top_radius
 	mesh.bottom_radius = bottom_radius
 	mesh.height = length
-	mesh.radial_segments = 14
+	# Laeufe und Rohre sind das Runde an einer Waffe. Mit 14 Segmenten sieht
+	# man die Facetten, mit 24 nicht mehr — und ein paar hundert Dreiecke mehr
+	# fallen bei einem Viewmodel nicht ins Gewicht.
+	mesh.radial_segments = 24
 	mesh.rings = 1
 	return instance(name, mesh, pos, mat, rotation_deg)
 
@@ -58,8 +257,8 @@ static func torus(name: String, inner: float, outer: float, pos: Vector3,
 	var mesh := TorusMesh.new()
 	mesh.inner_radius = inner
 	mesh.outer_radius = outer
-	mesh.rings = 16
-	mesh.ring_segments = 8
+	mesh.rings = 24
+	mesh.ring_segments = 10
 	return instance(name, mesh, pos, mat, rotation_deg)
 
 

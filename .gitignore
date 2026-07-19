@@ -15,6 +15,10 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
+# Gerenderte Vorschaubilder der Waffenmodelle (tools/render_viewmodel.gd)
+# Jederzeit neu erzeugbar, gehoeren nicht ins Repo.
+renders/
+
 # Editor / IDE
 .vscode/
 .idea/

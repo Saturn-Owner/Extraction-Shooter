@@ -25,6 +25,10 @@ const SIZE := Vector2i(1280, 720)
 const VIEWS := [
 	{name = "perspektive", from = Vector3(0.48, 0.26, 0.30), look_at = Vector3(0.0, -0.01, -0.24)},
 	{name = "seite", from = Vector3(0.95, 0.02, -0.22), look_at = Vector3(0.0, 0.0, -0.22)},
+	# Nahansicht auf Gehaeuse, Griff und Schaft. In der Gesamtansicht sind
+	# genau dort die Fehler, die man nicht sieht — durchstechende Teile,
+	# Luecken, Stufen. Aus zwei Metern faellt so etwas nicht auf.
+	{name = "nah_gehaeuse", from = Vector3(0.40, 0.14, 0.30), look_at = Vector3(0.0, -0.02, -0.04)},
 ]
 
 ## Laenge, auf die die Kameraabstaende ausgelegt sind (Muendung der AR-15).
@@ -94,23 +98,46 @@ func _build_scene() -> void:
 	_scene = Node3D.new()
 	root.add_child(_scene)
 
-	var env := WorldEnvironment.new()
+	# DIE UMGEBUNG MUSS DER DES SPIELS ENTSPRECHEN.
+	#
+	# Vorher stand hier ein flacher Farbhintergrund ohne Reflexionsquelle.
+	# Metall rendert darin schwarz — und die Materialien wurden daraufhin
+	# "korrigiert", bis sie in der Vorschau stimmten und im Spiel falsch waren.
+	# Eine Vorschau, die etwas anderes zeigt als das Spiel, ist schlimmer als
+	# gar keine. Deshalb hier dieselben Werte wie in testgelaende.tscn.
+	var sky_material := ProceduralSkyMaterial.new()
+	sky_material.sky_top_color = Color(0.52, 0.58, 0.66)
+	sky_material.sky_horizon_color = Color(0.78, 0.81, 0.84)
+	# Der Standardboden ist braun und faerbt ueber die Himmelsbeleuchtung die
+	# ganze Waffe warm ein. Neutral halten, sonst beurteilt man Farben falsch.
+	sky_material.ground_bottom_color = Color(0.26, 0.27, 0.29)
+	sky_material.ground_horizon_color = Color(0.46, 0.47, 0.50)
+
+	var sky := Sky.new()
+	sky.sky_material = sky_material
+
 	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.22, 0.23, 0.26)
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.45, 0.48, 0.55)
-	environment.ambient_light_energy = 0.7
+	environment.background_mode = Environment.BG_SKY
+	environment.sky = sky
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	environment.ambient_light_color = Color(0.75, 0.79, 0.85)
+	environment.ambient_light_sky_contribution = 0.85
+	environment.ambient_light_energy = 1.1
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	# Kantenverdunkelung: laesst Spalten und Absaetze hervortreten, die sonst
+	# in der gleichmaessigen Himmelsbeleuchtung verschwinden.
+	environment.ssao_enabled = true
+	environment.ssao_radius = 0.06
+	environment.ssao_intensity = 2.5
+
+	var env := WorldEnvironment.new()
 	env.environment = environment
 	_scene.add_child(env)
 
-	# Drei Lichter: Hauptlicht von schraeg oben, Aufhellung von der
-	# Gegenseite, Kante von hinten. Ohne das dritte verschwindet die
-	# Silhouette vor dem Hintergrund.
-	_add_light(Vector3(-0.6, -0.8, -0.5), Color(1.0, 0.97, 0.92), 2.6)
-	_add_light(Vector3(0.8, -0.3, 0.4), Color(0.6, 0.7, 0.9), 1.1)
-	_add_light(Vector3(0.2, 0.6, 0.9), Color(0.9, 0.9, 1.0), 1.4)
+	# Eine Sonne mit Schatten wie im Spiel, dazu eine schwache Aufhellung von
+	# der Gegenseite, damit die Schattenseite nicht komplett zulaeuft.
+	_add_light(Vector3(-0.6, -0.9, -0.45), Color(1.0, 0.97, 0.92), 2.2, true)
+	_add_light(Vector3(0.7, -0.2, 0.5), Color(0.72, 0.78, 0.92), 0.5, false)
 
 	_camera = Camera3D.new()
 	_camera.fov = 42.0
@@ -118,11 +145,15 @@ func _build_scene() -> void:
 	_scene.add_child(_camera)
 
 
-func _add_light(direction: Vector3, color: Color, energy: float) -> void:
+func _add_light(direction: Vector3, color: Color, energy: float, shadows: bool) -> void:
 	var light := DirectionalLight3D.new()
 	light.light_color = color
 	light.light_energy = energy
-	light.shadow_enabled = false
+	light.shadow_enabled = shadows
+	# Ein Viewmodel ist eine Handbreit gross — ohne engen Schattenbereich
+	# fallen die Schatten in die Aufloesung des halben Levels und verschwinden.
+	light.directional_shadow_max_distance = 4.0
+	light.shadow_normal_bias = 0.4
 	_scene.add_child(light)
 	light.look_at_from_position(Vector3.ZERO, direction.normalized(), Vector3.UP)
 

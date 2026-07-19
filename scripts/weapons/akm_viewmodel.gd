@@ -152,18 +152,20 @@ func _build_moving_parts() -> void:
 
 	# Das gekruemmte 7,62er-Magazin — die Sichel, die dem Gewehr sein Profil
 	# gibt. Deutlich staerker gebogen als das gerade STANAG der AR-15.
+	# Das Sichelmagazin ist das Erkennungszeichen der Kalaschnikow — und war
+	# als Stapel aus fuenf Quadern gebaut. Solange die Kanten scharf waren,
+	# verschmolzen die Segmente; mit gebrochenen Kanten wurde daraus eine
+	# sichtbare Treppe. Als durchgezogener Koerper ist die Kruemmung glatt,
+	# und sie darf hier ruhig kraeftig ausfallen.
 	var mag := ViewmodelParts.pivot("Magazine", Vector3(0.0, -0.030, -0.150))
-	for i in range(5):
-		var t := float(i)
-		mag.add_child(ViewmodelParts.box(
-			"MagSegment%d" % i,
-			Vector3(0.026, 0.038, 0.052 - t * 0.002),
-			Vector3(0.0, -0.018 - t * 0.033, -0.002 - t * 0.0075),
-			mag_mat,
-			Vector3(-t * 5.5, 0.0, 0.0)
-		))
-	mag.add_child(ViewmodelParts.box("MagFloor", Vector3(0.030, 0.012, 0.046), Vector3(0.0, -0.156, -0.032),
-		black, Vector3(-27.5, 0.0, 0.0)))
+	mag.add_child(ViewmodelParts.curved_body("MagBody", 0.026, 0.052, 0.168, 30.0,
+		Vector3(0.0, 0.002, 0.0), mag_mat, Vector3.ZERO, 12))
+	# Bodenplatte auf das rechnerische Ende des Bogens gesetzt:
+	# Radius = Laenge / Winkel, dann Ablage = R*sin(w) nach unten und
+	# R*(1-cos(w)) nach vorn. Nach Augenmass sass sie daneben und stach
+	# schraeg aus dem Magazin heraus.
+	mag.add_child(ViewmodelParts.box("MagFloor", Vector3(0.030, 0.011, 0.046),
+		Vector3(0.0, -0.1585, -0.0430), black, Vector3(-30.0, 0.0, 0.0)))
 	add_child(mag)
 
 	# Verschlusstraeger mit fest angesetztem Ladehebel rechts.
