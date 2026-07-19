@@ -14,14 +14,20 @@ const ALPHA := 0.85
 
 var stack: ItemStack = null
 
+## Wo innerhalb des Gegenstands angefasst wurde. Der Gegenstand haengt
+## dadurch genau an der Stelle am Zeiger, an der man ihn gepackt hat —
+## nicht mit der Ecke voran.
+var grab_offset: Vector2 = Vector2.ZERO
+
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_process(false)
 
 
-func show_stack(p_stack: ItemStack) -> void:
+func show_stack(p_stack: ItemStack, p_grab_offset: Vector2 = Vector2.ZERO) -> void:
 	stack = p_stack
+	grab_offset = p_grab_offset
 	set_process(stack != null)
 	queue_redraw()
 
@@ -43,10 +49,8 @@ func _draw() -> void:
 	var size := stack.get_size()
 	var step := InventoryGridView.CELL_SIZE + InventoryGridView.CELL_GAP
 
-	# Die linke obere Ecke sitzt am Zeiger — genau dort landet der Gegenstand
-	# auch. Was man sieht, ist damit das, was passiert.
 	var rect := Rect2(
-		get_local_mouse_position(),
+		get_local_mouse_position() - grab_offset,
 		Vector2(size.x * step - InventoryGridView.CELL_GAP,
 			size.y * step - InventoryGridView.CELL_GAP)
 	)

@@ -278,7 +278,17 @@ func _test_drag_between_grids() -> void:
 		_check(false, "loot_window.tscn laedt")
 		return
 
-	var window: LootWindow = packed.instantiate()
+	# Bewusst erst ungetypt: Hat loot_window.gd einen Parserfehler, bleibt der
+	# Knoten ein blankes Control. Ohne diese Pruefung bricht die Zuweisung mit
+	# einem Laufzeitfehler ab und die Suite meldet nur stillschweigend weniger
+	# Pruefungen statt eines Fehlers.
+	var node: Node = packed.instantiate()
+	_check(node is LootWindow, "loot_window.gd laedt fehlerfrei")
+	if not (node is LootWindow):
+		node.free()
+		return
+
+	var window: LootWindow = node
 	root.add_child(window)
 	await process_frame
 
@@ -316,8 +326,14 @@ func _test_drag_between_grids() -> void:
 	var player_view: InventoryGridView = window.get_node("Layout/Columns/Right/PlayerView")
 
 	# Aufnehmen in der Kiste, ablegen im Inventar.
+	#
+	# drop_at() ist genau der Weg, den auch das Loslassen der Maustaste geht.
+	# Frueher hat dieser Test cell_released des Zielrasters ausgeloest — und
+	# damit etwas geprueft, das im Spiel NIE passiert: Godot schickt das
+	# Loslassen immer an das Raster, auf dem gedrueckt wurde. Der Test war
+	# gruen, das Ziehen war kaputt.
 	container_view.item_pressed.emit(dragged, container_view)
-	player_view.cell_released.emit(Vector2i(0, 0), player_view)
+	window.drop_at(player_view, Vector2i(0, 0))
 
 	_check(player.inventory.grid.get_stack(id) != null,
 		"gezogener Gegenstand liegt im Inventar")
@@ -329,7 +345,7 @@ func _test_drag_between_grids() -> void:
 	# Zurueck in die Kiste ziehen muss genauso gehen.
 	var back: ItemStack = player.inventory.grid.get_stack(id)
 	player_view.item_pressed.emit(back, player_view)
-	container_view.cell_released.emit(Vector2i(0, 0), container_view)
+	window.drop_at(container_view, Vector2i(0, 0))
 	_check(container.contents.get_stack(id) != null, "und laesst sich zurueckziehen")
 	_check(container.is_revealed(id), "was man selbst hineinlegt, bleibt sichtbar")
 

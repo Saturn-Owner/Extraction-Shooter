@@ -51,6 +51,14 @@ var title: String = ""
 var drag_stack: ItemStack = null
 var drag_source: InventoryGridView = null
 
+## Wo der gezogene Gegenstand landen würde (-1 = nicht über diesem Raster).
+##
+## Das setzt das Fenster, nicht dieses Raster: Godot schickt nach dem Klick
+## alle Mausereignisse weiter an das Control, auf dem gedrückt wurde. Ein
+## Raster erfährt also gar nicht, dass der Zeiger über ihm schwebt, solange
+## der Gegenstand aus dem anderen Raster kommt.
+var preview_cell: Vector2i = Vector2i(-1, -1)
+
 var _hover_cell: Vector2i = Vector2i(-1, -1)
 var _last_click_time: float = 0.0
 var _last_click_id: int = -1
@@ -167,11 +175,11 @@ func _draw_cells() -> void:
 
 ## Zeigt beim Ziehen, ob der Gegenstand hier abgelegt werden kann.
 func _draw_drag_preview() -> void:
-	if drag_stack == null or _hover_cell.x < 0:
+	if drag_stack == null or preview_cell.x < 0 or preview_cell.y < 0:
 		return
 
 	var size := drag_stack.get_size()
-	var pos := cell_to_position(_hover_cell)
+	var pos := cell_to_position(preview_cell)
 	var rect := Rect2(pos, Vector2(
 		size.x * (CELL_SIZE + CELL_GAP) - CELL_GAP,
 		size.y * (CELL_SIZE + CELL_GAP) - CELL_GAP
@@ -180,7 +188,7 @@ func _draw_drag_preview() -> void:
 	# Beim Verschieben innerhalb desselben Rasters darf sich der Gegenstand
 	# mit sich selbst überlappen.
 	var ignore := drag_stack.instance_id if drag_source == self else 0
-	var fits := grid.can_place(drag_stack, _hover_cell.x, _hover_cell.y, ignore)
+	var fits := grid.can_place(drag_stack, preview_cell.x, preview_cell.y, ignore)
 	draw_rect(rect, COLOR_HOVER_OK if fits else COLOR_HOVER_BAD)
 
 

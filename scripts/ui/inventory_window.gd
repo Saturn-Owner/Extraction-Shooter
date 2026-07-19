@@ -17,6 +17,8 @@ signal opened()
 var player: PlayerController = null
 
 var _drag_stack: ItemStack = null
+var _drag_offset: Vector2i = Vector2i.ZERO
+var _drag_target_cell: Vector2i = Vector2i(-1, -1)
 
 @onready var _view: InventoryGridView = $Layout/Inhalt/GridView
 @onready var _stats: Label = $Layout/Inhalt/Stats
@@ -25,9 +27,10 @@ var _drag_stack: ItemStack = null
 
 func _ready() -> void:
 	hide()
+	# cell_released bleibt ungenutzt — siehe LootWindow: das Loslassen geht
+	# immer an das Control, auf dem gedrueckt wurde.
 	_view.item_pressed.connect(_on_item_pressed)
 	_view.item_double_clicked.connect(_on_item_double_clicked)
-	_view.cell_released.connect(_on_cell_released)
 
 
 func open_for(p_player: PlayerController) -> void:
@@ -52,10 +55,10 @@ func _process(_delta: float) -> void:
 	if not visible:
 		return
 
-	# Neben dem Raster losgelassen: siehe LootWindow — sonst klebt der
-	# Gegenstand unsichtbar am Zeiger.
-	if _drag_stack != null and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		_cancel_drag()
+	if _drag_stack != null:
+		_update_drag_target()
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			drop_at(_drag_target_cell)
 
 	_update_stats()
 
@@ -87,14 +90,34 @@ func _update_stats() -> void:
 
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 	_drag_stack = stack
-	_ghost.show_stack(stack)
+
+	var origin := view.grid.get_position(stack.instance_id)
+	var local := view.get_local_mouse_position()
+	var grabbed := view.position_to_cell(local)
+	_drag_offset = grabbed - origin if grabbed.x >= 0 and origin.x >= 0 else Vector2i.ZERO
+	var pixel_offset := local - view.cell_to_position(origin) if origin.x >= 0 else Vector2.ZERO
+
+	_ghost.show_stack(stack, pixel_offset)
 	_view.drag_stack = stack
 	_view.drag_source = view
+	_view.preview_cell = Vector2i(-1, -1)
 	_view.queue_redraw()
 
 
-func _on_cell_released(cell: Vector2i, _view: InventoryGridView) -> void:
-	if _drag_stack != null and cell.x >= 0:
+func _update_drag_target() -> void:
+	_drag_target_cell = Vector2i(-1, -1)
+	if _view.get_global_rect().has_point(get_global_mouse_position()):
+		var cell := _view.position_to_cell(_view.get_local_mouse_position())
+		if cell.x >= 0:
+			_drag_target_cell = cell - _drag_offset
+	_view.preview_cell = _drag_target_cell
+	_view.queue_redraw()
+
+
+func drop_at(cell: Vector2i) -> void:
+	if _drag_stack == null:
+		return
+	if cell.x >= 0 and cell.y >= 0:
 		_view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
 	_cancel_drag()
 
@@ -125,8 +148,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _cancel_drag() -> void:
 	_drag_stack = null
+	_drag_offset = Vector2i.ZERO
+	_drag_target_cell = Vector2i(-1, -1)
 	if _ghost != null:
 		_ghost.clear()
 	_view.drag_stack = null
 	_view.drag_source = null
+	_view.preview_cell = Vector2i(-1, -1)
 	_view.queue_redraw()

@@ -24,6 +24,13 @@ var player_inventory: PlayerInventory = null
 var _drag_stack: ItemStack = null
 var _drag_source: InventoryGridView = null
 
+## Um wie viele Felder der Anfasspunkt von der Ecke des Gegenstands abweicht.
+var _drag_offset: Vector2i = Vector2i.ZERO
+
+## Wo der Gegenstand gerade landen wuerde. Jeden Frame neu bestimmt.
+var _drag_target: InventoryGridView = null
+var _drag_target_cell: Vector2i = Vector2i(-1, -1)
+
 @onready var _container_view: InventoryGridView = $Layout/Columns/Left/ContainerView
 @onready var _player_view: InventoryGridView = $Layout/Columns/Right/PlayerView
 @onready var _container_title: Label = $Layout/Columns/Left/ContainerTitle
@@ -35,10 +42,13 @@ var _drag_source: InventoryGridView = null
 
 func _ready() -> void:
 	hide()
+	# cell_released wird bewusst NICHT verwendet: Godot schickt das Loslassen
+	# immer an das Control, auf dem gedrueckt wurde. Beim Ziehen von der Kiste
+	# ins Inventar kam es also nie beim Inventar an. Das Ziel bestimmt deshalb
+	# das Fenster selbst anhand der Zeigerposition.
 	for view in [_container_view, _player_view]:
 		view.item_pressed.connect(_on_item_pressed)
 		view.item_double_clicked.connect(_on_item_double_clicked)
-		view.cell_released.connect(_on_cell_released)
 
 
 ## Öffnet das Fenster für eine Kiste.
@@ -81,11 +91,10 @@ func _process(_delta: float) -> void:
 	if not visible:
 		return
 
-	# Wer neben den Rastern loslaesst, bekommt sonst kein Ereignis — der
-	# Gegenstand haenge dann unsichtbar am Zeiger fest. Eingaben laufen vor
-	# _process, ein gueltiges Ablegen ist hier also schon erledigt.
-	if _drag_stack != null and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		_cancel_drag()
+	if _drag_stack != null:
+		_update_drag_target()
+		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			drop_at(_drag_target, _drag_target_cell)
 
 	if container != null:
 		_update_status()
@@ -115,24 +124,53 @@ func _update_status() -> void:
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 	_drag_stack = stack
 	_drag_source = view
-	_ghost.show_stack(stack)
+
+	# Anfasspunkt merken, damit der Gegenstand nicht zur Ecke springt.
+	var origin := view.grid.get_position(stack.instance_id)
+	var local := view.get_local_mouse_position()
+	var grabbed := view.position_to_cell(local)
+	_drag_offset = grabbed - origin if grabbed.x >= 0 and origin.x >= 0 else Vector2i.ZERO
+	var pixel_offset := local - view.cell_to_position(origin) if origin.x >= 0 else Vector2.ZERO
+
+	_ghost.show_stack(stack, pixel_offset)
 	for v in [_container_view, _player_view]:
 		v.drag_stack = stack
 		v.drag_source = view
+		v.preview_cell = Vector2i(-1, -1)
 		v.queue_redraw()
 
 
-func _on_cell_released(cell: Vector2i, view: InventoryGridView) -> void:
+## Sucht jeden Frame das Raster unter dem Zeiger und rechnet aus, wo der
+## Gegenstand dort landen wuerde.
+func _update_drag_target() -> void:
+	_drag_target = null
+	_drag_target_cell = Vector2i(-1, -1)
+
+	var mouse := get_global_mouse_position()
+	for v: InventoryGridView in [_container_view, _player_view]:
+		if not v.get_global_rect().has_point(mouse):
+			continue
+		var cell := v.position_to_cell(v.get_local_mouse_position())
+		if cell.x >= 0:
+			_drag_target = v
+			_drag_target_cell = cell - _drag_offset
+		break
+
+	for v: InventoryGridView in [_container_view, _player_view]:
+		v.preview_cell = _drag_target_cell if v == _drag_target else Vector2i(-1, -1)
+		v.queue_redraw()
+
+
+## Legt den gezogenen Gegenstand ab. Ohne gueltiges Ziel bleibt er, wo er war.
+func drop_at(target: InventoryGridView, cell: Vector2i) -> void:
 	if _drag_stack == null:
 		return
-	if cell.x < 0:
-		_cancel_drag()
-		return
 
-	if view == _drag_source:
-		_move_within(view, cell)
-	else:
-		_move_between(view, cell)
+	if target != null and cell.x >= 0 and cell.y >= 0:
+		if target == _drag_source:
+			_move_within(target, cell)
+		else:
+			_move_between(target, cell)
 
 	_cancel_drag()
 
@@ -193,6 +231,9 @@ func _on_item_double_clicked(stack: ItemStack, view: InventoryGridView) -> void:
 func _cancel_drag() -> void:
 	_drag_stack = null
 	_drag_source = null
+	_drag_target = null
+	_drag_target_cell = Vector2i(-1, -1)
+	_drag_offset = Vector2i.ZERO
 	if _ghost != null:
 		_ghost.clear()
 	for v in [_container_view, _player_view]:
@@ -200,6 +241,7 @@ func _cancel_drag() -> void:
 			continue
 		v.drag_stack = null
 		v.drag_source = null
+		v.preview_cell = Vector2i(-1, -1)
 		v.queue_redraw()
 
 
