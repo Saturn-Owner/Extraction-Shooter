@@ -98,10 +98,19 @@ func _test_rotation() -> void:
 	_check(grid.get_stack_at(1, 4) == rifle, "Feld unten gehört jetzt zum Gewehr")
 	_check(grid.get_stack_at(4, 0) == null, "Feld rechts ist wieder frei")
 
-	# Platte darf sich laut Vorlage nicht drehen.
+	# Ein Rucksack darf sich laut Vorlage nicht drehen — er wird getragen,
+	# nicht verstaut. (Die Schutzplatte war hier frueher das Beispiel; sie
+	# ist inzwischen drehbar, weil sie im Rucksack quer liegen darf.)
+	var pack := ItemStack.create(&"backpack_small")
+	grid.place(pack, 6, 0)
+	_check(not grid.rotate_item(pack.instance_id), "nicht drehbarer Rucksack bleibt ungedreht")
+
+	# Und die Platte muss sich jetzt umgekehrt WIRKLICH drehen lassen.
+	var plate_grid := InventoryGrid.new(6, 6)
 	var plate := ItemStack.create(&"plate_class4_front")
-	grid.place(plate, 6, 0)
-	_check(not grid.rotate_item(plate.instance_id), "nicht drehbare Platte bleibt ungedreht")
+	plate_grid.place(plate, 0, 0)
+	_check(plate_grid.rotate_item(plate.instance_id), "Schutzplatte laesst sich drehen")
+	_check(plate.get_size() == Vector2i(3, 2), "und liegt dann quer (3x2)")
 
 	# Drehen muss scheitern, wenn kein Platz da ist — und dann sauber zurückrollen.
 	var narrow := InventoryGrid.new(5, 2)

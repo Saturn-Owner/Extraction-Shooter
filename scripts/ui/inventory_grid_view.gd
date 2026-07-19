@@ -43,8 +43,12 @@ const COLOR_COUNT := Color(0.86, 0.80, 0.56)
 const COLOR_HIGHLIGHT := Color(0.62, 0.66, 0.72)
 
 ## Wie stark die Seltenheitsfarbe den dunklen Grundton einfaerbt.
-## Niedrig halten: Die Farbe soll einordnen, nicht dominieren.
-const RARITY_TINT := 0.22
+##
+## Hoch: Der GANZE Gegenstand traegt seine Seltenheit, nicht nur ein
+## Streifen am Rand. Man soll eine goldene Flaeche im Raster sehen, ohne
+## hinzuschauen. Der dunkle Grundton bleibt beigemischt, damit das Inventar
+## nicht anfaengt zu leuchten wie ein Beutefenster.
+const RARITY_TINT := 0.78
 
 ## Noch nicht durchsuchte Gegenstände: schwarze Umrisse. Der Spieler sieht
 ## Groesse und Lage, aber nicht, was es ist.
@@ -66,11 +70,16 @@ const REVEAL_DURATION := {
 }
 
 ## Wie weit der Gegenstand beim Auftauchen über seine Größe hinauswächst.
-## Nur bei guten Funden — bei jeder Patrone würde das Raster zappeln.
-const POP_SCALE := 0.16
+##
+## Bewusst sehr klein: Ein deutliches Herausspringen sah aus, als loese sich
+## der Gegenstand aus seinem Feld. Ein guter Fund soll AUFLEUCHTEN, nicht
+## hüpfen — die Aufmerksamkeit kommt jetzt aus dem Schein, nicht aus Bewegung.
+const POP_SCALE := 0.03
 
-## Farbe je Kategorie — nur noch als schmaler Streifen am linken Rand, damit
-## man Munition von Medizin unterscheidet, ohne dass die Flaeche bunt wird.
+## Farbe je Kategorie. Wird derzeit NICHT gezeichnet: Die Flaeche zeigt die
+## Seltenheit, und zwei Farbsysteme nebeneinander machen das Raster unlesbar.
+## Bleibt erhalten, falls die Kategorie spaeter woanders auftauchen soll —
+## etwa als Symbol oder beim Sortieren im Lager.
 const CATEGORY_COLORS := {
 	ItemData.Category.AMMO: Color(0.62, 0.52, 0.30),
 	ItemData.Category.WEAPON: Color(0.44, 0.50, 0.62),
@@ -424,15 +433,12 @@ func _draw_stack(stack: ItemStack) -> void:
 		var pop := sin(PI * progress) * POP_SCALE
 		rect = rect.grow(rect.size.x * pop * 0.5)
 
-	# Dunkler Grundton, leicht in Richtung Seltenheit eingefaerbt.
-	draw_rect(rect, COLOR_ITEM.lerp(rarity_color, RARITY_TINT))
+	# Die ganze Flaeche traegt die Seltenheit.
+	var fill := COLOR_ITEM.lerp(rarity_color, RARITY_TINT)
+	draw_rect(rect, fill)
 
 	if progress >= 0.0:
 		_draw_reveal_glow(rect, rarity_color, progress, data.is_high_value())
-
-	# Schmaler Streifen links: die Kategorie auf einen Blick.
-	var accent: Color = CATEGORY_COLORS.get(data.category, COLOR_ITEM_BORDER)
-	draw_rect(Rect2(rect.position, Vector2(3.0, rect.size.y)), accent)
 
 	var hovered := _hover_stack_id == stack.instance_id
 	draw_rect(rect, COLOR_HIGHLIGHT if hovered else COLOR_ITEM_BORDER, false, 2.0 if hovered else 1.0)
@@ -440,14 +446,28 @@ func _draw_stack(stack: ItemStack) -> void:
 	var font := ThemeDB.fallback_font
 	var font_size := 12
 
+	# Auf goldenem oder rotem Untergrund ist heller Text nicht mehr lesbar.
+	# Die Schrift richtet sich deshalb nach der Helligkeit der Flaeche.
+	var text_color := _readable_on(fill)
+
 	# Name umbrechen, damit er in schmale Gegenstände passt.
 	var text := data.display_name
 	draw_string(font, rect.position + Vector2(4, 14), text,
-		HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 6, font_size, COLOR_TEXT)
+		HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 6, font_size, text_color)
 
 	# Stückzahl unten rechts, wie in Tarkov.
 	if stack.quantity > 1:
 		var count := "x%d" % stack.quantity
 		var width := font.get_string_size(count, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 		draw_string(font, rect.position + Vector2(rect.size.x - width - 4, rect.size.y - 5),
-			count, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, COLOR_COUNT)
+			count, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_color)
+
+
+## Schriftfarbe, die auf diesem Untergrund lesbar bleibt.
+##
+## Die Gewichtung folgt der wahrgenommenen Helligkeit: Gruen wirkt viel
+## heller als Blau, obwohl der Zahlenwert derselbe sein kann. Ohne diese
+## Gewichtung waere Text auf Gold schlecht lesbar und auf Blau unnoetig dunkel.
+static func _readable_on(background: Color) -> Color:
+	var luminance := 0.2126 * background.r + 0.7152 * background.g + 0.0722 * background.b
+	return Color(0.06, 0.06, 0.07) if luminance > 0.45 else COLOR_TEXT
