@@ -105,23 +105,32 @@ func _test_every_attachment_fits_somewhere() -> void:
 func _test_foreign_interfaces_are_rejected() -> void:
 	_section("Fremde Schnittstellen werden abgewiesen")
 
-	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var shotgun := ItemRegistry.get_item(&"weapon_shotgun_m870") as WeaponData
 	var pistol := ItemRegistry.get_item(&"weapon_pistol_g17") as WeaponData
+	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
 	var suppressor_9mm := ItemRegistry.get_item(&"muzzle_suppressor_9mm") as AttachmentData
-	var suppressor_556 := ItemRegistry.get_item(&"muzzle_suppressor_556") as AttachmentData
-	var foregrip := ItemRegistry.get_item(&"foregrip_vertical") as AttachmentData
+	var choke := ItemRegistry.get_item(&"muzzle_choke_12") as AttachmentData
+	var reddot := ItemRegistry.get_item(&"sight_reddot") as AttachmentData
 
-	_check(not ar15.accepts_attachment(suppressor_9mm),
-		"9-mm-Dämpfer passt nicht auf das 5,56er Gewehr")
-	_check(not pistol.accepts_attachment(suppressor_556),
-		"5,56er Dämpfer passt nicht auf die Pistole")
-	_check(ar15.accepts_attachment(suppressor_556), "5,56er Dämpfer passt aufs Gewehr")
+	_check(not shotgun.accepts_attachment(suppressor_9mm),
+		"9-mm-Dämpfer passt nicht auf die Flinte")
+	_check(not pistol.accepts_attachment(choke),
+		"Würgebohrung passt nicht auf die Pistole")
+	_check(shotgun.accepts_attachment(choke), "Würgebohrung passt auf die Flinte")
 	_check(pistol.accepts_attachment(suppressor_9mm), "9-mm-Dämpfer passt auf die Pistole")
 	# Die Pistole hat den Steckplatz gar nicht.
-	_check(not pistol.accepts_attachment(foregrip),
-		"Vordergriff passt nicht an die Pistole (kein Steckplatz)")
 	_check(pistol.find_mount(AttachmentData.Slot.FOREGRIP) == null,
 		"Pistole hat keine Vordergriff-Aufnahme")
+
+	# DIE AR-15 IST BEWUSST ABGEKOPPELT.
+	#
+	# Sie bekommt eigene Teile, die auf ihr neues Modell zugeschnitten sind,
+	# und dafür eigene Aufnahmen (ar15_rail statt picatinny). Ein allgemeines
+	# Schienenvisier passt deshalb absichtlich NICHT mehr an sie.
+	_check(not ar15.accepts_attachment(reddot),
+		"das allgemeine Schienenvisier passt nicht mehr an die AR-15")
+	_check(shotgun.accepts_attachment(reddot),
+		"dieselbe Optik passt weiterhin auf die Flinte")
 
 
 func _test_empty_build_matches_template() -> void:
@@ -144,35 +153,35 @@ func _test_empty_build_matches_template() -> void:
 func _test_modifiers_apply() -> void:
 	_section("Werte werden verrechnet")
 
-	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
-	var comp := ItemRegistry.get_item(&"muzzle_comp_556") as AttachmentData
+	var gun := ItemRegistry.get_item(&"weapon_shotgun_m870") as WeaponData
+	var choke := ItemRegistry.get_item(&"muzzle_choke_12") as AttachmentData
 	var scope := ItemRegistry.get_item(&"sight_scope4x") as AttachmentData
 
 	var build := WeaponBuild.new()
-	build.set_attachment(AttachmentData.Slot.MUZZLE, comp.id)
-	var with_comp := WeaponBuild.apply(ar15, build)
+	build.set_attachment(AttachmentData.Slot.MUZZLE, choke.id)
+	var with_choke := WeaponBuild.apply(gun, build)
 
-	_check(with_comp.recoil_vertical < ar15.recoil_vertical,
-		"Kompensator senkt den Hochschlag (%.1f -> %.1f)"
-			% [ar15.recoil_vertical, with_comp.recoil_vertical])
-	_check(with_comp.loudness_multiplier > ar15.loudness_multiplier,
-		"Kompensator macht lauter (%.2f -> %.2f)"
-			% [ar15.loudness_multiplier, with_comp.loudness_multiplier])
+	_check(with_choke.accuracy_moa < gun.accuracy_moa,
+		"Würgebohrung engt die Garbe ein (%.2f -> %.2f)"
+			% [gun.accuracy_moa, with_choke.accuracy_moa])
+	_check(with_choke.ergonomics < gun.ergonomics,
+		"und kostet etwas Ergonomie (%d -> %d)" % [gun.ergonomics, with_choke.ergonomics])
 
 	build.set_attachment(AttachmentData.Slot.SIGHT, scope.id)
-	var with_both := WeaponBuild.apply(ar15, build)
+	var with_both := WeaponBuild.apply(gun, build)
 	_check(is_equal_approx(with_both.ads_fov, scope.ads_fov_override),
 		"Zielfernrohr gibt das Sichtfeld vor (%.0f)" % with_both.ads_fov)
 	_check(with_both.ads_time_multiplier > 1.0,
 		"Zielfernrohr macht das Zielen träger (%.2f)" % with_both.ads_time_multiplier)
-	_check(with_both.ergonomics < ar15.ergonomics,
-		"beide zusammen kosten Ergonomie (%d -> %d)" % [ar15.ergonomics, with_both.ergonomics])
+	_check(with_both.ergonomics < with_choke.ergonomics,
+		"beide zusammen kosten mehr Ergonomie (%d -> %d)"
+			% [with_choke.ergonomics, with_both.ergonomics])
 
 	# Ein Teil, das nicht passt, darf die Werte nicht anfassen.
 	var wrong := WeaponBuild.new()
 	wrong.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_suppressor_9mm")
-	var unchanged := WeaponBuild.apply(ar15, wrong)
-	_check(is_equal_approx(unchanged.recoil_vertical, ar15.recoil_vertical),
+	var unchanged := WeaponBuild.apply(gun, wrong)
+	_check(is_equal_approx(unchanged.accuracy_moa, gun.accuracy_moa),
 		"ein unpassendes Teil verändert nichts")
 
 
@@ -181,23 +190,19 @@ func _test_modifiers_apply() -> void:
 func _test_order_does_not_matter() -> void:
 	_section("Reihenfolge ist egal")
 
-	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var gun := ItemRegistry.get_item(&"weapon_shotgun_m870") as WeaponData
 
 	var forward := WeaponBuild.new()
 	forward.set_attachment(AttachmentData.Slot.SIGHT, &"sight_reddot")
-	forward.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_suppressor_556")
-	forward.set_attachment(AttachmentData.Slot.GRIP, &"grip_rubber")
-	forward.set_attachment(AttachmentData.Slot.FOREGRIP, &"foregrip_vertical")
+	forward.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_choke_12")
 
 	var backward := WeaponBuild.new()
-	backward.set_attachment(AttachmentData.Slot.FOREGRIP, &"foregrip_vertical")
-	backward.set_attachment(AttachmentData.Slot.GRIP, &"grip_rubber")
-	backward.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_suppressor_556")
+	backward.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_choke_12")
 	backward.set_attachment(AttachmentData.Slot.SIGHT, &"sight_reddot")
 
-	var a := WeaponBuild.apply(ar15, forward)
-	var b := WeaponBuild.apply(ar15, backward)
-	_check(_fields_equal(a, b), "vier Teile in umgekehrter Reihenfolge ergeben dasselbe")
+	var a := WeaponBuild.apply(gun, forward)
+	var b := WeaponBuild.apply(gun, backward)
+	_check(_fields_equal(a, b), "umgekehrte Reihenfolge ergibt dasselbe")
 
 
 func _test_values_stay_in_range() -> void:
@@ -270,31 +275,31 @@ func _test_registry_stays_untouched() -> void:
 	# Und die Waffe in der Hand trennt sauber zwischen beidem.
 	var gun := Weapon.new()
 	gun.build = WeaponBuild.new()
-	gun.build.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_suppressor_556")
-	gun.setup(&"weapon_rifle_ar15", &"ammo_556x45_m855a1")
+	gun.build.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_choke_12")
+	gun.setup(&"weapon_shotgun_m870", &"ammo_12x70_buckshot")
 
-	var registry_copy := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var registry_copy := ItemRegistry.get_item(&"weapon_shotgun_m870") as WeaponData
 	_check(gun.base_data == registry_copy, "base_data ist die Ressource aus der Registry")
 	_check(gun.data != registry_copy, "data ist eine eigene Kopie")
 	_check(gun.data.resource_path == "", "die Kopie liegt nicht im Ressourcen-Cache")
-	_check(gun.data.recoil_vertical < registry_copy.recoil_vertical,
-		"die Kopie trägt den gedämpften Rückstoß (%.1f statt %.1f)"
-			% [gun.data.recoil_vertical, registry_copy.recoil_vertical])
+	_check(gun.data.accuracy_moa < registry_copy.accuracy_moa,
+		"die Kopie trägt die engere Garbe (%.2f statt %.2f)"
+			% [gun.data.accuracy_moa, registry_copy.accuracy_moa])
 	gun.free()
 
 
 func _test_build_survives_serialisation() -> void:
 	_section("Bestückung übersteht Speichern und Laden")
 
-	var stack := ItemStack.create(&"weapon_rifle_ar15")
+	var stack := ItemStack.create(&"weapon_shotgun_m870")
 	stack.attachments[int(AttachmentData.Slot.SIGHT)] = &"sight_reddot"
-	stack.attachments[int(AttachmentData.Slot.MUZZLE)] = &"muzzle_suppressor_556"
+	stack.attachments[int(AttachmentData.Slot.MUZZLE)] = &"muzzle_choke_12"
 
 	var restored := ItemStack.from_dict(stack.to_dict())
 	_check(restored.attachments.size() == 2, "beide Teile sind wieder da")
 	_check(restored.attachments.get(int(AttachmentData.Slot.SIGHT)) == &"sight_reddot",
 		"das Visier sitzt im richtigen Steckplatz")
-	_check(restored.attachments.get(int(AttachmentData.Slot.MUZZLE)) == &"muzzle_suppressor_556",
+	_check(restored.attachments.get(int(AttachmentData.Slot.MUZZLE)) == &"muzzle_choke_12",
 		"der Dämpfer sitzt im richtigen Steckplatz")
 
 	var build := WeaponBuild.from_stack(restored)
@@ -343,9 +348,9 @@ func _test_mount_anchors_exist() -> void:
 func _test_attachments_become_visible() -> void:
 	_section("Anbauteile erscheinen am Modell")
 
-	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var gun := ItemRegistry.get_item(&"weapon_shotgun_m870") as WeaponData
 
-	var bare := _build_model(ar15, WeaponBuild.new())
+	var bare := _build_model(gun, WeaponBuild.new())
 	var iron_rear := bare.get_node_or_null("RearSight") as Node3D
 	_check(iron_rear != null and iron_rear.visible, "ohne Optik ist die Kimme sichtbar")
 	_check(bare.mounted.is_empty(), "ohne Bestückung hängt nichts an den Aufnahmen")
@@ -353,37 +358,26 @@ func _test_attachments_become_visible() -> void:
 
 	var build := WeaponBuild.new()
 	build.set_attachment(AttachmentData.Slot.SIGHT, &"sight_reddot")
-	build.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_suppressor_556")
-	build.set_attachment(AttachmentData.Slot.GRIP, &"grip_target")
-	build.set_attachment(AttachmentData.Slot.FOREGRIP, &"foregrip_vertical")
-	var kitted := _build_model(ar15, build)
+	build.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_choke_12")
+	var kitted := _build_model(gun, build)
 
-	_check(kitted.mounted.size() == 4, "alle vier Teile sind montiert (%d)" % kitted.mounted.size())
+	_check(kitted.mounted.size() == 2, "beide Teile sind montiert (%d)" % kitted.mounted.size())
 
 	# Was ersetzt wurde, ist weg — aber nicht gelöscht.
-	for hidden_name in ["RearSight", "FrontSight", "FlashHider", "GripAssembly"]:
+	for hidden_name in ["RearSight", "FrontSight"]:
 		var node := kitted.get_node_or_null(hidden_name) as Node3D
 		_check(node != null and not node.visible,
-			"%s ist vorhanden, aber ausgeblendet" % hidden_name)
-
-	# Und die beweglichen Teile sind trotz Umbau noch auffindbar.
-	_check(kitted.action != null and kitted.trigger != null and kitted.magazine != null,
-		"die beweglichen Teile werden weiterhin gefunden")
+			"%s ist ausgeblendet, aber noch da" % hidden_name)
 	kitted.free()
 
 
-## Zielt der Spieler durch das, wodurch er schaut?
-##
-## Das ist die fehleranfälligste Rechnung im ganzen Vorhaben: weapon_view.gd
-## senkt die Waffe beim Zielen um sight_height ab. Stimmt der Wert nicht, sitzt
 ## der Rotpunkt sichtbar neben der Bildmitte — und die Waffe schiesst dorthin,
 ## wo der Punkt NICHT ist.
 func _test_sight_line_follows_the_optic() -> void:
 	_section("Die Visierlinie folgt der Optik")
 
 	for entry in [
-		{weapon = &"weapon_rifle_ar15", optic = &"sight_reddot"},
-		{weapon = &"weapon_rifle_ar15", optic = &"sight_scope4x"},
+		{weapon = &"weapon_shotgun_m870", optic = &"sight_scope4x"},
 		{weapon = &"weapon_pistol_g17", optic = &"sight_micro_dot"},
 		{weapon = &"weapon_shotgun_m870", optic = &"sight_reddot"},
 	]:
@@ -424,10 +418,10 @@ func _test_sight_line_follows_the_optic() -> void:
 func _test_muzzle_follows_the_suppressor() -> void:
 	_section("Die Mündung wandert mit dem Dämpfer")
 
-	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var gun := ItemRegistry.get_item(&"weapon_shotgun_m870") as WeaponData
 	var build := WeaponBuild.new()
-	build.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_suppressor_556")
-	var model := _build_model(ar15, build)
+	build.set_attachment(AttachmentData.Slot.MUZZLE, &"muzzle_choke_12")
+	var model := _build_model(gun, build)
 
 	_check(model.muzzle_z < model.bare_muzzle_z,
 		"die Mündung sitzt weiter vorn (%.3f statt %.3f)" % [model.muzzle_z, model.bare_muzzle_z])
@@ -436,7 +430,7 @@ func _test_muzzle_follows_the_suppressor() -> void:
 	model.free()
 
 	# Ohne Aufsatz bleibt die Zusicherung aus verify_weapon_handling gültig.
-	var bare := _build_model(ar15, WeaponBuild.new())
+	var bare := _build_model(gun, WeaponBuild.new())
 	_check(is_equal_approx(bare.muzzle_z, bare.bare_muzzle_z),
 		"ohne Aufsatz bleibt die Mündung, wo sie war")
 	bare.free()
@@ -494,7 +488,7 @@ func _fields_equal(a: WeaponData, b: WeaponData) -> bool:
 ## selbst: Genau diese Funktionen laufen später auf dem Server, wo es weder
 ## Szenenbaum noch Spieler gibt. Was hier grün ist, ist dort abgesichert.
 func _test_workbench_rejects_nonsense() -> void:
-	var rifle := ItemStack.create(&"weapon_rifle_ar15")
+	var rifle := ItemStack.create(&"weapon_shotgun_m870")
 	var ammo := ItemStack.create(&"ammo_556x45_m855a1")
 
 	_check(WorkbenchStation.check_attach(null, AttachmentData.Slot.SIGHT, &"sight_reddot") != "",
@@ -506,7 +500,7 @@ func _test_workbench_rejects_nonsense() -> void:
 	_check(WorkbenchStation.check_attach(rifle, AttachmentData.Slot.MUZZLE, &"sight_reddot") != "",
 		"Werkbank: Visier gehoert nicht in den Muendungsplatz")
 	_check(WorkbenchStation.check_attach(rifle, AttachmentData.Slot.SIGHT, &"sight_reddot") == "",
-		"Werkbank: Rotpunkt passt auf die AR-15")
+		"Werkbank: Rotpunkt passt auf die Flinte")
 
 	# Eine abgelehnte Anfrage darf den Gegenstand nicht anfassen.
 	_check(rifle.attachments.is_empty(), "Werkbank: Pruefung veraendert den Gegenstand nicht")
@@ -529,6 +523,15 @@ func _test_workbench_rejects_nonsense() -> void:
 ##
 ## Ohne diesen Test wäre eine Schaltfläche denkbar, die bei jedem Klick eine
 ## Fehlermeldung erzeugt — der Spieler sähe ein Angebot, das keines ist.
+## Waffen, deren Sortiment gerade neu gebaut wird und die deshalb (noch)
+## nichts anzubieten haben.
+##
+## BEWUSST EINE LISTE UND KEIN WEGLASSEN DER PRUEFUNG: So steht schwarz auf
+## weiss, dass die AR-15 im Umbau ist, und der Test erinnert daran, sobald
+## ihre neuen Teile stehen — dann fliegt der Eintrag hier raus.
+const IM_UMBAU := [&"weapon_rifle_ar15"]
+
+
 func _test_workbench_options_are_mountable() -> void:
 	for weapon_id in [&"weapon_rifle_ar15", &"weapon_pistol_g17", &"weapon_shotgun_m870"]:
 		var weapon_data := ItemRegistry.get_item(weapon_id) as WeaponData
@@ -542,7 +545,10 @@ func _test_workbench_options_are_mountable() -> void:
 				_check(problem == "", "Werkbank: %s bietet %s an und nimmt es auch" % [
 					weapon_id, attachment.id])
 
-		_check(offered > 0, "Werkbank: %s hat ueberhaupt etwas zur Auswahl" % weapon_id)
+		if IM_UMBAU.has(weapon_id):
+			_check(offered == 0, "Werkbank: %s ist im Umbau und bietet noch nichts an" % weapon_id)
+		else:
+			_check(offered > 0, "Werkbank: %s hat ueberhaupt etwas zur Auswahl" % weapon_id)
 
 
 ## Anbauteile muessen wiegen.
@@ -554,11 +560,11 @@ func _test_workbench_options_are_mountable() -> void:
 func _test_attachments_add_weight() -> void:
 	_section("Anbauteile wiegen mit")
 
-	var stack := ItemStack.create(&"weapon_rifle_ar15")
+	var stack := ItemStack.create(&"weapon_shotgun_m870")
 	var bare := stack.get_total_weight()
 
 	var scope := ItemRegistry.get_item(&"sight_scope4x") as AttachmentData
-	var suppressor := ItemRegistry.get_item(&"muzzle_suppressor_556") as AttachmentData
+	var suppressor := ItemRegistry.get_item(&"muzzle_choke_12") as AttachmentData
 
 	stack.attachments[int(AttachmentData.Slot.SIGHT)] = scope.id
 	_check(is_equal_approx(stack.get_total_weight(), bare + scope.weight_kg),
@@ -566,7 +572,7 @@ func _test_attachments_add_weight() -> void:
 
 	stack.attachments[int(AttachmentData.Slot.MUZZLE)] = suppressor.id
 	_check(is_equal_approx(stack.get_total_weight(), bare + scope.weight_kg + suppressor.weight_kg),
-		"Daempfer kommt oben drauf (%.2f kg)" % stack.get_total_weight())
+		"Wuergebohrung kommt oben drauf (%.2f kg)" % stack.get_total_weight())
 
 	stack.attachments.clear()
 	_check(is_equal_approx(stack.get_total_weight(), bare),

@@ -209,7 +209,7 @@ func _test_preview(station: WorkbenchStation, player: PlayerController) -> void:
 			% [weapon_data.display_name, shown])
 
 	# Bestückung anbauen und schauen, ob die Vorschau mehr Teile zeigt.
-	var rifle := _find_carried(player, &"weapon_rifle_ar15")
+	var rifle := _find_carried(player, &"weapon_shotgun_m870")
 	if rifle == null:
 		return
 	ui._on_weapon_chosen(rifle)
@@ -228,20 +228,20 @@ func _test_preview(station: WorkbenchStation, player: PlayerController) -> void:
 ## er nichts an, kann man nur raten, ob ein Teil hilft.
 func _test_comparison(station: WorkbenchStation) -> void:
 	var ui := station.get_node_or_null("WerkbankUI") as WorkbenchUI
-	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
-	var stack := ItemStack.create(&"weapon_rifle_ar15")
+	var gun := ItemRegistry.get_item(&"weapon_shotgun_m870") as WeaponData
+	var stack := ItemStack.create(&"weapon_shotgun_m870")
 
 	ui._stack = stack
 	ui._slot = int(AttachmentData.Slot.MUZZLE)
 
 	# Ohne Zeigen kein Vergleich.
 	ui._on_candidate_cleared()
-	_check(ui._candidate_data(ar15) == null, "ohne Zeigen wird nichts verglichen")
+	_check(ui._candidate_data(gun) == null, "ohne Zeigen wird nichts verglichen")
 
-	ui._on_candidate(&"muzzle_comp_556")
-	var with_comp := ui._candidate_data(ar15)
-	_check(with_comp != null and with_comp.recoil_vertical < ar15.recoil_vertical,
-		"Zeigen auf den Kompensator zeigt weniger Rückstoss")
+	ui._on_candidate(&"muzzle_choke_12")
+	var with_choke := ui._candidate_data(gun)
+	_check(with_choke != null and with_choke.accuracy_moa < gun.accuracy_moa,
+		"Zeigen auf die Würgebohrung zeigt eine engere Garbe")
 
 	# Zeigen darf nichts anbauen — sonst würde der Vergleich zur Änderung.
 	_check(stack.attachments.is_empty(), "Zeigen baut nichts an")
