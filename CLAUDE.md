@@ -54,7 +54,7 @@ Der Client entscheidet **nie** selbst, dass ein Item ins Inventar wandert, ein
 Gegner stirbt oder Geld gutgeschrieben wird. Er fragt und wartet auf Antwort.
 Ohne diese Disziplin wird der spätere Multiplayer-Umbau ein Rewrite.
 
-### 3. Godot 4.5 Standard-Build
+### 3. Godot Standard-Build genügt
 
 Karten bleiben unter ~4 km Abstand vom Weltursprung. Damit reichen 32-bit-Floats.
 Kein `precision=double`, kein Floating Origin. Falls Karten je größer werden
@@ -67,17 +67,33 @@ Kugel durch die Platte kommt. Rüstung hat **kein** Stufensystem: Platten decken
 nur Flächen ab, nutzen sich ab, und starke Munition geht durch. Der Spieler soll
 jederzeit sterblich bleiben.
 
-## Grenzen von Claude in diesem Projekt
+## Was Claude testen kann — und was nicht
 
-Damit keine falschen Erwartungen entstehen — Claude kann in diesem Projekt **nicht**:
+Claude **kann** Godot im Headless-Modus über die Kommandozeile ausführen und damit
+selbstständig prüfen, ob Code funktioniert:
 
-- Godot starten, Szenen testen oder beurteilen, wie sich etwas anfühlt
+```
+Godot_v4.7.1-stable_win64_console.exe --headless --path <projekt> --import --quit-after 60
+Godot_v4.7.1-stable_win64_console.exe --headless --path <projekt> --script res://mein_test.gd
+```
+
+Damit lassen sich Ladefehler, Parserfehler, `.tres`-Formatfehler und Rechenlogik
+(Ballistik, Plattenwerte, Inventar-Belegung) ohne Menschen verifizieren.
+**Claude soll das nach jeder Änderung selbst tun**, statt Tests an euch abzuschieben.
+
+Claude kann **nicht**:
+
+- beurteilen, wie sich Bewegung, Schießen oder Trefferfeedback *anfühlt*
+- sehen, wie etwas aussieht (Grafik, UI-Layout, Animationen)
 - 3D-Modelle, Texturen, Animationen oder Sounds erstellen
 - Balancing bewerten, ohne dass jemand gespielt hat
 - den Server betreiben oder überwachen
 
-**Nach jeder Änderung muss ein Mensch im Editor testen.** Claude schreibt Code
-und erklärt ihn; ob es Spaß macht, entscheidet ihr.
+**Alles, was mit Gefühl, Optik oder Spielspaß zu tun hat, muss ein Mensch testen.**
+
+Hinweis: Ist die installierte Godot-Version neuer als die im Projekt eingetragene,
+NICHT direkt im Repo testen — Godot konvertiert das Projekt sonst und der andere
+Entwickler kann es nicht mehr öffnen. Stattdessen auf einer Kopie testen.
 
 ## Git-Workflow (WICHTIG)
 
@@ -119,5 +135,5 @@ und erklärt ihn; ob es Spaß macht, entscheidet ihr.
 ## Arbeitsweise mit Claude
 
 - Claude soll vor Änderungen an bestehendem Code die betroffenen Dateien lesen und sich an den vorhandenen Stil halten.
-- Nach größeren Änderungen kurz zusammenfassen, was getestet werden muss — Godot-Szenen kann Claude nicht selbst starten, das Testen im Editor übernimmt der Mensch.
+- Nach größeren Änderungen selbst per Headless-Godot prüfen, dass alles lädt und rechnet (siehe oben), und danach kurz zusammenfassen, was noch ein Mensch im Editor testen muss — nämlich alles, was Gefühl, Optik oder Spielspaß betrifft.
 - Bei Architektur-Entscheidungen (z. B. neues System wie Inventar, Loot, Netzwerk) erst einen kurzen Plan vorschlagen, bevor viel Code geschrieben wird.
