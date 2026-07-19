@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/character_window.gd" id="1_character"]
 
@@ -13,10 +13,14 @@ corner_radius_top_left = 4
 corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
-content_margin_left = 20.0
-content_margin_top = 16.0
-content_margin_right = 20.0
-content_margin_bottom = 16.0
+content_margin_left = 24.0
+content_margin_top = 18.0
+content_margin_right = 24.0
+content_margin_bottom = 18.0
+
+[sub_resource type="StyleBoxLine" id="Style_trenner"]
+color = Color(0.2, 0.215, 0.235, 1)
+thickness = 1
 
 [node name="CharacterWindow" type="Control"]
 anchors_preset = 15
@@ -29,7 +33,7 @@ script = ExtResource("1_character")
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0, 0, 0, 0.72)
+color = Color(0, 0, 0, 0.78)
 mouse_filter = 2
 
 [node name="Layout" type="PanelContainer" parent="."]
@@ -38,120 +42,70 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -450.0
-offset_top = -280.0
-offset_right = 450.0
-offset_bottom = 280.0
+offset_left = -420.0
+offset_top = -320.0
+offset_right = 420.0
+offset_bottom = 320.0
 theme_override_styles/panel = SubResource("Style_panel")
 
-[node name="Spalten" type="HBoxContainer" parent="Layout"]
-theme_override_constants/separation = 32
+[node name="Inhalt" type="VBoxContainer" parent="Layout"]
+theme_override_constants/separation = 14
 
-[node name="Koerper" type="VBoxContainer" parent="Layout/Spalten"]
-theme_override_constants/separation = 10
+[node name="Reiter" type="HBoxContainer" parent="Layout/Inhalt"]
+theme_override_constants/separation = 4
 
-[node name="Titel" type="Label" parent="Layout/Spalten/Koerper"]
-text = "Koerper"
-theme_override_font_sizes/font_size = 18
-
-[node name="Schema" type="Control" parent="Layout/Spalten/Koerper"]
-custom_minimum_size = Vector2(240, 400)
-mouse_filter = 1
-
-[node name="Detail" type="Label" parent="Layout/Spalten/Koerper"]
-custom_minimum_size = Vector2(240, 46)
-text = "..."
-theme_override_colors/font_color = Color(0.76, 0.78, 0.8, 1)
-theme_override_font_sizes/font_size = 12
-autowrap_mode = 3
-
-[node name="Ausruestung" type="VBoxContainer" parent="Layout/Spalten"]
-theme_override_constants/separation = 10
-
-[node name="Titel" type="Label" parent="Layout/Spalten/Ausruestung"]
+[node name="Ausruestung" type="Button" parent="Layout/Inhalt/Reiter"]
+custom_minimum_size = Vector2(170, 34)
+toggle_mode = true
+button_pressed = true
 text = "Ausruestung"
-theme_override_font_sizes/font_size = 18
 
-[node name="Hinweis" type="Label" parent="Layout/Spalten/Ausruestung"]
-text = "Klicken legt ab"
-theme_override_colors/font_color = Color(0.55, 0.58, 0.62, 1)
-theme_override_font_sizes/font_size = 11
+[node name="Gesundheit" type="Button" parent="Layout/Inhalt/Reiter"]
+custom_minimum_size = Vector2(170, 34)
+toggle_mode = true
+text = "Gesundheit"
 
-[node name="Slots" type="VBoxContainer" parent="Layout/Spalten/Ausruestung"]
+[node name="Trenner" type="HSeparator" parent="Layout/Inhalt"]
+theme_override_styles/separator = SubResource("Style_trenner")
+
+[node name="Mitte" type="HBoxContainer" parent="Layout/Inhalt"]
+size_flags_vertical = 3
+theme_override_constants/separation = 24
+alignment = 1
+
+[node name="Links" type="VBoxContainer" parent="Layout/Inhalt/Mitte"]
+theme_override_constants/separation = 10
+
+[node name="Figur" type="VBoxContainer" parent="Layout/Inhalt/Mitte"]
 theme_override_constants/separation = 6
 
-[node name="Zustand" type="VBoxContainer" parent="Layout/Spalten"]
-theme_override_constants/separation = 12
+[node name="Zeichnung" type="Control" parent="Layout/Inhalt/Mitte/Figur"]
+custom_minimum_size = Vector2(250, 370)
+size_flags_vertical = 3
+mouse_filter = 1
 
-[node name="Titel" type="Label" parent="Layout/Spalten/Zustand"]
-text = "Zustand"
-theme_override_font_sizes/font_size = 18
-
-[node name="GesamtHP" type="Label" parent="Layout/Spalten/Zustand"]
-text = "Gesamt:  -"
-theme_override_font_sizes/font_size = 14
-
-[node name="Hunger" type="VBoxContainer" parent="Layout/Spalten/Zustand"]
-theme_override_constants/separation = 3
-
-[node name="Titel" type="Label" parent="Layout/Spalten/Zustand/Hunger"]
-text = "Hunger"
-theme_override_font_sizes/font_size = 12
-
-[node name="Balken" type="ProgressBar" parent="Layout/Spalten/Zustand/Hunger"]
-custom_minimum_size = Vector2(230, 14)
-max_value = 100.0
-value = 100.0
-show_percentage = false
-
-[node name="Wert" type="Label" parent="Layout/Spalten/Zustand/Hunger"]
-text = "-"
-theme_override_colors/font_color = Color(0.7, 0.74, 0.78, 1)
+[node name="Hinweis" type="Label" parent="Layout/Inhalt/Mitte/Figur"]
+custom_minimum_size = Vector2(250, 16)
+theme_override_colors/font_color = Color(0.55, 0.58, 0.62, 1)
 theme_override_font_sizes/font_size = 11
+horizontal_alignment = 1
 
-[node name="Durst" type="VBoxContainer" parent="Layout/Spalten/Zustand"]
-theme_override_constants/separation = 3
+[node name="Rechts" type="VBoxContainer" parent="Layout/Inhalt/Mitte"]
+theme_override_constants/separation = 10
 
-[node name="Titel" type="Label" parent="Layout/Spalten/Zustand/Durst"]
-text = "Durst"
-theme_override_font_sizes/font_size = 12
-
-[node name="Balken" type="ProgressBar" parent="Layout/Spalten/Zustand/Durst"]
-custom_minimum_size = Vector2(230, 14)
-max_value = 100.0
-value = 100.0
-show_percentage = false
-
-[node name="Wert" type="Label" parent="Layout/Spalten/Zustand/Durst"]
-text = "-"
-theme_override_colors/font_color = Color(0.7, 0.74, 0.78, 1)
-theme_override_font_sizes/font_size = 11
-
-[node name="Kaelte" type="VBoxContainer" parent="Layout/Spalten/Zustand"]
-theme_override_constants/separation = 3
-
-[node name="Titel" type="Label" parent="Layout/Spalten/Zustand/Kaelte"]
-text = "Koerpertemperatur"
-theme_override_font_sizes/font_size = 12
-
-[node name="Balken" type="ProgressBar" parent="Layout/Spalten/Zustand/Kaelte"]
-custom_minimum_size = Vector2(230, 14)
-max_value = 100.0
-value = 100.0
-show_percentage = false
-
-[node name="Wert" type="Label" parent="Layout/Spalten/Zustand/Kaelte"]
-text = "-"
-theme_override_colors/font_color = Color(0.7, 0.74, 0.78, 1)
-theme_override_font_sizes/font_size = 11
-
-[node name="Auswirkung" type="Label" parent="Layout/Spalten/Zustand"]
-custom_minimum_size = Vector2(230, 90)
+[node name="Auswirkung" type="Label" parent="Layout/Inhalt"]
+custom_minimum_size = Vector2(0, 104)
 text = "..."
 theme_override_colors/font_color = Color(0.82, 0.72, 0.5, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_font_sizes/font_size = 12
 autowrap_mode = 3
 vertical_alignment = 0
+
+[node name="Trenner2" type="HSeparator" parent="Layout/Inhalt"]
+theme_override_styles/separator = SubResource("Style_trenner")
+
+[node name="Werte" type="HBoxContainer" parent="Layout/Inhalt"]
+theme_override_constants/separation = 40
 
 [node name="Fusszeile" type="Label" parent="."]
 anchors_preset = 7
@@ -160,8 +114,8 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -300.0
-offset_top = -60.0
+offset_top = -46.0
 offset_right = 300.0
-offset_bottom = -30.0
-text = "[C] / [Esc] schliessen"
+offset_bottom = -22.0
+text = "[C] / [Esc] schliessen     Klick auf einen Platz legt ab"
 horizontal_alignment = 1

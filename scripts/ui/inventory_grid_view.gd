@@ -50,10 +50,17 @@ const COLOR_HIGHLIGHT := Color(0.62, 0.66, 0.72)
 ## nicht anfaengt zu leuchten wie ein Beutefenster.
 const RARITY_TINT := 0.78
 
-## Noch nicht durchsuchte Gegenstände: schwarze Umrisse. Der Spieler sieht
-## Groesse und Lage, aber nicht, was es ist.
-const COLOR_HIDDEN := Color(0.03, 0.03, 0.04, 0.97)
+## Noch nicht durchsuchte Gegenstände: dunkle Flächen mit Schraffur.
+## Der Spieler sieht Groesse und Lage, aber nicht, was es ist.
+const COLOR_HIDDEN := Color(0.055, 0.058, 0.065, 0.97)
 const COLOR_HIDDEN_BORDER := Color(0.22, 0.23, 0.26)
+
+## Die diagonalen Striche auf allem Unbesuchten. Sie sagen "hier war noch
+## niemand" auf einen Blick — deutlicher als eine bloss dunklere Fläche,
+## die man auch für ein leeres Feld halten könnte.
+const COLOR_HATCH := Color(0.135, 0.142, 0.155)
+const HATCH_SPACING := 7.0
+const HATCH_WIDTH := 1.0
 
 ## Der Umriss, der gerade durchsucht wird.
 const COLOR_HIDDEN_ACTIVE_BORDER := Color(0.85, 0.78, 0.45)
@@ -408,6 +415,8 @@ func _draw_hidden_stack(stack: ItemStack) -> void:
 		rect = rect.grow(rect.size.x * HOVER_GROW * hover * 0.5)
 
 	draw_rect(rect, COLOR_HIDDEN)
+	_draw_hatch(rect, COLOR_HATCH)
+	_draw_magnifier(rect, COLOR_HATCH.lerp(COLOR_TEXT, 0.35 + 0.5 * hover))
 
 	var is_current := container != null and container.get_current_target() == stack
 	if is_current and container.is_searching():
@@ -418,12 +427,57 @@ func _draw_hidden_stack(stack: ItemStack) -> void:
 		draw_rect(rect, COLOR_HIDDEN_BORDER, false, 1.0)
 
 
+## Diagonale Striche innerhalb eines Rechtecks.
+##
+## Godot kennt keine Schraffur und `draw_line` beschneidet nicht. Jede Linie
+## wird deshalb selbst am Rechteck abgeschnitten: Die Gerade läuft in
+## Richtung (1,1), und aus den Grenzen in x und y ergibt sich der Abschnitt,
+## der wirklich innen liegt.
+func _draw_hatch(rect: Rect2, color: Color, spacing: float = HATCH_SPACING) -> void:
+	var offset := -rect.size.y
+	while offset < rect.size.x:
+		var start := Vector2(rect.position.x + offset, rect.position.y)
+
+		# Gültiger Bereich entlang der Geraden, getrennt für x und y.
+		var t_min := maxf(rect.position.x - start.x, 0.0)
+		var t_max := minf(rect.position.x + rect.size.x - start.x, rect.size.y)
+
+		if t_max > t_min:
+			draw_line(
+				start + Vector2(t_min, t_min),
+				start + Vector2(t_max, t_max),
+				color, HATCH_WIDTH
+			)
+		offset += spacing
+
+
+## Eine kleine Lupe in der Mitte — dasselbe Zeichen wie auf der Kiste selbst.
+## Nur wenn genug Platz ist: Auf einem einzelnen Feld wäre sie nur ein Fleck.
+func _draw_magnifier(rect: Rect2, color: Color) -> void:
+	var radius := minf(rect.size.x, rect.size.y) * 0.16
+	if radius < 5.0:
+		return
+
+	var center := rect.position + rect.size * 0.5 - Vector2(radius * 0.3, radius * 0.3)
+	draw_arc(center, radius, 0.0, TAU, 20, color, 1.6)
+
+	var diagonal := Vector2(0.7071, 0.7071)
+	draw_line(center + diagonal * radius, center + diagonal * (radius * 2.1), color, 1.6)
+
+
 func _draw_cells() -> void:
+	# Solange die Kiste nicht fertig durchsucht ist, liegt ueber dem ganzen
+	# Raster eine Schraffur: "Hier war noch niemand." Erst wenn alles
+	# gefunden ist, wird daraus ein normales Inventar.
+	var unsearched := container != null and not container.is_fully_searched
+
 	for y in range(grid.height):
 		for x in range(grid.width):
 			var pos := cell_to_position(Vector2i(x, y))
 			var rect := Rect2(pos, Vector2(CELL_SIZE, CELL_SIZE))
 			draw_rect(rect, COLOR_CELL)
+			if unsearched:
+				_draw_hatch(rect, COLOR_HATCH.darkened(0.35), HATCH_SPACING * 1.6)
 			draw_rect(rect, COLOR_CELL_BORDER, false, 1.0)
 
 

@@ -319,6 +319,29 @@ func _test_scene_wiring() -> void:
 	if window != null:
 		var node: Node = window.instantiate()
 		_check(node is CharacterWindow, "character_window.gd laedt fehlerfrei")
+
+		# Die Knotenpfade muessen stimmen. Ein Tippfehler faellt sonst erst
+		# auf, wenn jemand im Spiel C drueckt — und dann als Nullzugriff.
+		for path in ["Layout/Inhalt/Reiter/Ausruestung", "Layout/Inhalt/Reiter/Gesundheit",
+				"Layout/Inhalt/Mitte/Links", "Layout/Inhalt/Mitte/Rechts",
+				"Layout/Inhalt/Mitte/Figur/Zeichnung", "Layout/Inhalt/Mitte/Figur/Hinweis",
+				"Layout/Inhalt/Werte", "Layout/Inhalt/Auswirkung"]:
+			_check(node.get_node_or_null(path) != null, "Knoten vorhanden: %s" % path)
+
+		# Und es muss sich mit einem echten Spieler oeffnen lassen, ohne zu
+		# stolpern — inklusive einmal Aufbauen der Plaetze und Werte.
+		root.add_child(node)
+		await process_frame
+		var character := node as CharacterWindow
+		character.open_for(player)
+		await process_frame
+		_check(character.is_open(), "das Fenster oeffnet sich")
+		_check(character.get_node("Layout/Inhalt/Werte").get_child_count() > 0,
+			"die Werteleiste ist gefuellt")
+		character.close()
+		_check(not character.is_open(), "und laesst sich schliessen")
+
+		root.remove_child(node)
 		node.free()
 
 	var level: PackedScene = load("res://scenes/levels/raid_eisstadt.tscn")
