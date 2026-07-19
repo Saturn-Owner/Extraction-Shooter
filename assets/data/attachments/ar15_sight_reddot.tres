@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_data"]
+[ext_resource type="Script" path="res://scripts/attachments/ar15_red_dot.gd" id="2_view"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"ar15_sight_reddot"
+display_name = "AR-15 Rotpunktvisier"
+description = "Geschlossenes Rotpunktvisier fuer die Schiene. Schnell auf kurze Distanz."
+category = 11
+weight_kg = 0.16
+grid_width = 1
+grid_height = 1
+slot = 0
+interface_tag = &"ar15_rail"
+viewmodel_part = ExtResource("2_view")
+ergonomics_delta = 3
+ads_time_mult = 0.9
+ads_spread_mult = 0.85
+ads_fov_override = 46.0

@@ -8,21 +8,12 @@
 script = ExtResource("1_r17ar")
 interface_tag = &"ar15_rail"
 anchor = &"MountSight"
-hides = Array[StringName]([&"RearSight", &"FrontSight"])
 
 [sub_resource type="Resource" id="Resource_pcn7f"]
 script = ExtResource("1_r17ar")
 slot = 1
 interface_tag = &"ar15_thread"
 anchor = &"MountMuzzle"
-hides = Array[StringName]([&"FlashHider", &"HiderRingFront", &"HiderRingRear"])
-
-[sub_resource type="Resource" id="Resource_y57jr"]
-script = ExtResource("1_r17ar")
-slot = 2
-interface_tag = &"ar15_grip"
-anchor = &"MountGrip"
-hides = Array[StringName]([&"GripAssembly", &"GripTang"])
 
 [sub_resource type="Resource" id="Resource_iql5q"]
 script = ExtResource("1_r17ar")
@@ -38,7 +29,7 @@ recoil_horizontal = 42.0
 ergonomics = 54
 accuracy_moa = 2.4
 viewmodel = ExtResource("2_view")
-mounts = Array[ExtResource("1_r17ar")]([SubResource("Resource_r17ar"), SubResource("Resource_pcn7f"), SubResource("Resource_y57jr"), SubResource("Resource_iql5q")])
+mounts = Array[ExtResource("1_r17ar")]([SubResource("Resource_r17ar"), SubResource("Resource_pcn7f"), SubResource("Resource_iql5q")])
 id = &"weapon_rifle_ar15"
 display_name = "AR-15"
 description = "Praezise und angenehm zu schiessen. Empfindlicher gegen Dreck als eine Kalaschnikow."

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_data"]
+[ext_resource type="Script" path="res://scripts/attachments/ar15_holo.gd" id="2_view"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"ar15_sight_holo"
+display_name = "AR-15 Holovisier"
+description = "Grosses Sichtfenster, beide Augen offen. Schwerer als der Rotpunkt."
+category = 11
+weight_kg = 0.24
+grid_width = 1
+grid_height = 1
+slot = 0
+interface_tag = &"ar15_rail"
+viewmodel_part = ExtResource("2_view")
+ergonomics_delta = -1
+ads_time_mult = 0.96
+ads_spread_mult = 0.8
+ads_fov_override = 42.0

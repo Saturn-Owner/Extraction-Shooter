@@ -541,8 +541,24 @@ func _check_sight_line(model: WeaponViewmodel, label: String) -> void:
 	var rear := model.get_node_or_null("RearSight") as Node3D
 	var front := model.get_node_or_null("FrontSight") as Node3D
 
+	if rear == null and front == null:
+		# WAFFE OHNE NOTVISIERUNG. Die AR-15 hat seit dem neuen Modell keine
+		# mehr — man zielt ueber die nackte Schiene, bis eine Optik drauf ist.
+		# Das ist eine Entscheidung des Modells, kein Fehler.
+		#
+		# Geprueft wird trotzdem, und zwar das, worauf es dann ankommt: Die
+		# Zielhoehe muss ueber dem Lauf liegen und darf nicht auf null stehen.
+		# Bei sight_height = 0 wuerde weapon_view.gd die Waffe beim Zielen gar
+		# nicht absenken, und der Spieler schoesse ueber alles hinweg.
+		_check(model.sight_height > 0.0,
+			"%s: ohne Notvisierung ist die Zielhoehe trotzdem gesetzt (%.4f)"
+				% [label, model.sight_height])
+		return
+
 	if rear == null or front == null:
-		_check(false, "%s: Kimme und Korn vorhanden" % label)
+		# Nur eines von beiden ist immer ein Fehler: Entweder die Waffe hat
+		# eine Visierung oder sie hat keine.
+		_check(false, "%s: Kimme und Korn entweder beide oder keines" % label)
 		return
 
 	_check(is_equal_approx(rear.position.y, front.position.y),

@@ -91,10 +91,32 @@ Modell spielbar bleibt statt unsichtbar zu sein. Welche Waffen noch daran
 hängen, listet `verify_weapon_handling` bei jedem Lauf auf — die Liste soll
 irgendwann leer sein.
 
-Modelle werden im Code gebaut, nicht als `.tscn`: Szenen lassen sich bei
-Konflikten nicht mergen, und bei zwölf Waffen und zwei Entwicklern wäre das
-eine dauerhafte Konfliktquelle. `tools/render_viewmodel.gd` rendert die
-Modelle in PNGs, damit man sie ansehen kann, ohne das Spiel zu starten.
+Modelle kommen als `.glb` aus Blender — **nie als `.tscn`**. Szenen lassen
+sich bei Konflikten nicht mergen; bei zwölf Waffen und zwei Entwicklern wäre
+das eine dauerhafte Konfliktquelle. Eine `.glb` ist dagegen eine Binärdatei
+wie ein Sound oder eine Textur: Einer bearbeitet sie, sie wird als Ganzes
+ersetzt, fertig. Wo noch kein Modell existiert, wird die Geometrie im Code
+gebaut (`ViewmodelParts`) — das ist der Übergangszustand, nicht das Ziel.
+
+Regeln für den Export:
+
+- **Ein Teil, eine Datei.** Der Lauf ist keine Datei, das Magazin schon:
+  Alles, was sich unabhängig bewegt oder abgenommen werden kann, kommt
+  einzeln. Verschmolzene Teile können sich nicht bewegen.
+- **Bewegliche Teile heißen exakt** `Action`, `ChargingHandle`, `Trigger`,
+  `Selector`, `Magazine`. `WeaponViewmodel._collect_parts()` sucht nach
+  diesen Namen. Ein Tippfehler heißt: Das Teil sitzt richtig und bewegt sich
+  nie — und das merkt man beim Spielen kaum.
+- **Der Ursprung einer Teildatei liegt an seiner Einbaustelle** an der Waffe,
+  die Geometrie selbst um null. `GlbParts.mount_point()` liest das aus. So
+  weiß das Teil, wohin es gehört, und ein Verschieben in Blender braucht
+  keine Codeänderung.
+- **Achsen:** Blender exportiert mit +X als Mündung, das Spiel erwartet -Z.
+  Die Umrechnung macht `GlbParts` an genau einer Stelle.
+
+`tools/render_viewmodel.gd` rendert die Modelle aus neun Richtungen in PNGs,
+mit `bestueckt` auch voll ausgestattet — damit man sie ansehen kann, ohne das
+Spiel zu starten.
 
 ## Was Claude testen kann — und was nicht
 

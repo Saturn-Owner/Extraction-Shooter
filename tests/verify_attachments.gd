@@ -529,7 +529,7 @@ func _test_workbench_rejects_nonsense() -> void:
 ## BEWUSST EINE LISTE UND KEIN WEGLASSEN DER PRUEFUNG: So steht schwarz auf
 ## weiss, dass die AR-15 im Umbau ist, und der Test erinnert daran, sobald
 ## ihre neuen Teile stehen — dann fliegt der Eintrag hier raus.
-const IM_UMBAU := [&"weapon_rifle_ar15"]
+const IM_UMBAU := []
 
 
 func _test_workbench_options_are_mountable() -> void:

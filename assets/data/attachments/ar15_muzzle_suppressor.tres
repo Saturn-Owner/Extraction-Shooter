@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_data"]
+[ext_resource type="Script" path="res://scripts/attachments/ar15_suppressor.gd" id="2_view"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"ar15_muzzle_suppressor"
+display_name = "AR-15 Schalldaempfer"
+description = "Daempft Knall und Muendungsfeuer. Macht die Waffe lang und kopflastig."
+category = 11
+weight_kg = 0.46
+grid_width = 2
+grid_height = 1
+slot = 1
+interface_tag = &"ar15_thread"
+viewmodel_part = ExtResource("2_view")
+recoil_vertical_mult = 0.88
+recoil_horizontal_mult = 0.94
+ergonomics_delta = -9
+ads_time_mult = 1.12
+muzzle_velocity_delta = 0.02
+loudness_mult = 0.32

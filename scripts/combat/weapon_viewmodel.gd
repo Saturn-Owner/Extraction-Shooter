@@ -187,9 +187,11 @@ func _apply_attachments() -> void:
 
 ## Uebernimmt Visierlinie und Muendung vom Anbauteil.
 ##
-## Die Aufnahmen sind direkte, ungedrehte Kinder des Modells — deshalb genuegt
-## es, ihre Position mit der des Teils zu addieren. Waeren sie verschachtelt
-## oder gedreht, muesste hier ueber Transformationen gerechnet werden.
+## Gerechnet wird ueber die volle Transformationskette bis zum Modell hinauf,
+## nicht ueber das Addieren zweier Positionen. Der kurze Weg hat vorausgesetzt,
+## dass Aufnahmen ungedrehte Direktkinder sind und Teile in ihrer Aufnahme bei
+## null sitzen. Beides gilt nicht mehr, seit Modelle aus Blender kommen: Die
+## sind um 90 Grad gedreht, und jedes Teil bringt seine eigene Einbaustelle mit.
 func _adopt_attachment_geometry(mount: WeaponMount, part: AttachmentViewmodel) -> void:
 	var anchor := get_node_or_null(String(mount.anchor)) as Node3D
 	if anchor == null:
@@ -199,14 +201,28 @@ func _adopt_attachment_geometry(mount: WeaponMount, part: AttachmentViewmodel) -
 		# Ab jetzt zielt der Spieler durch die Optik, nicht mehr ueber Kimme
 		# und Korn. Genau hier entscheidet sich, ob die Waffe dorthin schiesst,
 		# wo der Punkt steht.
-		sight_height = anchor.position.y + part.aim_point.position.y
+		sight_height = position_in_model(part.aim_point).y
 
 	if mount.slot == AttachmentData.Slot.MUZZLE and part.muzzle_point != null:
-		muzzle_z = anchor.position.z + part.muzzle_point.position.z
+		muzzle_z = position_in_model(part.muzzle_point).z
 		# Den Muendungspunkt der Waffe mitziehen, damit das Muendungsfeuer
 		# an der Spitze des Daempfers erscheint und nicht mittendrin.
 		if muzzle_point != null:
 			muzzle_point.position.z = muzzle_z
+
+
+## Wo dieser Knoten im Koordinatensystem des Modells liegt.
+##
+## Bewusst nicht ueber global_position: Das Modell haengt beim Bauen und in
+## den Tests oft noch gar nicht im Szenenbaum, und dann liefert global_position
+## Unsinn.
+func position_in_model(node: Node3D) -> Vector3:
+	var accumulated := Transform3D.IDENTITY
+	var current := node
+	while current != null and current != self:
+		accumulated = current.transform * accumulated
+		current = current.get_parent() as Node3D
+	return accumulated.origin
 
 
 # --- Von Unterklassen zu ueberschreiben ---
