@@ -66,7 +66,7 @@ extends Resource
 
 ## Wackeln um die Blickachse. DARF GROSS SEIN: Rollen dreht das Bild, aber
 ## nicht die Blickrichtung — es kostet keine Präzision.
-@export_range(0.0, 6.0) var shake_roll_deg: float = 1.5
+@export_range(0.0, 6.0) var shake_roll_deg: float = 3.5
 
 ## Wackeln nach oben/unten und zur Seite.
 ##

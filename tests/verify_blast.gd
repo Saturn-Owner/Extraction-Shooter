@@ -332,16 +332,35 @@ func _test_in_level() -> void:
 		"ohne Belastung steht die Kamera exakt gerade (%v / %v)"
 			% [camera.rotation_degrees, camera.position])
 
-	# --- Die Grenzen halten ---
+	# --- Die Grenzen halten, UND der Effekt kommt oben auch an ---
+	#
+	# Die untere Schranke ist die wichtigere von beiden. Vorher stand hier nur
+	# "bleibt unter dem Höchstwert" — diese Prüfung besteht ein Effekt, der gar
+	# nichts tut, mühelos. Genau das ist passiert: FastNoiseLite steht ab Werk
+	# auf Frequenz 0,01, das Wackeln erreichte 0,035 statt 1,5 Grad, und der
+	# Test war grün.
 	blast.strain = 1.0
 	blast.shake = 1.0
 	var worst_pitch := 0.0
+	var worst_roll := 0.0
 	for i in range(240):
 		blast._process(1.0 / 60.0)
 		blast.shake = 1.0
 		worst_pitch = maxf(worst_pitch, absf(camera.rotation_degrees.x))
+		worst_roll = maxf(worst_roll, absf(camera.rotation_degrees.z))
+
 	_check(worst_pitch <= blast.config.shake_pitch_deg + 0.001,
-		"das Nicken bleibt unter dem eingestellten Höchstwert (%.3f von %.3f Grad)"
+		"das Nicken bleibt unter dem Höchstwert (%.3f von %.3f Grad)"
+			% [worst_pitch, blast.config.shake_pitch_deg])
+	_check(worst_roll <= blast.config.shake_roll_deg + 0.001,
+		"das Rollen bleibt unter dem Höchstwert (%.3f von %.3f Grad)"
+			% [worst_roll, blast.config.shake_roll_deg])
+
+	_check(worst_roll > blast.config.shake_roll_deg * 0.6,
+		"und erreicht auch mindestens 60 %% davon (%.3f von %.3f Grad)"
+			% [worst_roll, blast.config.shake_roll_deg])
+	_check(worst_pitch > blast.config.shake_pitch_deg * 0.6,
+		"dasselbe fürs Nicken (%.3f von %.3f Grad)"
 			% [worst_pitch, blast.config.shake_pitch_deg])
 
 	player.queue_free()

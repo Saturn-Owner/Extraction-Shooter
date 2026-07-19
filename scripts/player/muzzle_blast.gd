@@ -45,8 +45,22 @@ var _camera: Camera3D
 var _time_since_shot: float = 999.0
 var _shake_time: float = 0.0
 
-## Zwei Rauschquellen mit verschiedenen Startwerten, damit Nicken und Gieren
-## nicht im Gleichtakt laufen.
+## Frequenz der Rauschquellen.
+##
+## ACHTUNG, HIER LAG EIN FEHLER: FastNoiseLite steht ab Werk auf 0.01. Bei den
+## Werten, mit denen hier abgetastet wird, liegt das Rauschen dann praktisch
+## bei null und aendert sich kaum — herausgekommen sind 0,035 Grad Rollen statt
+## der eingestellten 1,5. Der Effekt war da, aber vierzigmal zu schwach, und im
+## Spiel schlicht nicht wahrnehmbar.
+const NOISE_FREQUENCY := 0.5
+
+## FastNoiseLite liefert nicht den vollen Bereich -1 bis 1, gemessen sind es
+## rund -0,65 bis 0,57. Ohne Ausgleich erreicht das Wackeln nie die Staerke,
+## die in der .tres steht — wer dort 1,5 Grad eintraegt, bekaeme 1,0.
+const NOISE_GAIN := 1.6
+
+## Drei Rauschquellen mit verschiedenen Startwerten, damit die Achsen nicht im
+## Gleichtakt laufen.
 ##
 ## Rauschen statt randf() pro Bild: Weisses Rauschen bei 144 Bildern je Sekunde
 ## sieht aus wie ein Wackelkontakt, nicht wie ein zitternder Mensch.
@@ -58,6 +72,8 @@ var _noise_roll := FastNoiseLite.new()
 func _ready() -> void:
 	if config == null:
 		config = _load_config()
+	for noise in [_noise_pitch, _noise_yaw, _noise_roll]:
+		noise.frequency = NOISE_FREQUENCY
 	_noise_pitch.seed = 1
 	_noise_yaw.seed = 2
 	_noise_roll.seed = 3
@@ -194,15 +210,20 @@ func apply_shake() -> void:
 
 	var t := _shake_time * config.shake_speed
 	_camera.rotation_degrees = Vector3(
-		_noise_pitch.get_noise_1d(t) * config.shake_pitch_deg * shake,
-		_noise_yaw.get_noise_1d(t) * config.shake_yaw_deg * shake,
-		_noise_roll.get_noise_1d(t) * config.shake_roll_deg * shake
+		_wobble(_noise_pitch, t) * config.shake_pitch_deg * shake,
+		_wobble(_noise_yaw, t) * config.shake_yaw_deg * shake,
+		_wobble(_noise_roll, t) * config.shake_roll_deg * shake
 	)
 	_camera.position = Vector3(
-		_noise_yaw.get_noise_1d(t + 100.0) * config.shake_offset_m * shake,
-		_noise_pitch.get_noise_1d(t + 100.0) * config.shake_offset_m * shake,
+		_wobble(_noise_yaw, t + 100.0) * config.shake_offset_m * shake,
+		_wobble(_noise_pitch, t + 100.0) * config.shake_offset_m * shake,
 		0.0
 	)
+
+
+## Ein Rauschwert von -1 bis 1, ausgeglichen und begrenzt.
+static func _wobble(noise: FastNoiseLite, at: float) -> float:
+	return clampf(noise.get_noise_1d(at) * NOISE_GAIN, -1.0, 1.0)
 
 
 ## Fällt von voll auf null in `fall_time` Sekunden.
