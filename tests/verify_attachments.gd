@@ -28,6 +28,7 @@ func _initialize() -> void:
 	_test_mount_anchors_exist()
 	_test_attachments_become_visible()
 	_test_sight_line_follows_the_optic()
+	_test_reticle_sits_in_the_glass()
 	_test_muzzle_follows_the_suppressor()
 	_test_workbench_rejects_nonsense()
 	_test_workbench_options_are_mountable()
@@ -582,3 +583,93 @@ func _test_attachments_add_weight() -> void:
 	for attachment in _attachments():
 		_check(attachment.weight_kg > 0.0, "%s hat ein Gewicht (%.2f kg)"
 			% [attachment.id, attachment.weight_kg])
+
+
+## DER ZIELPUNKT MUSS IM GLAS LIEGEN.
+##
+## Er lag vorher im Ursprung des Visiers, und der ist nicht das Absehen: beim
+## Rotpunkt 6,8 mm darunter, beim Holovisier 2,7 mm. Beim Zielen senkt
+## weapon_view.gd die Waffe um sight_height ab — war der Wert zu klein, stand
+## der Leuchtpunkt ueber der Bildmitte, waehrend die Kugel in die Mitte ging.
+## Bei 0,16 m Zielabstand sind 6,8 mm rund 2,4 Grad, also gut ein Meter zu
+## tief auf 25 m. Man zielt sauber und trifft nichts.
+##
+## Geprueft wird bewusst NICHT gegen feste Zahlen: Verschiebt der Modellierer
+## das Absehen, waere der Test rot, obwohl alles stimmt. Geprueft wird die
+## Eigenschaft, auf die es ankommt — der Punkt, durch den gezielt wird, muss
+## innerhalb der Glasflaeche liegen. Sonst schaut man daran vorbei.
+func _test_reticle_sits_in_the_glass() -> void:
+	_section("Der Zielpunkt liegt im Glas")
+
+	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+
+	for optic_id in [&"ar15_sight_reddot", &"ar15_sight_holo"]:
+		var build := WeaponBuild.new()
+		build.set_attachment(AttachmentData.Slot.SIGHT, optic_id)
+		var model := _build_model(ar15, build)
+
+		var part := model.mounted.get(int(AttachmentData.Slot.SIGHT)) as AttachmentViewmodel
+		if part == null or part.aim_point == null:
+			_check(false, "%s: Optik montiert und hat einen Zielpunkt" % optic_id)
+			model.free()
+			continue
+
+		var glass: Variant = _glass_extent(part, Transform3D.IDENTITY)
+		if glass == null:
+			_check(false, "%s: Glasflaeche gefunden" % optic_id)
+			model.free()
+			continue
+
+		var box: AABB = glass
+		var aim := part.aim_point.position
+		_check(aim.y >= box.position.y - 0.001 and aim.y <= box.end.y + 0.001,
+			"%s: Zielpunkt liegt auf Glashoehe (%.4f in %.4f..%.4f)"
+				% [optic_id, aim.y, box.position.y, box.end.y])
+
+		# Und die Visierhoehe der Waffe muss genau diesen Punkt uebernehmen.
+		var expected := part.position.y + aim.y
+		_check(is_equal_approx(model.sight_height, expected),
+			"%s: sight_height folgt dem Zielpunkt (%.4f / %.4f)"
+				% [optic_id, model.sight_height, expected])
+
+		# Gegenprobe gegen den alten Fehler: Der Ursprung des Teils allein
+		# waere zu tief gewesen.
+		_check(not is_equal_approx(model.sight_height, part.position.y),
+			"%s: der Ursprung des Visiers wird NICHT als Zielpunkt benutzt" % optic_id)
+
+		model.free()
+
+
+## Ausdehnung der Glasflaeche eines Anbauteils, in dessen eigenen Achsen.
+##
+## DIE TRANSFORMATIONEN MUESSEN MIT. Ohne sie kommen die rohen Eckpunkte aus
+## der Datei heraus, und die stehen bei skalierten Knoten in einem voellig
+## anderen Massstab: Beim Rotpunkt spannte das "Glas" dadurch von -0,44 bis
+## 0,45 statt ueber zwei Zentimeter. Der Test war gruen, ohne irgendetwas zu
+## pruefen — jeder Zielpunkt haette in diesem Bereich gelegen.
+func _glass_extent(part: Node, transform: Transform3D) -> Variant:
+	if part is MeshInstance3D:
+		var mesh: Mesh = (part as MeshInstance3D).mesh
+		if mesh != null:
+			for i in range(mesh.get_surface_count()):
+				var material := mesh.surface_get_material(i)
+				if material == null or material.resource_name != "glass":
+					continue
+				var vertices: PackedVector3Array = mesh.surface_get_arrays(i)[Mesh.ARRAY_VERTEX]
+				if vertices.is_empty():
+					continue
+				var low := Vector3.INF
+				var high := -Vector3.INF
+				for vertex in vertices:
+					var point: Vector3 = transform * vertex
+					low = low.min(point)
+					high = high.max(point)
+				return AABB(low, high - low)
+
+	for child in part.get_children():
+		if not (child is Node3D):
+			continue
+		var found: Variant = _glass_extent(child, transform * (child as Node3D).transform)
+		if found != null:
+			return found
+	return null

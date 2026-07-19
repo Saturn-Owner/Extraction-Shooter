@@ -16,7 +16,6 @@ func _configure() -> void:
 
 func _build_parts() -> void:
 	super()
-	# Der Punkt liegt auf der optischen Achse, und die ist die Mitte des
-	# Teils. Genau hier entscheidet sich, ob die Waffe dorthin schiesst,
-	# wo der Punkt steht.
-	add_child(GlbParts.pivot("AimPoint", Vector3.ZERO))
+	# Gemessen am Leuchtpunkt selbst, nicht am Ursprung des Visiers. Genau
+	# hier entscheidet sich, ob die Waffe dorthin schiesst, wo der Punkt steht.
+	add_child(GlbParts.pivot("AimPoint", aim_centre()))

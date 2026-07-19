@@ -16,4 +16,5 @@ func _configure() -> void:
 
 func _build_parts() -> void:
 	super()
-	add_child(GlbParts.pivot("AimPoint", Vector3.ZERO))
+	# Gemessen am Leuchtpunkt selbst, nicht am Ursprung des Visiers.
+	add_child(GlbParts.pivot("AimPoint", aim_centre()))
