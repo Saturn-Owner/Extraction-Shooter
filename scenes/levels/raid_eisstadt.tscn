@@ -1,0 +1,202 @@
+[gd_scene load_steps=17 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1_player"]
+[ext_resource type="Script" path="res://scripts/levels/raid_level.gd" id="2_raid_level"]
+[ext_resource type="PackedScene" path="res://scenes/loot/loot_container.tscn" id="3_loot"]
+[ext_resource type="PackedScene" path="res://scenes/raid/extraction_zone.tscn" id="4_extraction"]
+[ext_resource type="Script" path="res://scripts/raid/raid_manager.gd" id="5_raid_manager"]
+[ext_resource type="Resource" path="res://assets/data/loot/wohnung.tres" id="6_loot_wohnung"]
+[ext_resource type="Resource" path="res://assets/data/loot/werkstatt.tres" id="7_loot_werkstatt"]
+[ext_resource type="Resource" path="res://assets/data/loot/militaer.tres" id="8_loot_militaer"]
+
+[sub_resource type="ProceduralSkyMaterial" id="Sky_winter"]
+sky_top_color = Color(0.44, 0.5, 0.6, 1)
+sky_horizon_color = Color(0.72, 0.76, 0.8, 1)
+ground_bottom_color = Color(0.6, 0.64, 0.7, 1)
+ground_horizon_color = Color(0.72, 0.76, 0.8, 1)
+
+[sub_resource type="Sky" id="Sky_main"]
+sky_material = SubResource("Sky_winter")
+
+[sub_resource type="Environment" id="Env_winter"]
+background_mode = 2
+sky = SubResource("Sky_main")
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.75, 0.82, 1)
+ambient_light_sky_contribution = 0.9
+ambient_light_energy = 1.0
+fog_enabled = true
+fog_light_color = Color(0.76, 0.79, 0.84, 1)
+fog_density = 0.012
+fog_sky_affect = 0.4
+
+[sub_resource type="StandardMaterial3D" id="Mat_snow"]
+albedo_color = Color(0.84, 0.87, 0.9, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="Mat_wall"]
+albedo_color = Color(0.3, 0.31, 0.33, 1)
+roughness = 0.85
+
+[sub_resource type="PlaneMesh" id="Mesh_ground"]
+material = SubResource("Mat_snow")
+size = Vector2(160, 160)
+
+[sub_resource type="BoxShape3D" id="Shape_ground"]
+size = Vector3(160, 1, 160)
+
+[sub_resource type="BoxMesh" id="Mesh_wall"]
+material = SubResource("Mat_wall")
+size = Vector3(8, 4, 0.5)
+
+[sub_resource type="BoxShape3D" id="Shape_wall"]
+size = Vector3(8, 4, 0.5)
+
+[node name="RaidEisstadt" type="Node3D"]
+script = ExtResource("2_raid_level")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_winter")
+
+[node name="Sonne" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.82, -0.31, 0.48, 0, 0.84, 0.54, -0.57, -0.44, 0.69, 0, 20, 0)
+light_color = Color(1, 0.96, 0.9, 1)
+light_energy = 0.8
+shadow_enabled = true
+
+[node name="RaidManager" type="Node" parent="."]
+script = ExtResource("5_raid_manager")
+
+[node name="Boden" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Boden"]
+mesh = SubResource("Mesh_ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Boden"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("Shape_ground")
+
+[node name="Gebaeude" type="Node3D" parent="."]
+
+[node name="Wand1" type="StaticBody3D" parent="Gebaeude"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 2, -18)
+collision_layer = 1
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Gebaeude/Wand1"]
+mesh = SubResource("Mesh_wall")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Gebaeude/Wand1"]
+shape = SubResource("Shape_wall")
+
+[node name="Wand2" type="StaticBody3D" parent="Gebaeude"]
+transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, -18, 2, -14)
+collision_layer = 1
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Gebaeude/Wand2"]
+mesh = SubResource("Mesh_wall")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Gebaeude/Wand2"]
+shape = SubResource("Shape_wall")
+
+[node name="Wand3" type="StaticBody3D" parent="Gebaeude"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 2, -22)
+collision_layer = 1
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Gebaeude/Wand3"]
+mesh = SubResource("Mesh_wall")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Gebaeude/Wand3"]
+shape = SubResource("Shape_wall")
+
+[node name="Wand4" type="StaticBody3D" parent="Gebaeude"]
+transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, 20, 2, -18)
+collision_layer = 1
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Gebaeude/Wand4"]
+mesh = SubResource("Mesh_wall")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Gebaeude/Wand4"]
+shape = SubResource("Shape_wall")
+
+[node name="Kisten" type="Node3D" parent="."]
+
+[node name="Wohnung1" parent="Kisten" instance=ExtResource("3_loot")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 0, -15)
+search_time = 2.0
+loot_table = ExtResource("6_loot_wohnung")
+display_name = "Wohnungsschrank"
+
+[node name="Wohnung2" parent="Kisten" instance=ExtResource("3_loot")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -17, 0, -17)
+search_time = 2.0
+loot_table = ExtResource("6_loot_wohnung")
+display_name = "Kuechenschrank"
+
+[node name="Werkstatt1" parent="Kisten" instance=ExtResource("3_loot")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -30)
+search_time = 3.5
+loot_table = ExtResource("7_loot_werkstatt")
+display_name = "Werkzeugkiste"
+
+[node name="Werkstatt2" parent="Kisten" instance=ExtResource("3_loot")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, -32)
+search_time = 3.5
+loot_table = ExtResource("7_loot_werkstatt")
+display_name = "Ersatzteilkiste"
+
+[node name="Militaer1" parent="Kisten" instance=ExtResource("3_loot")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 0, -19)
+search_time = 6.0
+loot_table = ExtResource("8_loot_militaer")
+display_name = "Militaerkiste"
+
+[node name="Militaer2" parent="Kisten" instance=ExtResource("3_loot")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 0, -21)
+search_time = 6.0
+loot_table = ExtResource("8_loot_militaer")
+display_name = "Munitionskiste"
+
+[node name="Ausgaenge" type="Node3D" parent="."]
+
+[node name="AusgangSued" parent="Ausgaenge" instance=ExtResource("4_extraction")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 14)
+required_time = 8.0
+display_name = "Ausgang Sued"
+
+[node name="AusgangKlippe" parent="Ausgaenge" instance=ExtResource("4_extraction")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 0, -34)
+required_time = 5.0
+required_item_id = &"backpack_small"
+display_name = "Vereiste Klippe"
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 4)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="InfoPanel" type="PanelContainer" parent="HUD"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 380.0
+offset_bottom = 320.0
+
+[node name="InfoLabel" type="Label" parent="HUD/InfoPanel"]
+text = "..."
+
+[node name="PromptLabel" type="Label" parent="HUD"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = 60.0
+offset_right = 300.0
+offset_bottom = 160.0
+horizontal_alignment = 1

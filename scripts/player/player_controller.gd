@@ -115,6 +115,7 @@ var _recoil_yaw: float = 0.0
 @onready var _collision: CollisionShape3D = $CollisionShape3D
 @onready var weapon: Weapon = $CameraPivot/Weapon
 @onready var inventory: PlayerInventory = $Inventory
+@onready var interaction: PlayerInteraction = $CameraPivot/Interaction
 
 
 func _ready() -> void:
@@ -156,6 +157,23 @@ func equip_from_inventory(stack: ItemStack) -> bool:
 	weapon.setup(stack.item_id, chosen)
 	try_reload()
 	return true
+
+
+## Entlaedt das Magazin zurueck ins Inventar.
+##
+## Muss vor jeder Extraction passieren, sonst verschwinden die geladenen
+## Patronen — bei M995 waeren das ueber 20.000 Spielwaehrung pro Raid.
+## Solange Magazine keine eigenen Gegenstaende sind, ist das Magazin ein
+## blinder Fleck: Munition darin gehoert niemandem.
+func unload_weapon() -> int:
+	if weapon == null or inventory == null or weapon.rounds_in_magazine <= 0:
+		return 0
+	var rounds := weapon.rounds_in_magazine
+	if not inventory.add(weapon.ammo_id, rounds):
+		# Kein Platz: lieber im Magazin lassen als vernichten.
+		return 0
+	weapon.rounds_in_magazine = 0
+	return rounds
 
 
 ## Nachladen: holt echte Patronen aus dem Inventar.
@@ -227,6 +245,11 @@ func _handle_weapon_input() -> void:
 	if is_sprinting:
 		return
 
+	# Schiessen bricht ein laufendes Durchsuchen ab. Man kann nicht
+	# gleichzeitig eine Kiste durchwühlen und sich verteidigen.
+	if Input.is_action_just_pressed("fire") and interaction != null:
+		interaction.stop_search()
+
 	weapon.try_fire(
 		Input.is_action_pressed("fire"),
 		Input.is_action_just_pressed("fire")
@@ -259,6 +282,10 @@ func _physics_process(delta: float) -> void:
 	_update_movement(delta)
 	_update_recoil(delta)
 	_handle_weapon_input()
+
+	if interaction != null and Input.is_action_just_pressed("interact"):
+		interaction.interact()
+
 	move_and_slide()
 
 

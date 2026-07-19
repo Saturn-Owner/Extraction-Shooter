@@ -16,7 +16,7 @@
 ##   R             Nachladen (verbraucht echte Munition aus dem Inventar)
 ##   B             Feuermodus wechseln
 ##   Q / E         Waffe wechseln (nur was im Inventar liegt)
-##   F / G         Munition wechseln (nur was im Inventar liegt)
+##   5 / 6         Munition wechseln (nur was im Inventar liegt)
 ##   T             Munitionsnachschub (Testhilfe)
 ##   Z             Rucksack mit Ballast füllen (Gewicht spüren)
 ##   0             Zurück zum Start, Ziele und Ausrüstung zurücksetzen
@@ -134,9 +134,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_switch_weapon(-1)
 		KEY_E:
 			_switch_weapon(1)
-		KEY_F:
+		# Nicht F/G: F ist inzwischen die Interaktionstaste.
+		KEY_5:
 			_switch_ammo(-1)
-		KEY_G:
+		KEY_6:
 			_switch_ammo(1)
 		KEY_T:
 			# Testhilfe: Nachschub für alle Kaliber.
@@ -201,7 +202,8 @@ func _process(_delta: float) -> void:
 		lines.append("> %s" % _last_action)
 
 	lines.append("")
-	lines.append("Q/E Waffe  F/G Munition  R Laden  B Modus")
+	lines.append("Q/E Waffe  5/6 Munition  R Laden  B Modus")
 	lines.append("T Nachschub  Z Ballast  0 Reset  Esc Maus")
 
 	_label.text = "\n".join(lines)
+

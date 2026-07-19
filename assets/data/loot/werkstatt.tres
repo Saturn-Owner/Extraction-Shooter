@@ -1,0 +1,55 @@
+[gd_resource type="Resource" script_class="LootTableData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/loot_table_data.gd" id="1_r3qpu"]
+
+[resource]
+script = ExtResource("1_r3qpu")
+entries = Array[Dictionary]([{
+"id": "ammo_762x39_ps",
+"max": 30,
+"min": 10,
+"weight": 40
+}, {
+"id": "ammo_556x45_m855",
+"max": 30,
+"min": 10,
+"weight": 35
+}, {
+"id": "ammo_545x39_ps",
+"max": 30,
+"min": 10,
+"weight": 35
+}, {
+"id": "ammo_12x70_slug",
+"max": 8,
+"min": 3,
+"weight": 20
+}, {
+"id": "ammo_9x19_ap",
+"max": 20,
+"min": 8,
+"weight": 14
+}, {
+"id": "plate_class4_front",
+"max": 1,
+"min": 1,
+"weight": 10
+}, {
+"id": "weapon_shotgun_m870",
+"max": 1,
+"min": 1,
+"weight": 7
+}, {
+"id": "weapon_rifle_akm",
+"max": 1,
+"min": 1,
+"weight": 5
+}, {
+"id": "weapon_smg_mp5",
+"max": 1,
+"min": 1,
+"weight": 4
+}])
+min_rolls = 2
+max_rolls = 4
+empty_weight = 30

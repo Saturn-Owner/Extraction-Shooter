@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/combat/weapon.gd" id="2_weapon"]
 [ext_resource type="Script" path="res://scripts/player/player_inventory.gd" id="3_inventory"]
+[ext_resource type="Script" path="res://scripts/player/player_interaction.gd" id="4_interaction"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.35
@@ -27,6 +28,9 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 0)
 fov = 75.0
 near = 0.05
 far = 4000.0
+
+[node name="Interaction" type="Node3D" parent="CameraPivot"]
+script = ExtResource("4_interaction")
 
 [node name="Weapon" type="Node3D" parent="CameraPivot"]
 script = ExtResource("2_weapon")
