@@ -34,7 +34,15 @@ const NOISE_SEED := 20260719
 static var _cache: Dictionary = {}
 
 
+## Wo echte Aufnahmen liegen. Was hier gefunden wird, schlaegt die Synthese.
+const AUDIO_DIR := "res://assets/audio/loot"
+
+
 ## Der passende Klang zu einem Gegenstand. null = bewusst still.
+##
+## ECHTE DATEIEN GEHEN VOR. Die Synthese unten ist nur der Platzhalter,
+## bis jemand richtige Aufnahmen abgelegt hat — synthetisches Metall
+## klingt nie ganz echt, egal wie sorgfaeltig man dreht.
 static func get_stream(data: ItemData) -> AudioStream:
 	if data == null:
 		return null
@@ -47,9 +55,36 @@ static func get_stream(data: ItemData) -> AudioStream:
 	if _cache.has(key):
 		return _cache[key]
 
-	var stream := _build(data.category, rarity)
+	var stream := _load_file_for(data)
+	if stream == null:
+		stream = _build(data.category, rarity)
+
 	_cache[key] = stream
 	return stream
+
+
+## Sucht eine echte Aufnahme, von speziell nach allgemein:
+##   1. genau dieser Gegenstand   loot/ammo_556x45_m995.wav
+##   2. seine Kategorie           loot/weapon.wav
+##   3. Notnagel fuer alles       loot/default.wav
+##
+## Dadurch kann man mit einer einzigen Datei je Kategorie anfangen und
+## spaeter einzelne Gegenstaende gezielt herausheben.
+static func _load_file_for(data: ItemData) -> AudioStream:
+	var category_name: String = String(ItemData.Category.keys()[data.category]).to_lower()
+	var candidates := [
+		"%s/%s" % [AUDIO_DIR, data.id],
+		"%s/%s" % [AUDIO_DIR, category_name],
+		"%s/default" % AUDIO_DIR,
+	]
+	for base in candidates:
+		for ext in [".ogg", ".wav", ".mp3"]:
+			var path: String = base + ext
+			if ResourceLoader.exists(path):
+				var res := load(path)
+				if res is AudioStream:
+					return res as AudioStream
+	return null
 
 
 static func clear_cache() -> void:
