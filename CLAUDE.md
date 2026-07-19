@@ -33,14 +33,20 @@ Regeln:
 ### Goldene Regeln
 
 1. **Vor jedem Arbeitsbeginn:** `git pull` auf `main`, damit du den aktuellen Stand hast.
-2. **Nie direkt auf `main` committen.** Immer einen Feature-Branch erstellen:
+2. **Für JEDES neue Feature einen eigenen Branch — niemals direkt auf `main` arbeiten.**
+   `main` muss immer ein funktionierendes, spielbares Spiel enthalten. Neue Features
+   werden isoliert in einem Branch gebaut und erst nach dem Testen gemerged. So kann
+   ein kaputtes oder halbfertiges Feature das laufende Spiel auf `main` nicht zerschießen —
+   und wenn doch mal was schiefgeht, wirft man einfach den Branch weg statt `main` zu reparieren.
    ```
    git checkout main
    git pull
    git checkout -b feature/kurzer-name
    ```
-3. **Fertige Features als Pull Request** auf GitHub erstellen (`gh pr create`), der andere schaut kurz drüber und merged.
+   Branch-Namen sprechend wählen: `feature/spielerbewegung`, `feature/loot-system`, `fix/extraction-timer`.
+3. **Fertige Features als Pull Request** auf GitHub erstellen (`gh pr create`), der andere schaut kurz drüber und merged. Erst dann landet das Feature auf `main`.
 4. **Regelmäßig committen und pushen** — lieber viele kleine Commits als ein riesiger am Ende des Tages.
+5. **Erst mergen, wenn das Feature in Godot getestet wurde** und das Spiel startet. Kaputten Code nicht auf `main` schieben.
 
 ### Szenen-Konflikte vermeiden (Godot-spezifisch!)
 
