@@ -49,6 +49,8 @@ func _run_all() -> void:
 	_test_suppressor_changes_the_sound_in_hand()
 	_test_recordings_start_immediately()
 	_test_reload_sounds_are_wired()
+	await _test_sounds_do_not_cut_each_other()
+	await _test_empty_weapon_clicks_once()
 	await _test_effects_spawn()
 	await _test_firing_in_level()
 
@@ -434,3 +436,90 @@ func _count_cues(from_empty: bool) -> int:
 		if not bool(cue.only_empty) or from_empty:
 			count += 1
 	return count
+
+
+## Schuesse duerfen sich nicht gegenseitig abschneiden.
+##
+## Mit einer einzigen Stimme setzte jeder Schuss den Stream neu und startete
+## ihn von vorn. Bei 750 Schuss pro Minute liegen 80 ms zwischen den Schuessen,
+## die Aufnahme ist 2,6 s lang - zu hoeren waren also nur die ersten 80 ms.
+## Dauerfeuer klang wie Klicken, nicht wie Schiessen.
+func _test_sounds_do_not_cut_each_other() -> void:
+	_section("Schuesse schneiden sich nicht ab")
+
+	var weapon := Weapon.new()
+	var muzzle := Node3D.new()
+	muzzle.name = "Muzzle"
+	var speaker := AudioStreamPlayer3D.new()
+	# Name ausdruecklich setzen: weapon.gd sucht ueber
+	# $Muzzle/AudioStreamPlayer3D, und ohne Namen vergibt Godot einen eigenen.
+	speaker.name = "AudioStreamPlayer3D"
+	muzzle.add_child(speaker)
+	weapon.add_child(muzzle)
+	root.add_child(weapon)
+	# _ready() laeuft erst im naechsten Frame - vorher gibt es keine Stimmen.
+	await process_frame
+
+	_check(weapon._voices.size() == Weapon.AUDIO_VOICES,
+		"es gibt %d Stimmen (%d)" % [Weapon.AUDIO_VOICES, weapon._voices.size()])
+	_check(weapon._voices.size() > 1,
+		"mehr als eine - sonst schneidet jeder Schuss den vorigen ab")
+
+	# Mehrere Geraeusche kurz hintereinander muessen auf VERSCHIEDENEN
+	# Stimmen landen.
+	var sound := WeaponAudio.make_gunshot(0.6)
+	var used := {}
+	for i in range(Weapon.AUDIO_VOICES):
+		weapon._play(sound, 1.0)
+		for voice in weapon._voices:
+			if voice.stream == sound and voice.playing:
+				used[voice.get_instance_id()] = true
+
+	_check(used.size() > 1, "aufeinanderfolgende Schuesse belegen verschiedene Stimmen (%d)"
+		% used.size())
+
+	weapon.queue_free()
+
+
+## Eine leergeschossene Waffe macht EINEN Klack, kein Maschinengewehr-Klicken.
+##
+## Vorher setzte der Leerlauf-Zweig kein _cooldown. Im Dauerfeuer lief
+## try_fire() dadurch bei jedem Bild erneut durch und klickte im Bildtakt.
+func _test_empty_weapon_clicks_once() -> void:
+	_section("Leere Waffe klickt einmal")
+
+	var weapon := Weapon.new()
+	var muzzle := Node3D.new()
+	muzzle.name = "Muzzle"
+	var speaker := AudioStreamPlayer3D.new()
+	speaker.name = "AudioStreamPlayer3D"
+	muzzle.add_child(speaker)
+	weapon.add_child(muzzle)
+	root.add_child(weapon)
+	await process_frame
+	weapon.setup(&"weapon_rifle_ar15", &"ammo_556x45_m855a1")
+
+	weapon.rounds_in_magazine = 0
+	weapon.round_chambered = false
+	weapon.current_fire_mode = WeaponData.FireMode.AUTO
+
+	# GDScript-Lambdas fangen Werte als KOPIE. Ein einfacher int-Zaehler
+	# bliebe hier fuer immer null - das Array wird dagegen geteilt.
+	var clicks := [0]
+	weapon.dry_fire.connect(func(): clicks[0] += 1)
+
+	# Abzug 60 Bilder lang gehalten, ohne dass Zeit vergeht.
+	for i in range(60):
+		weapon.try_fire(true, i == 0)
+	_check(clicks[0] == 1, "gehaltener Abzug klickt genau einmal (%d)" % clicks[0])
+
+	# Loslassen und neu druecken darf wieder klicken.
+	#
+	# Die Wartezeit muss dafuer abgelaufen sein: Auch ins Leere klickt eine
+	# Waffe nur im Takt ihrer Feuerrate, nicht beliebig schnell.
+	weapon.release_trigger()
+	weapon._cooldown = 0.0
+	weapon.try_fire(true, true)
+	_check(clicks[0] == 2, "nach dem Loslassen klickt es wieder (%d)" % clicks[0])
+
+	weapon.queue_free()

@@ -86,6 +86,9 @@ var ammo_supplier: Callable = Callable()
 var _cooldown: float = 0.0
 var _burst_remaining: int = 0
 var _shots_since_release: int = 0
+
+## Ob seit dem letzten Loslassen schon ins Leere geklickt wurde.
+var _dry_fired_since_release: bool = false
 var _reload_time_left: float = 0.0
 var _reload_from_empty: bool = false
 
@@ -122,11 +125,43 @@ var _dry_sound: AudioStream
 @onready var _muzzle: Node3D = $Muzzle
 @onready var _audio: AudioStreamPlayer3D = $Muzzle/AudioStreamPlayer3D
 
+## Wie viele Geraeusche gleichzeitig klingen duerfen.
+##
+## MIT EINER EINZIGEN STIMME KLANG DAUERFEUER WIE KLICKEN. Jeder Schuss setzte
+## den Stream neu und startete ihn von vorn — bei 750 Schuss pro Minute liegen
+## 80 ms zwischen den Schuessen, die Aufnahme ist 2,6 Sekunden lang. Zu hoeren
+## waren also immer nur die ersten 80 ms: der Anschlag, nie der Knall.
+##
+## Sechs reichen: Bei 900 Schuss pro Minute und einem Ausklang von 2,6 s
+## ueberlappen sich zwar mehr, aber die aeltesten sind dann so leise, dass ihr
+## Abbruch nicht auffaellt.
+const AUDIO_VOICES := 6
+
+var _voices: Array[AudioStreamPlayer3D] = []
+var _next_voice: int = 0
+
 
 func _ready() -> void:
 	ItemRegistry.ensure_loaded()
 	setup(weapon_id, ammo_id)
 	_dry_sound = WeaponAudio.make_dry_fire()
+	_build_voices()
+
+
+## Legt die zusaetzlichen Stimmen als Geschwister der Szenen-Stimme an.
+##
+## Bewusst im Code und nicht in player.tscn: Szenen lassen sich bei Konflikten
+## nicht mergen, und die Zahl der Stimmen ist eine Frage des Verhaltens, keine
+## der Szene.
+func _build_voices() -> void:
+	if _audio == null:
+		return
+	_voices.append(_audio)
+	for i in range(AUDIO_VOICES - 1):
+		var voice := _audio.duplicate() as AudioStreamPlayer3D
+		voice.name = "Stimme%d" % (i + 2)
+		_audio.get_parent().add_child(voice)
+		_voices.append(voice)
 
 
 ## Waffe und Munition setzen. Laedt gleich ein volles Magazin.
@@ -224,8 +259,15 @@ func _shoot() -> bool:
 	# ohne Patrone im Lauf feuert nicht — der Verschluss muss erst vor.
 	if not round_chambered:
 		_burst_remaining = 0
-		_play(_dry_sound, 1.0)
-		dry_fire.emit()
+		# EINMAL pro Abzug, nicht jeden Frame. Vorher wurde _cooldown in
+		# diesem Zweig nicht gesetzt, also lief try_fire() im Dauerfeuer bei
+		# jedem Bild erneut durch — das ergab ein Klicken im Bildtakt statt
+		# des einen Klacks, den eine leergeschossene Waffe macht.
+		if not _dry_fired_since_release:
+			_dry_fired_since_release = true
+			_play(_dry_sound, 1.0)
+			dry_fire.emit()
+		_cooldown = data.get_shot_interval()
 		return false
 
 	round_chambered = false
@@ -288,12 +330,27 @@ func _play_shot_feedback() -> void:
 	_play(_shot_sound, randf_range(0.94, 1.06))
 
 
+## Spielt ein Geraeusch, ohne das vorherige abzuschneiden.
+##
+## Gesucht wird zuerst eine freie Stimme. Ist keine frei, wird reihum die
+## naechste genommen — dann klingt der aelteste Schuss ab, und das ist der,
+## den man am wenigsten vermisst.
 func _play(stream: AudioStream, pitch: float) -> void:
-	if _audio == null or stream == null:
+	if stream == null or _voices.is_empty():
 		return
-	_audio.stream = stream
-	_audio.pitch_scale = pitch
-	_audio.play()
+
+	var voice: AudioStreamPlayer3D = null
+	for candidate in _voices:
+		if not candidate.playing:
+			voice = candidate
+			break
+	if voice == null:
+		voice = _voices[_next_voice]
+		_next_voice = (_next_voice + 1) % _voices.size()
+
+	voice.stream = stream
+	voice.pitch_scale = pitch
+	voice.play()
 
 
 ## Streuung aus Waffenpraezision (MOA) und Munitionsstreuung (Schrot).
@@ -366,6 +423,7 @@ func _emit_recoil() -> void:
 ## Abzug losgelassen — Rueckstossaufbau zuruecksetzen.
 func release_trigger() -> void:
 	_shots_since_release = 0
+	_dry_fired_since_release = false
 
 
 ## Effektive Werte neu ausrechnen, nachdem sich die Bestückung geändert hat.
