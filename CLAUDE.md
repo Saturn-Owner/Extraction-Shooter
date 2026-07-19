@@ -28,6 +28,57 @@ Regeln:
 - Dateinamen in `snake_case` (Godot-Konvention): `player_movement.gd`, `extraction_zone.tscn`.
 - Klassennamen in `PascalCase` mit `class_name` (z. B. `class_name PlayerMovement`).
 
+## Architektur — Grundsatzentscheidungen
+
+Diese vier Punkte wurden bewusst festgelegt und dürfen nicht beiläufig geändert werden.
+Der vollständige Entwicklungsplan liegt außerhalb des Repos beim jeweiligen Entwickler.
+
+### 1. Alles ist datengetrieben
+
+Items, Munition, Waffen, Platten, Verletzungen, Händler und Bunker-Upgrades sind
+`Resource`-Klassen unter `scripts/data/` mit `.tres`-Dateien unter `assets/data/`.
+
+**Eine neue Munitionssorte ist eine neue Datei, kein neuer Code.** Wer anfängt,
+Werte in Skripte zu schreiben, macht es falsch.
+
+### 2. Server-autoritativ von Anfang an
+
+Alle zustandsverändernden Aktionen laufen über dieses Muster — auch solange das
+Spiel noch allein läuft:
+
+```
+Client fragt an  →  Server prüft  →  Server ändert Zustand  →  Server informiert Clients
+```
+
+Der Client entscheidet **nie** selbst, dass ein Item ins Inventar wandert, ein
+Gegner stirbt oder Geld gutgeschrieben wird. Er fragt und wartet auf Antwort.
+Ohne diese Disziplin wird der spätere Multiplayer-Umbau ein Rewrite.
+
+### 3. Godot 4.5 Standard-Build
+
+Karten bleiben unter ~4 km Abstand vom Weltursprung. Damit reichen 32-bit-Floats.
+Kein `precision=double`, kein Floating Origin. Falls Karten je größer werden
+sollen, muss diese Entscheidung neu bewertet werden.
+
+### 4. Schaden und Durchschlag sind getrennt
+
+`AmmoData.damage` = Wirkung im Fleisch. `AmmoData.penetration_power` = ob die
+Kugel durch die Platte kommt. Rüstung hat **kein** Stufensystem: Platten decken
+nur Flächen ab, nutzen sich ab, und starke Munition geht durch. Der Spieler soll
+jederzeit sterblich bleiben.
+
+## Grenzen von Claude in diesem Projekt
+
+Damit keine falschen Erwartungen entstehen — Claude kann in diesem Projekt **nicht**:
+
+- Godot starten, Szenen testen oder beurteilen, wie sich etwas anfühlt
+- 3D-Modelle, Texturen, Animationen oder Sounds erstellen
+- Balancing bewerten, ohne dass jemand gespielt hat
+- den Server betreiben oder überwachen
+
+**Nach jeder Änderung muss ein Mensch im Editor testen.** Claude schreibt Code
+und erklärt ihn; ob es Spaß macht, entscheidet ihr.
+
 ## Git-Workflow (WICHTIG)
 
 ### Goldene Regeln
