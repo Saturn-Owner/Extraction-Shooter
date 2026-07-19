@@ -220,10 +220,18 @@ func _test_in_level() -> void:
 		"volle Ausruestung bremst spuerbar (Faktor %.2f)" % player.get_weight_factor())
 
 	# Schiessen muss Munition verbrauchen, aber nicht den Inventarvorrat.
-	var magazine_before := player.weapon.rounds_in_magazine
+	#
+	# Geprueft wird die Gesamtzahl, nicht der Magazininhalt: Bei einer
+	# Ladehemmung bleibt die naechste Patrone im Magazin stecken, statt in den
+	# Lauf zu wandern. Der Magazininhalt aendert sich dann nicht — verbraucht
+	# ist die Patrone trotzdem. Auf rounds_in_magazine geprueft war der Test
+	# selten, aber zuverlaessig zufaellig rot.
+	var total_before := player.weapon.get_total_rounds()
 	var supply_before := player.inventory.count_ammo(player.weapon.ammo_id)
 	player.weapon._shoot()
-	_check(player.weapon.rounds_in_magazine == magazine_before - 1, "Schuss leert das Magazin")
+	_check(player.weapon.get_total_rounds() == total_before - 1,
+		"Schuss verbraucht genau eine Patrone (%d -> %d)"
+			% [total_before, player.weapon.get_total_rounds()])
 	_check(player.inventory.count_ammo(player.weapon.ammo_id) == supply_before,
 		"Schiessen greift nicht direkt auf den Vorrat zu")
 

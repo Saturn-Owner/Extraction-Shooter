@@ -26,6 +26,7 @@ func _initialize() -> void:
 	_test_reload_respects_supply()
 	_test_jamming()
 	_test_jam_chance_grows_with_wear()
+	_test_jam_never_loses_ammo()
 	_test_aiming_reduces_spread()
 	_test_viewmodel_parts()
 	_test_sight_line_is_straight()
@@ -224,6 +225,66 @@ func _test_jam_chance_grows_with_wear() -> void:
 		"abgenutzte Waffe klemmt oefter (neu: %d, Schrott: %d von 4000)" % [jams_new, jams_worn])
 	_check(jams_new < 200,
 		"neue Waffe klemmt selten (%d von 4000)" % jams_new)
+
+	weapon.free()
+
+
+## Buchhaltung ueber Ladehemmungen hinweg.
+##
+## Eine Hemmung unterbricht das Nachladen des Verschlusses — die naechste
+## Patrone bleibt im Magazin. Dabei darf keine Patrone verschwinden und schon
+## gar keine entstehen. Genau hier ist der bestehende Ladungstest zufaellig
+## rot geworden, weil er den Magazininhalt statt der Gesamtzahl geprueft hat.
+func _test_jam_never_loses_ammo() -> void:
+	_section("Hemmungen verschlucken keine Munition")
+
+	var weapon := _make_weapon()
+	weapon.rounds_in_magazine = 30
+	weapon.round_chambered = true
+	# Schrottzustand, damit im Testlauf wirklich Hemmungen auftreten.
+	weapon.condition = 0.0
+
+	# Ueber viele Magazine laufen lassen. Bei 2 % Hemmungswahrscheinlichkeit
+	# bliebe ein einzelnes Magazin oft hemmungsfrei — der Test waere dann
+	# selbst zufaellig rot, also genau der Fehler, den er aufdecken soll.
+	const TARGET_SHOTS := 600
+	var supplied := weapon.get_total_rounds()
+	var shots := 0
+	var jams := 0
+	var bookkeeping_ok := true
+
+	while shots < TARGET_SHOTS:
+		if weapon.is_jammed:
+			# Beheben schiebt nur eine Patrone weiter, verbraucht aber keine.
+			var before_clear := weapon.get_total_rounds()
+			weapon.is_jammed = false
+			weapon._chamber_if_possible()
+			if weapon.get_total_rounds() != before_clear:
+				bookkeeping_ok = false
+			jams += 1
+			continue
+
+		if not weapon.round_chambered:
+			if weapon.rounds_in_magazine <= 0:
+				weapon.rounds_in_magazine = weapon.data.magazine_size
+				supplied += weapon.data.magazine_size
+			weapon._chamber_if_possible()
+			continue
+
+		var before_shot := weapon.get_total_rounds()
+		# Schuss ohne Projektil nachbilden: Patrone raus, Verschluss nachladen.
+		weapon.round_chambered = false
+		weapon._cycle_action()
+		shots += 1
+		if weapon.get_total_rounds() != before_shot - 1:
+			bookkeeping_ok = false
+
+	_check(jams > 0, "im Schrottzustand traten Hemmungen auf (%d bei %d Schuss)" % [jams, shots])
+	_check(bookkeeping_ok, "jeder Schuss verbraucht genau eine Patrone, auch bei Hemmungen")
+	# Gesamtbilanz: Was reingegeben wurde, ist verschossen oder noch da.
+	_check(shots + weapon.get_total_rounds() == supplied,
+		"Bilanz stimmt: %d verschossen + %d uebrig = %d geladen"
+			% [shots, weapon.get_total_rounds(), supplied])
 
 	weapon.free()
 

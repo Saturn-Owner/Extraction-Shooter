@@ -33,6 +33,21 @@ extends Node3D
 ## Wie schnell zwischen den Haltungen gewechselt wird.
 @export var pose_speed: float = 11.0
 
+@export_group("Nachladehaltung")
+
+## Beim Nachladen kippt die Waffe schraeg nach oben und dreht sich zum
+## Spieler. Sonst passiert der ganze Magazinwechsel unten ausserhalb des
+## Bildes und man sieht von der Animation praktisch nichts.
+@export var reload_position: Vector3 = Vector3(0.075, -0.150, -0.235)
+
+## Nach oben kippen (X), zur Mitte drehen (Y), zum Spieler rollen (Z).
+## Das Rollen ist der wichtigste Teil — erst dadurch zeigt der
+## Magazinschacht in Richtung Kamera.
+@export var reload_rotation_degrees: Vector3 = Vector3(24.0, 17.0, -34.0)
+
+## Anteil der Nachladezeit, in dem die Waffe hoch- bzw. wieder zurueckwandert.
+@export_range(0.05, 0.45) var reload_pose_blend: float = 0.16
+
 @export_group("Zielen")
 
 ## Sekunden von der Huefte bis die Visierlinie steht.
@@ -238,9 +253,33 @@ func _update_aim(delta: float) -> void:
 	_aim_progress = clampf(_aim_progress + (step if wants_aim else -step), 0.0, 1.0)
 
 
+## Wie stark die Nachladehaltung gerade wirkt.
+## Faehrt am Anfang hoch und am Ende wieder herunter, damit der Uebergang
+## nicht springt.
+func _get_reload_pose_weight() -> float:
+	if _sequence_time_left <= 0.0 or _sequence_duration <= 0.0:
+		return 0.0
+	var progress := 1.0 - _sequence_time_left / _sequence_duration
+	var blend := clampf(reload_pose_blend, 0.05, 0.45)
+	var rise := _ramp(progress, 0.0, blend)
+	var fall := 1.0 - _ramp(progress, 1.0 - blend, 1.0)
+	# Weiche Kurve statt Gerade — sonst wirkt das Anheben mechanisch.
+	return smoothstep(0.0, 1.0, minf(rise, fall))
+
+
 func _update_pose(delta: float) -> void:
 	var target_pos := hip_position
 	var target_rot := hip_rotation_degrees
+
+	var reload_weight := _get_reload_pose_weight()
+	if reload_weight > 0.0:
+		# Nachladen schlaegt alles andere: Wer nachlaedt, zielt nicht.
+		target_pos = target_pos.lerp(reload_position, reload_weight)
+		target_rot = target_rot.lerp(reload_rotation_degrees, reload_weight)
+		var reload_step := clampf(pose_speed * delta, 0.0, 1.0)
+		_pose.position = _pose.position.lerp(target_pos, reload_step)
+		_pose.rotation_degrees = _pose.rotation_degrees.lerp(target_rot, reload_step)
+		return
 
 	if _sprinting:
 		target_pos = sprint_position
