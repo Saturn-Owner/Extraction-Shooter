@@ -5,10 +5,45 @@
 [resource]
 script = ExtResource("1_r3qpu")
 entries = Array[Dictionary]([{
+"id": "misc_screws",
+"max": 5,
+"min": 2,
+"weight": 45
+}, {
+"id": "misc_wire_spool",
+"max": 3,
+"min": 1,
+"weight": 42
+}, {
 "id": "ammo_762x39_ps",
 "max": 30,
 "min": 10,
 "weight": 40
+}, {
+"id": "misc_gear_wheel",
+"max": 3,
+"min": 1,
+"weight": 30
+}, {
+"id": "tool_multitool",
+"max": 1,
+"min": 1,
+"weight": 18
+}, {
+"id": "tool_crowbar",
+"max": 1,
+"min": 1,
+"weight": 14
+}, {
+"id": "misc_car_battery",
+"max": 1,
+"min": 1,
+"weight": 9
+}, {
+"id": "tool_ice_axe",
+"max": 1,
+"min": 1,
+"weight": 6
 }, {
 "id": "ammo_556x45_m855",
 "max": 30,
@@ -51,5 +86,4 @@ entries = Array[Dictionary]([{
 "weight": 4
 }])
 min_rolls = 2
-max_rolls = 4
-empty_weight = 30
+max_rolls = 5

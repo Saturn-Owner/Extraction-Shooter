@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_qby3j"]
+
+[resource]
+script = ExtResource("1_qby3j")
+id = &"med_tourniquet"
+display_name = "Aderpresse"
+description = "Schnuert das Glied ab. Rettet gegen schwere Blutungen - kostet aber das Glied, wenn sie zu lange sitzt."
+category = 7
+can_rotate = false
+weight_kg = 0.08
+max_stack = 2
+base_price = 780

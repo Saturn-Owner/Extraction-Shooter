@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_bkv4o"]
+
+[resource]
+script = ExtResource("1_bkv4o")
+id = &"food_coffee_tin"
+display_name = "Kaffeedose"
+description = "Ungeoeffnet. Vor dem Krieg ein Fruehstueck, heute ein Tauschmittel."
+category = 8
+can_rotate = false
+weight_kg = 0.35
+base_price = 620

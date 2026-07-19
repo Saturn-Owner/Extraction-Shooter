@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_tk8th"]
+
+[resource]
+script = ExtResource("1_tk8th")
+id = &"tool_ice_axe"
+display_name = "Eispickel"
+description = "Ohne den kommt niemand die vereiste Klippe hoch. Der Weg dorthin ist kuerzer - wenn man ihn dabei hat."
+category = 10
+grid_height = 3
+weight_kg = 1.1
+base_price = 3200

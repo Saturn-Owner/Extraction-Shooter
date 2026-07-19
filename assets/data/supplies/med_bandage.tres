@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_yj7gv"]
+
+[resource]
+script = ExtResource("1_yj7gv")
+id = &"med_bandage"
+display_name = "Verband"
+description = "Sterile Mullbinde. Stoppt leichte Blutungen, gegen eine Arterie zwecklos."
+category = 7
+can_rotate = false
+weight_kg = 0.05
+max_stack = 4
+base_price = 160

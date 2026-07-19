@@ -30,6 +30,8 @@ func _initialize() -> void:
 	_check_info_lines()
 	_check_find_sounds()
 	_check_reveal_animation()
+	_check_category_matches_id()
+	_check_loot_variety()
 	_print_caliber_overview()
 
 	print("\n=== ERGEBNIS: %s ===" % ("FEHLGESCHLAGEN" if _failed else "ALLES OK"))
@@ -246,14 +248,20 @@ func _check_find_sounds() -> void:
 
 		var kategorie: String = ItemData.Category.keys()[item.category]
 
-		# Echte Aufnahmen sind meist .ogg und lassen sich hier nicht
-		# Sample fuer Sample pruefen — dafuer sind sie auch nicht noetig,
-		# weil ein Mensch sie ausgesucht hat. Genau geprueft wird die
-		# Synthese, weil die aus einer Rechnung kommt und still sein
-		# koennte, ohne dass es jemandem auffaellt.
+		# Echte Aufnahmen hat ein Mensch ausgesucht und angehoert — die
+		# muessen hier nicht Sample fuer Sample geprueft werden. Sie liegen
+		# ausserdem meist auf Vollpegel, was voellig normal ist.
+		#
+		# Genau geprueft wird nur die SYNTHESE: Die kommt aus einer Rechnung
+		# und koennte still oder uebersteuert sein, ohne dass es jemandem
+		# auffaellt.
+		if SearchAudio.has_real_recording(item):
+			print("  OK  %-12s echte Aufnahme" % kategorie)
+			continue
+
 		var wav := stream as AudioStreamWAV
 		if wav == null:
-			print("  OK  %-12s echte Aufnahme (%s)" % [kategorie, stream.get_class()])
+			print("  OK  %-12s %s" % [kategorie, stream.get_class()])
 			continue
 
 		var peak := _peak_of(wav)
@@ -334,6 +342,90 @@ func _peak_of(stream: AudioStreamWAV) -> float:
 		peak = maxi(peak, absi(value))
 		i += 2
 	return float(peak) / 32767.0
+
+
+## Die Kategorie muss zum Namenspraefix passen.
+##
+## Der Rucksack war jahrelang als MEDICAL eingetragen, weil die Kategorie
+## in der .tres eine ZAHL ist und sich niemand verzaehlt gerne. Aufgefallen
+## ist es erst, als er das Geraeusch fuer Verbandszeug bekam. Ein Praefix
+## im Namen und eine Zahl in der Datei koennen auseinanderlaufen — dieser
+## Test verhindert genau das.
+func _check_category_matches_id() -> void:
+	print("\n--- Kategorie passt zum Namen")
+	ItemRegistry.ensure_loaded()
+
+	var expected := {
+		"ammo_": ItemData.Category.AMMO,
+		"weapon_": ItemData.Category.WEAPON,
+		"plate_": ItemData.Category.ARMOR_PLATE,
+		"backpack_": ItemData.Category.BACKPACK,
+		"med_": ItemData.Category.MEDICAL,
+		"food_": ItemData.Category.FOOD,
+		"misc_": ItemData.Category.MISC,
+		"tool_": ItemData.Category.TOOL,
+		"key_": ItemData.Category.KEY,
+	}
+
+	var checked := 0
+	var wrong := 0
+	for item in ItemRegistry.get_all():
+		var id := String(item.id)
+		for prefix in expected:
+			if not id.begins_with(prefix):
+				continue
+			checked += 1
+			if item.category != expected[prefix]:
+				_fail("%s ist als %s eingetragen, erwartet war %s" % [
+					id,
+					ItemData.Category.keys()[item.category],
+					ItemData.Category.keys()[expected[prefix]],
+				])
+				wrong += 1
+			break
+
+	if wrong == 0:
+		print("  OK  %d Gegenstaende, alle Kategorien passen zum Namen" % checked)
+
+
+## Eine Kiste muss mehr ausspucken koennen als Munition.
+##
+## Vorher gab es ueberhaupt nur Munition, Waffen, eine Platte und einen
+## Rucksack — wer nur Munition findet, trifft keine Entscheidung, was er
+## mitnimmt. Genau diese Entscheidung ist der Kern des Genres.
+func _check_loot_variety() -> void:
+	print("\n--- Vielfalt in den Kisten")
+	ItemRegistry.ensure_loaded()
+
+	for table_name in ["wohnung", "werkstatt", "militaer"]:
+		var path := "res://assets/data/loot/%s.tres" % table_name
+		var table := load(path) as LootTableData
+		if table == null:
+			_fail("Loot-Tabelle fehlt: %s" % path)
+			continue
+
+		var problems := table.validate()
+		if not problems.is_empty():
+			_fail("%s: %s" % [table_name, ", ".join(problems)])
+			continue
+
+		var categories := {}
+		for entry in table.entries:
+			var item := ItemRegistry.get_item(StringName(entry["id"]))
+			if item == null:
+				continue
+			categories[item.category] = true
+
+		var names: Array[String] = []
+		for c in categories:
+			names.append(ItemData.Category.keys()[c])
+		names.sort()
+
+		if categories.size() < 3:
+			_fail("%s bietet nur %d Kategorien: %s" % [table_name, categories.size(), ", ".join(names)])
+		else:
+			print("  OK  %-10s %d Eintraege, %d Kategorien: %s" % [
+				table_name, table.entries.size(), categories.size(), ", ".join(names)])
 
 
 func _fail(msg: String) -> void:

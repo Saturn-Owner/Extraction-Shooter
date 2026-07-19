@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ItemData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/item_data.gd" id="1_ki2n3"]
+
+[resource]
+script = ExtResource("1_ki2n3")
+id = &"tool_crowbar"
+display_name = "Brecheisen"
+description = "Oeffnet, was verschlossen ist, und taugt zur Not als Waffe. Kalt genug, dass die Hand daran klebt."
+category = 10
+grid_height = 3
+weight_kg = 2.4
+base_price = 1250

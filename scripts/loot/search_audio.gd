@@ -63,6 +63,15 @@ static func get_stream(data: ItemData) -> AudioStream:
 	return stream
 
 
+## Ob für diesen Gegenstand eine echte Aufnahme vorliegt.
+##
+## Fuer Pruefungen: Eine Aufnahme darf auf Vollpegel liegen, das ist bei
+## heruntergeladenen Dateien der Normalfall. Die SYNTHESE darf das nicht,
+## weil ein Rechenfehler dort zu Uebersteuerung fuehrt.
+static func has_real_recording(data: ItemData) -> bool:
+	return data != null and _load_file_for(data) != null
+
+
 ## Sucht eine echte Aufnahme, von speziell nach allgemein:
 ##   1. genau dieser Gegenstand   loot/ammo_556x45_m995.wav
 ##   2. seine Kategorie           loot/weapon.wav
