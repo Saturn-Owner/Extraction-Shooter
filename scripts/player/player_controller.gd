@@ -124,6 +124,9 @@ var is_aiming: bool = false
 ## nur eben unsichtbar.
 @onready var weapon_view: WeaponView = get_node_or_null("CameraPivot/Weapon/WeaponView")
 
+## Belastung durch den eigenen Muendungsknall. Wird in _ready() angelegt.
+var muzzle_blast: MuzzleBlast
+
 ## Sichtfeld aus der Szene, auf das nach dem Zielen zurueckgekehrt wird.
 var _base_fov: float = 75.0
 
@@ -141,6 +144,13 @@ func _ready() -> void:
 		# Gezielt wird mit der Kamera, geschossen aus der Muendung. Ohne diese
 		# Zeile fliegt die Kugel parallel an der Bildmitte vorbei.
 		weapon.set_aim_source(_camera)
+		# Muendungsknall: blendet, raucht, pfeift und ruettelt bei Dauerfeuer.
+		# Im Code erzeugt statt in player.tscn — Szenen lassen sich bei
+		# Konflikten nicht mergen, und der Kollege arbeitet an der Szene.
+		muzzle_blast = MuzzleBlast.new()
+		muzzle_blast.name = "MuzzleBlast"
+		_camera_pivot.add_child(muzzle_blast)
+		muzzle_blast.attach(weapon, _camera)
 		if weapon_view != null:
 			weapon_view.attach_weapon(weapon)
 			weapon.set_visual_muzzle(weapon_view.get_muzzle_point())

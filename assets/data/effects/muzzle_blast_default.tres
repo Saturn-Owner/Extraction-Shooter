@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="MuzzleBlastData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/muzzle_blast_data.gd" id="1_blast"]
+
+[resource]
+script = ExtResource("1_blast")
+rise_per_shot = 0.28
+threshold = 0.35
+recovery_seconds = 2.5
+hold_seconds = 0.15
+flash_fall = 1.2
+smoke_fall = 2.5
+shake_fall = 0.5
+tinnitus_fall = 12.0
+flash_alpha = 0.55
+shake_roll_deg = 1.5
+shake_pitch_deg = 0.35
+shake_yaw_deg = 0.35
+shake_offset_m = 0.015
+shake_speed = 14.0
+muffle_cutoff_hz = 600.0
+muffle_volume_db = -9.0
+tinnitus_hz = 4500.0
+tinnitus_beat_hz = 4508.0
+tinnitus_volume_db = -14.0
