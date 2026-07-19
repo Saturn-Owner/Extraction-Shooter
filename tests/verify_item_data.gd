@@ -29,6 +29,7 @@ func _initialize() -> void:
 	_check_rarity_tiers()
 	_check_info_lines()
 	_check_find_sounds()
+	_check_reveal_animation()
 	_print_caliber_overview()
 
 	print("\n=== ERGEBNIS: %s ===" % ("FEHLGESCHLAGEN" if _failed else "ALLES OK"))
@@ -149,7 +150,7 @@ func _check_rarity_tiers() -> void:
 	if used < 3:
 		_fail("nur %d Seltenheitsstufen kommen vor — Farbe und Klang unterscheiden dann kaum" % used)
 	else:
-		print("  OK  %d von 4 Stufen sind belegt" % used)
+		print("  OK  %d von %d Stufen sind belegt" % [used, ItemData.Rarity.size()])
 
 	# Stichproben: Die Grenzen muessen zu den bekannten Gegenstaenden passen.
 	var billig := ItemRegistry.get_item(&"ammo_9x19_fmj")
@@ -268,14 +269,55 @@ func _check_find_sounds() -> void:
 	# Seltener muss deutlicher klingen. Das haengt NICHT mehr an der Datei,
 	# sondern an der Lautstaerke beim Abspielen — sonst klaenge seltene und
 	# epische Munition gleich, weil sie sich dieselbe Aufnahme teilen.
-	var leise := SearchAudio.get_volume_db(ItemData.Rarity.UNCOMMON)
-	var mittel := SearchAudio.get_volume_db(ItemData.Rarity.RARE)
-	var laut := SearchAudio.get_volume_db(ItemData.Rarity.EPIC)
-	if not (leise < mittel and mittel < laut):
-		_fail("Lautstaerke steigt nicht mit der Seltenheit (%.1f / %.1f / %.1f dB)"
-			% [leise, mittel, laut])
+	var steigend := true
+	var werte: Array[float] = []
+	for rarity in [ItemData.Rarity.UNCOMMON, ItemData.Rarity.RARE,
+			ItemData.Rarity.EPIC, ItemData.Rarity.LEGENDARY]:
+		var db := SearchAudio.get_volume_db(rarity)
+		if not werte.is_empty() and db <= werte[-1]:
+			steigend = false
+		werte.append(db)
+
+	if not steigend:
+		_fail("Lautstaerke steigt nicht durchgehend mit der Seltenheit: %s" % str(werte))
 	else:
-		print("  OK  Lautstaerke steigt: %.1f / %.1f / %.1f dB" % [leise, mittel, laut])
+		print("  OK  Lautstaerke steigt durchgehend: %s dB" % str(werte))
+
+
+## Die Fundanimation muss mit der Seltenheit laenger werden, und jede
+## Stufe braucht einen Eintrag — eine fehlende faellt sonst auf 0,3 s
+## zurueck, ohne dass es jemandem auffaellt.
+func _check_reveal_animation() -> void:
+	print("\n--- Fundanimation")
+
+	var vorher := -1.0
+	var steigend := true
+	for rarity in ItemData.Rarity.values():
+		if not InventoryGridView.REVEAL_DURATION.has(rarity):
+			_fail("keine Animationsdauer fuer %s" % ItemData.Rarity.keys()[rarity])
+			continue
+		var dauer: float = InventoryGridView.REVEAL_DURATION[rarity]
+		if dauer <= vorher:
+			steigend = false
+		vorher = dauer
+		print("  %-10s %.2f s" % [ItemData.Rarity.keys()[rarity], dauer])
+
+	if not steigend:
+		_fail("die Animationsdauer steigt nicht durchgehend mit der Seltenheit")
+	else:
+		print("  OK  Dauer steigt mit der Seltenheit")
+
+	# Nur die hohen Stufen sollen aufploppen. Wuerde jede Patrone huepfen,
+	# zappelt das ganze Raster beim Durchsuchen.
+	var billig := ItemRegistry.get_item(&"ammo_9x19_fmj")
+	var teuer := ItemRegistry.get_item(&"weapon_rifle_ar15")
+	if billig != null and teuer != null:
+		if billig.is_high_value():
+			_fail("9mm FMJ gilt als hochwertig — dann huepft jede Patrone")
+		elif not teuer.is_high_value():
+			_fail("die AR-15 gilt nicht als hochwertig")
+		else:
+			print("  OK  nur hochwertige Funde ploppen auf")
 
 
 ## Groesster Ausschlag im Puffer, 0 bis 1.

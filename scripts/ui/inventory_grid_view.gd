@@ -54,6 +54,21 @@ const COLOR_HIDDEN_BORDER := Color(0.22, 0.23, 0.26)
 ## Der Umriss, der gerade durchsucht wird.
 const COLOR_HIDDEN_ACTIVE_BORDER := Color(0.85, 0.78, 0.45)
 
+## Wie lange die Fundanimation läuft, je Seltenheitsstufe.
+## Krimskrams blitzt nur kurz auf, damit man merkt DASS etwas erschien —
+## ein guter Fund leuchtet lange genug, um den Blick hinzuziehen.
+const REVEAL_DURATION := {
+	ItemData.Rarity.COMMON: 0.30,
+	ItemData.Rarity.UNCOMMON: 0.45,
+	ItemData.Rarity.RARE: 0.70,
+	ItemData.Rarity.EPIC: 1.00,
+	ItemData.Rarity.LEGENDARY: 1.30,
+}
+
+## Wie weit der Gegenstand beim Auftauchen über seine Größe hinauswächst.
+## Nur bei guten Funden — bei jeder Patrone würde das Raster zappeln.
+const POP_SCALE := 0.16
+
 ## Farbe je Kategorie — nur noch als schmaler Streifen am linken Rand, damit
 ## man Munition von Medizin unterscheidet, ohne dass die Flaeche bunt wird.
 const CATEGORY_COLORS := {
@@ -88,6 +103,65 @@ var _hover_cell: Vector2i = Vector2i(-1, -1)
 
 ## Gegenstand unter dem Zeiger. 0 = keiner.
 var _hover_stack_id: int = 0
+
+## Laufende Fundanimationen: instance_id -> verstrichene Zeit.
+var _reveal_animations: Dictionary = {}
+
+
+func _ready() -> void:
+	# Nur laufen lassen, wenn wirklich etwas animiert wird — sonst rechnet
+	# jedes Raster im Spiel dauerhaft mit, auch das der Ausruestung.
+	set_process(false)
+
+
+## Startet die Fundanimation für einen gerade aufgedeckten Gegenstand.
+func play_reveal(stack: ItemStack) -> void:
+	if stack == null:
+		return
+	_reveal_animations[stack.instance_id] = 0.0
+	set_process(true)
+	queue_redraw()
+
+
+func _process(delta: float) -> void:
+	if _reveal_animations.is_empty():
+		set_process(false)
+		return
+
+	var finished: Array = []
+	for id in _reveal_animations:
+		var elapsed: float = _reveal_animations[id] + delta
+		_reveal_animations[id] = elapsed
+		if elapsed >= _duration_for(id):
+			finished.append(id)
+
+	for id in finished:
+		_reveal_animations.erase(id)
+
+	queue_redraw()
+
+
+## Wie lange die Animation dieses Gegenstands dauert.
+func _duration_for(instance_id: int) -> float:
+	if grid == null:
+		return 0.0
+	var stack := grid.get_stack(instance_id)
+	if stack == null:
+		return 0.0
+	var data := stack.get_data()
+	if data == null:
+		return 0.3
+	return REVEAL_DURATION.get(data.get_rarity(), 0.3)
+
+
+## Fortschritt der Animation, 0 bis 1. Negativ = keine Animation.
+func _reveal_progress(instance_id: int) -> float:
+	if not _reveal_animations.has(instance_id):
+		return -1.0
+	var duration := _duration_for(instance_id)
+	if duration <= 0.0:
+		return -1.0
+	return clampf(float(_reveal_animations[instance_id]) / duration, 0.0, 1.0)
 var _last_click_time: float = 0.0
 var _last_click_id: int = -1
 
@@ -285,6 +359,36 @@ func _draw_drag_preview() -> void:
 	draw_rect(rect, COLOR_HOVER_OK if fits else COLOR_HOVER_BAD)
 
 
+## Das kurze Aufleuchten nach dem Aufdecken.
+##
+## Bewusst ohne Shader: Ein echter Leuchteffekt braucht Nachbearbeitung im
+## ganzen Bild, und dafuer ist das hier zu klein. Stattdessen eine helle
+## Flaeche plus mehrere Rahmen nach aussen — das liest sich aus zwei Metern
+## Entfernung genauso wie ein Schein.
+##
+## Gute Funde pulsieren zusaetzlich, damit sie im Augenwinkel auffallen,
+## auch wenn man gerade woanders hinsieht.
+func _draw_reveal_glow(rect: Rect2, color: Color, progress: float, strong: bool) -> void:
+	# Schnell hell, langsam aus: So wirkt es wie ein Aufblitzen und nicht
+	# wie ein Ein- und Ausblenden.
+	var fade := pow(1.0 - progress, 2.2)
+
+	if strong:
+		# Zwei Pulse ueber die Dauer, die mit dem Ausklingen schwaecher werden.
+		fade *= 0.65 + 0.35 * absf(sin(progress * PI * 2.0))
+
+	var fill := color
+	fill.a = fade * (0.55 if strong else 0.32)
+	draw_rect(rect, fill)
+
+	# Rahmen nach aussen, jeder schwaecher — das ergibt den Schein.
+	var rings := 4 if strong else 2
+	for i in range(rings):
+		var ring := color
+		ring.a = fade * (0.5 if strong else 0.3) * (1.0 - float(i) / float(rings))
+		draw_rect(rect.grow(float(i) * 2.0 + 1.0), ring, false, 2.0)
+
+
 func _draw_stack(stack: ItemStack) -> void:
 	# Der gezogene Gegenstand haengt am Mauszeiger — gezeichnet wird er dort
 	# vom DragGhost des Fensters, nicht hier.
@@ -308,9 +412,23 @@ func _draw_stack(stack: ItemStack) -> void:
 		draw_rect(rect, COLOR_ITEM_BORDER, false, 1.5)
 		return
 
+	var rarity := data.get_rarity()
+	var rarity_color := ItemTooltip.get_rarity_color(rarity)
+	var progress := _reveal_progress(stack.instance_id)
+
+	# Aufploppen: kurz ueber die eigene Groesse hinaus und zurueck.
+	# Nur bei guten Funden — bei jeder Patrone wuerde das Raster zappeln.
+	if progress >= 0.0 and data.is_high_value():
+		# sin(pi * x) waechst und faellt in einer Bewegung, ohne Sprung
+		# am Anfang oder Ende.
+		var pop := sin(PI * progress) * POP_SCALE
+		rect = rect.grow(rect.size.x * pop * 0.5)
+
 	# Dunkler Grundton, leicht in Richtung Seltenheit eingefaerbt.
-	var rarity_color := ItemTooltip.get_rarity_color(data.get_rarity())
 	draw_rect(rect, COLOR_ITEM.lerp(rarity_color, RARITY_TINT))
+
+	if progress >= 0.0:
+		_draw_reveal_glow(rect, rarity_color, progress, data.is_high_value())
 
 	# Schmaler Streifen links: die Kategorie auf einen Blick.
 	var accent: Color = CATEGORY_COLORS.get(data.category, COLOR_ITEM_BORDER)

@@ -99,7 +99,8 @@ static func clear_cache() -> void:
 ## seltene und epische Munition identisch.
 static func get_volume_db(rarity: ItemData.Rarity) -> float:
 	match rarity:
-		ItemData.Rarity.EPIC: return 0.0
+		ItemData.Rarity.LEGENDARY: return 0.0
+		ItemData.Rarity.EPIC: return -1.5
 		ItemData.Rarity.RARE: return -3.5
 	return -8.0
 
@@ -173,9 +174,9 @@ static func _build(category: ItemData.Category, rarity: ItemData.Rarity) -> Audi
 				{at = 0.000, partials = [418.0, 703.0, 985.0], decay = 26.0, amp = 0.80, noise = 0.34},
 			]
 
-	# Episch bekommt einen tiefen Unterton. Der macht den Fund schwer,
-	# ohne ihn festlich zu machen — genau der Unterschied zum Jingle.
-	if rarity == ItemData.Rarity.EPIC:
+	# Die hohen Stufen bekommen einen tiefen Unterton. Der macht den Fund
+	# schwer, ohne ihn festlich zu machen — genau der Unterschied zum Jingle.
+	if rarity >= ItemData.Rarity.EPIC:
 		strikes.append({at = 0.0, partials = [52.0, 78.0], decay = 6.0, amp = 0.55, noise = 0.0})
 		duration = maxf(duration, 0.68)
 

@@ -90,11 +90,16 @@ func _follow_mouse() -> void:
 	)
 
 
-## Farbe je Seltenheitsstufe. Gedämpft gehalten — das Inventar soll düster
-## bleiben, nicht leuchten wie ein Rollenspiel-Beutefenster.
+## Farbe je Seltenheitsstufe.
+##
+## Die unteren drei sind bewusst gedämpft — das Inventar soll düster
+## bleiben, nicht leuchten wie ein Rollenspiel-Beutefenster. Gold und Rot
+## duerfen dagegen kraeftig sein: Sie sind selten genug, dass sie
+## auffallen sollen, wenn sie auftauchen.
 static func get_rarity_color(rarity: ItemData.Rarity) -> Color:
 	match rarity:
-		ItemData.Rarity.EPIC: return Color(0.82, 0.66, 0.36)
+		ItemData.Rarity.LEGENDARY: return Color(0.88, 0.28, 0.24)
+		ItemData.Rarity.EPIC: return Color(0.92, 0.72, 0.30)
 		ItemData.Rarity.RARE: return Color(0.52, 0.66, 0.82)
 		ItemData.Rarity.UNCOMMON: return Color(0.60, 0.72, 0.56)
 	return Color(0.70, 0.72, 0.74)

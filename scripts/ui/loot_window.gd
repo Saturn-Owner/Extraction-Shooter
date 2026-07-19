@@ -104,7 +104,7 @@ func is_open() -> bool:
 
 
 func _on_item_revealed(stack: ItemStack, _remaining: int) -> void:
-	_container_view.queue_redraw()
+	_container_view.play_reveal(stack)
 	_update_status()
 	_play_find_sound(stack)
 

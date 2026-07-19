@@ -29,10 +29,11 @@ enum Category {
 ## beim Fund. Wird aus dem Preis ABGELEITET, nicht pro Item gepflegt —
 ## sonst müsste man bei jeder Preisänderung daran denken.
 enum Rarity {
-	COMMON,    ## Krimskrams, Pistolenmunition — grau, kein Fundgeräusch
-	UNCOMMON,  ## brauchbare Ausrüstung
-	RARE,      ## gute Munition, solide Waffen
-	EPIC,      ## Platten, hochwertige Waffen — der Fund, für den man bleibt
+	COMMON,     ## Krimskrams, Pistolenmunition — grau, kein Fundgeräusch
+	UNCOMMON,   ## brauchbare Ausrüstung — gedämpftes Grün
+	RARE,       ## gute Munition, solide Waffen — Blau
+	EPIC,       ## Platten, hochwertige Munition — Gold
+	LEGENDARY,  ## die teuersten Waffen — Rot, der Fund, für den man bleibt
 }
 
 ## Eindeutige ID, z.B. "ammo_556x45_m995". Wird zum Speichern benutzt —
@@ -133,11 +134,18 @@ func get_search_time() -> float:
 ## Zwei getrennte Felder würden früher oder später auseinanderlaufen.
 ##
 ## Die Grenzen orientieren sich an den vorhandenen Daten:
-##   9mm FMJ 42        -> COMMON
-##   M855A1 260        -> UNCOMMON
-##   M995 780          -> RARE
+##   9mm FMJ 42         -> COMMON
+##   M855A1 260         -> UNCOMMON
+##   M995 780           -> RARE
 ##   Schutzplatte 18500 -> EPIC
+##   AR-15 24000        -> LEGENDARY
+##
+## Die oberste Stufe ist bewusst eng: Vorher galten 14 von 43 Gegenständen
+## als hoechste Stufe, weil jede Waffe teuer ist. Wenn fast alles glaenzt,
+## bedeutet Glaenzen nichts mehr.
 func get_rarity() -> Rarity:
+	if base_price >= 20000:
+		return Rarity.LEGENDARY
 	if base_price >= 5000:
 		return Rarity.EPIC
 	if base_price >= 500:
@@ -145,6 +153,12 @@ func get_rarity() -> Rarity:
 	if base_price >= 150:
 		return Rarity.UNCOMMON
 	return Rarity.COMMON
+
+
+## Ob dieser Gegenstand einen Fund wert ist, fuer den man stehenbleibt.
+## Steuert die auffaelligere Fundanimation.
+func is_high_value() -> bool:
+	return get_rarity() >= Rarity.EPIC
 
 
 ## Kurze Typbezeichnung für die Infoanzeige. Basisklasse: die Kategorie.
