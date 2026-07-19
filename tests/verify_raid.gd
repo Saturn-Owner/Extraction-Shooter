@@ -40,6 +40,7 @@ func _run_all() -> void:
 	_test_search_times_scale()
 	await _test_container_search()
 	await _test_hidden_items_are_untouchable()
+	await _test_drag_between_grids()
 	await _test_extraction_secures_loot()
 	await _test_death_loses_loot()
 	await _test_locked_exit()
@@ -262,6 +263,79 @@ func _test_hidden_items_are_untouchable() -> void:
 	_check(target.get_item_count() == 1, "und liegt im Inventar")
 
 	container.free()
+
+
+## Ziehen mit der Maus, so wie das Fenster es ausloest.
+##
+## Geprueft wird der Weg, den ein Mausklick nimmt: gedrueckt auf einem Feld
+## der Kiste, losgelassen auf einem Feld des Inventars. Was dabei NICHT
+## geprueft werden kann, ist ob sich das Ziehen fluessig anfuehlt.
+func _test_drag_between_grids() -> void:
+	_section("Ziehen zwischen den Rastern")
+
+	var packed: PackedScene = load("res://scenes/ui/loot_window.tscn")
+	if packed == null:
+		_check(false, "loot_window.tscn laedt")
+		return
+
+	var window: LootWindow = packed.instantiate()
+	root.add_child(window)
+	await process_frame
+
+	_check(window.get_node_or_null("DragGhost") is DragGhost,
+		"Anzeige am Mauszeiger ist vorhanden")
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("werkstatt")
+	root.add_child(container)
+	await process_frame
+	container.set_seed(7)
+
+	var player := _make_player()
+	await process_frame
+
+	window.open_for(container, player.inventory)
+
+	# Alles aufdecken — das Verdecken ist bereits eigens geprueft.
+	for stack in container.contents.get_all_stacks():
+		container.mark_revealed(stack)
+
+	var stacks := container.contents.get_all_stacks()
+	if stacks.is_empty():
+		_check(false, "Container hat Inhalt")
+		window.free()
+		container.free()
+		player.free()
+		return
+
+	var dragged: ItemStack = stacks[0]
+	var id := dragged.instance_id
+	var before := player.inventory.grid.get_item_count()
+
+	var container_view: InventoryGridView = window.get_node("Layout/Columns/Left/ContainerView")
+	var player_view: InventoryGridView = window.get_node("Layout/Columns/Right/PlayerView")
+
+	# Aufnehmen in der Kiste, ablegen im Inventar.
+	container_view.item_pressed.emit(dragged, container_view)
+	player_view.cell_released.emit(Vector2i(0, 0), player_view)
+
+	_check(player.inventory.grid.get_stack(id) != null,
+		"gezogener Gegenstand liegt im Inventar")
+	_check(container.contents.get_stack(id) == null,
+		"und nicht mehr in der Kiste")
+	_check(player.inventory.grid.get_item_count() == before + 1,
+		"nichts verdoppelt, nichts verloren")
+
+	# Zurueck in die Kiste ziehen muss genauso gehen.
+	var back: ItemStack = player.inventory.grid.get_stack(id)
+	player_view.item_pressed.emit(back, player_view)
+	container_view.cell_released.emit(Vector2i(0, 0), container_view)
+	_check(container.contents.get_stack(id) != null, "und laesst sich zurueckziehen")
+	_check(container.is_revealed(id), "was man selbst hineinlegt, bleibt sichtbar")
+
+	window.free()
+	container.free()
+	player.free()
 
 
 func _make_player() -> PlayerController:

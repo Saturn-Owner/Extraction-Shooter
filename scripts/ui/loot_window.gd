@@ -30,6 +30,7 @@ var _drag_source: InventoryGridView = null
 @onready var _player_title: Label = $Layout/Columns/Right/PlayerTitle
 @onready var _status: Label = $Layout/Columns/Left/Status
 @onready var _progress: ProgressBar = $Layout/Columns/Left/SearchProgress
+@onready var _ghost: DragGhost = $DragGhost
 
 
 func _ready() -> void:
@@ -77,9 +78,17 @@ func _on_item_revealed(_stack: ItemStack, _remaining: int) -> void:
 
 
 func _process(_delta: float) -> void:
-	if not visible or container == null:
+	if not visible:
 		return
-	_update_status()
+
+	# Wer neben den Rastern loslaesst, bekommt sonst kein Ereignis — der
+	# Gegenstand haenge dann unsichtbar am Zeiger fest. Eingaben laufen vor
+	# _process, ein gueltiges Ablegen ist hier also schon erledigt.
+	if _drag_stack != null and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_cancel_drag()
+
+	if container != null:
+		_update_status()
 
 
 func _update_status() -> void:
@@ -106,6 +115,7 @@ func _update_status() -> void:
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 	_drag_stack = stack
 	_drag_source = view
+	_ghost.show_stack(stack)
 	for v in [_container_view, _player_view]:
 		v.drag_stack = stack
 		v.drag_source = view
@@ -183,6 +193,8 @@ func _on_item_double_clicked(stack: ItemStack, view: InventoryGridView) -> void:
 func _cancel_drag() -> void:
 	_drag_stack = null
 	_drag_source = null
+	if _ghost != null:
+		_ghost.clear()
 	for v in [_container_view, _player_view]:
 		if v == null:
 			continue

@@ -185,7 +185,8 @@ func _draw_drag_preview() -> void:
 
 
 func _draw_stack(stack: ItemStack) -> void:
-	# Der gezogene Gegenstand wird am Mauszeiger gezeichnet, nicht hier.
+	# Der gezogene Gegenstand haengt am Mauszeiger — gezeichnet wird er dort
+	# vom DragGhost des Fensters, nicht hier.
 	if stack == drag_stack:
 		return
 

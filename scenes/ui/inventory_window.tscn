@@ -1,7 +1,8 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/inventory_window.gd" id="1_inventory_window"]
 [ext_resource type="Script" path="res://scripts/ui/inventory_grid_view.gd" id="2_grid_view"]
+[ext_resource type="Script" path="res://scripts/ui/drag_ghost.gd" id="3_drag_ghost"]
 
 [sub_resource type="StyleBoxFlat" id="Style_panel"]
 bg_color = Color(0.07, 0.08, 0.09, 0.97)
@@ -77,3 +78,10 @@ offset_right = 300.0
 offset_bottom = -30.0
 text = "[Tab] / [Esc] schliessen"
 horizontal_alignment = 1
+
+[node name="DragGhost" type="Control" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("3_drag_ghost")

@@ -20,6 +20,7 @@ var _drag_stack: ItemStack = null
 
 @onready var _view: InventoryGridView = $Layout/Inhalt/GridView
 @onready var _stats: Label = $Layout/Inhalt/Stats
+@onready var _ghost: DragGhost = $DragGhost
 
 
 func _ready() -> void:
@@ -48,8 +49,15 @@ func is_open() -> bool:
 
 
 func _process(_delta: float) -> void:
-	if visible:
-		_update_stats()
+	if not visible:
+		return
+
+	# Neben dem Raster losgelassen: siehe LootWindow — sonst klebt der
+	# Gegenstand unsichtbar am Zeiger.
+	if _drag_stack != null and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_cancel_drag()
+
+	_update_stats()
 
 
 func _update_stats() -> void:
@@ -79,6 +87,7 @@ func _update_stats() -> void:
 
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 	_drag_stack = stack
+	_ghost.show_stack(stack)
 	_view.drag_stack = stack
 	_view.drag_source = view
 	_view.queue_redraw()
@@ -116,6 +125,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _cancel_drag() -> void:
 	_drag_stack = null
+	if _ghost != null:
+		_ghost.clear()
 	_view.drag_stack = null
 	_view.drag_source = null
 	_view.queue_redraw()
