@@ -48,6 +48,8 @@ func _ready() -> void:
 
 ## Wird vom Geschoss aufgerufen. Der Rueckgabewert beschreibt den Treffer.
 func take_hit(ammo: AmmoData, distance: float, _point: Vector3, _direction: Vector3) -> Ballistics.HitResult:
+	# Unterstrich im Parameternamen, weil Godot sonst warnt — die Position
+	# brauchen wir aber für die Schadenszahl.
 	var result := Ballistics.resolve_hit(ammo, distance, plate, plate_durability, _rng)
 
 	plate_durability = maxf(0.0, plate_durability - result.damage_to_armor)
@@ -55,6 +57,14 @@ func take_hit(ammo: AmmoData, distance: float, _point: Vector3, _direction: Vect
 	hit_count += 1
 
 	_update_visuals()
+
+	# Schadenszahl leicht versetzt, damit mehrere Treffer nicht übereinander
+	# liegen und unlesbar werden.
+	var offset := Vector3(randf_range(-0.15, 0.15), randf_range(0.0, 0.3), 0.0)
+	var parent: Node = get_tree().current_scene if get_tree().current_scene != null else get_parent()
+	if parent != null:
+		DamageNumber.spawn(parent, _point + offset, result)
+
 	was_hit.emit(result, hit_count)
 
 	if health <= 0.0:

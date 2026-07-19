@@ -91,11 +91,34 @@ func _check_segment(from: Vector3, to: Vector3) -> void:
 
 	var collider: Node = hit.get("collider")
 	var point: Vector3 = hit.get("position", to)
+	var normal: Vector3 = hit.get("normal", -_velocity.normalized())
 	var distance := _start_position.distance_to(point)
 
 	var result := _apply_damage(collider, point, distance)
+	_spawn_impact(point, normal, result)
 	hit_something.emit(collider, point, result)
 	queue_free()
+
+
+## Der Einschlag zeigt auf einen Blick, was passiert ist:
+##   gelbe Funken = Platte hat gehalten
+##   orange       = Platte durchschlagen
+##   rot          = ungeschuetzt getroffen
+##   hell         = Wand oder Boden
+func _spawn_impact(point: Vector3, normal: Vector3, result: Ballistics.HitResult) -> void:
+	# Der Einschlag darf nicht an das Geschoss gehaengt werden — das wird
+	# im selben Moment entfernt und nimmt den Effekt sonst mit.
+	var scene: Node = get_parent()
+	if scene == null:
+		return
+
+	var kind := ImpactEffect.Kind.WORLD
+	if result.was_armored:
+		kind = ImpactEffect.Kind.ARMOR_PENETRATED if result.penetrated else ImpactEffect.Kind.ARMOR_STOPPED
+	elif result.damage_to_target > 0.0:
+		kind = ImpactEffect.Kind.FLESH
+
+	ImpactEffect.spawn(scene, point, normal, kind)
 
 
 ## Reicht den Treffer an das Ziel weiter, falls es Schaden nehmen kann.

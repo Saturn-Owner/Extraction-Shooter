@@ -32,12 +32,20 @@ var _cooldown: float = 0.0
 var _burst_remaining: int = 0
 var _shots_since_release: int = 0
 
+## Synthetische Platzhalter-Sounds, einmal pro Waffe berechnet.
+var _shot_sound: AudioStreamWAV
+var _dry_sound: AudioStreamWAV
+var _reload_sound: AudioStreamWAV
+
 @onready var _muzzle: Node3D = $Muzzle
+@onready var _audio: AudioStreamPlayer3D = $Muzzle/AudioStreamPlayer3D
 
 
 func _ready() -> void:
 	ItemRegistry.ensure_loaded()
 	setup(weapon_id, ammo_id)
+	_dry_sound = WeaponAudio.make_dry_fire()
+	_reload_sound = WeaponAudio.make_reload()
 
 
 ## Waffe und Munition setzen. Laedt gleich ein volles Magazin.
@@ -62,6 +70,10 @@ func setup(p_weapon_id: StringName, p_ammo_id: StringName) -> bool:
 	ammo_id = p_ammo_id
 	rounds_in_magazine = data.magazine_size
 	current_fire_mode = data.fire_modes[0] if not data.fire_modes.is_empty() else WeaponData.FireMode.SINGLE
+
+	# Klangfarbe passt sich der Waffe an — eine Pistole knallt anders als
+	# ein Scharfschützengewehr, ohne dass jemand Werte pflegen muss.
+	_shot_sound = WeaponAudio.make_gunshot(WeaponAudio.get_power_for_weapon(data))
 	return true
 
 
@@ -107,6 +119,7 @@ func try_fire(trigger_held: bool, trigger_just_pressed: bool) -> bool:
 func _shoot() -> bool:
 	if rounds_in_magazine <= 0:
 		_burst_remaining = 0
+		_play(_dry_sound, 1.0)
 		dry_fire.emit()
 		return false
 
@@ -123,9 +136,29 @@ func _shoot() -> bool:
 		var dir := _apply_spread(base_dir, i)
 		_spawn_projectile(origin, dir, speed)
 
+	_play_shot_feedback()
 	_emit_recoil()
 	fired.emit(loaded_ammo, rounds_in_magazine)
 	return true
+
+
+## Mündungsfeuer und Knall. Beides muss exakt im selben Frame kommen wie
+## das Geschoss, sonst fühlt sich der Schuss "abgekoppelt" an.
+func _play_shot_feedback() -> void:
+	if _muzzle != null:
+		var power := WeaponAudio.get_power_for_weapon(data)
+		MuzzleFlash.spawn(get_spawn_parent(), _muzzle.global_transform, 0.6 + power)
+
+	# Tonhöhe leicht variieren, damit Dauerfeuer nicht wie eine Maschine klingt.
+	_play(_shot_sound, randf_range(0.94, 1.06))
+
+
+func _play(stream: AudioStreamWAV, pitch: float) -> void:
+	if _audio == null or stream == null:
+		return
+	_audio.stream = stream
+	_audio.pitch_scale = pitch
+	_audio.play()
 
 
 ## Streuung aus Waffenpraezision (MOA) und Munitionsstreuung (Schrot).
@@ -154,8 +187,27 @@ func _spawn_projectile(origin: Vector3, direction: Vector3, speed: float) -> voi
 	var projectile: Projectile = PROJECTILE_SCENE.instantiate()
 	# An den Baum haengen, nicht an die Waffe — sonst fliegt das Geschoss
 	# mit, wenn sich der Spieler dreht.
-	get_tree().current_scene.add_child(projectile)
+	get_spawn_parent().add_child(projectile)
 	projectile.launch(loaded_ammo, origin, direction, speed, owner, projectile_mask)
+
+
+## Wohin Geschosse und Effekte gehaengt werden.
+##
+## current_scene ist null, sobald die Szene nicht als Hauptszene laeuft —
+## etwa waehrend eines Szenenwechsels, im Test oder wenn spaeter mehrere
+## Level gleichzeitig geladen sind. Deshalb mit Rueckfallebene statt blind
+## darauf zu vertrauen.
+func get_spawn_parent() -> Node:
+	var tree := get_tree()
+	if tree == null:
+		return self
+	if tree.current_scene != null:
+		return tree.current_scene
+	# Oberster Vorfahr unterhalb der Baumwurzel.
+	var node: Node = self
+	while node.get_parent() != null and node.get_parent() != tree.root:
+		node = node.get_parent()
+	return node
 
 
 ## Rueckstoss. Waechst innerhalb einer Salve an, damit Dauerfeuer auf
@@ -181,6 +233,7 @@ func reload() -> void:
 		return
 	rounds_in_magazine = data.magazine_size
 	_shots_since_release = 0
+	_play(_reload_sound, 1.0)
 	reloaded.emit(rounds_in_magazine)
 
 

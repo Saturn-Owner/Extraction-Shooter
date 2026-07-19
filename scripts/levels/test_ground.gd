@@ -38,6 +38,7 @@ const WEAPON_CYCLE: Array[StringName] = [
 
 @onready var _player: PlayerController = $Player
 @onready var _label: Label = $HUD/DebugPanel/DebugLabel
+@onready var _crosshair: Crosshair = $HUD/Crosshair
 
 var _spawn: Vector3
 var _weapon_index := 0
@@ -51,14 +52,10 @@ func _ready() -> void:
 	# Bewusst leer starten, damit man den Tempo-Bonus sofort spürt.
 	_player.carried_weight_kg = 0.0
 
-	for target in get_tree().get_nodes_in_group("ziele"):
-		if target is TargetDummy:
-			(target as TargetDummy).was_hit.connect(_on_target_hit.bind(target))
+	_player.crosshair = _crosshair
 
-	# Ziele automatisch registrieren, falls die Gruppe nicht gesetzt ist.
 	for target in _find_targets():
-		if not target.was_hit.is_connected(_on_target_hit):
-			target.was_hit.connect(_on_target_hit.bind(target))
+		target.was_hit.connect(_on_target_hit.bind(target))
 
 	_refresh_ammo_list()
 
@@ -76,6 +73,8 @@ func _find_targets() -> Array[TargetDummy]:
 
 func _on_target_hit(result: Ballistics.HitResult, _hits: int, target: TargetDummy) -> void:
 	_last_hit = "%s: %s" % [target.label_text, result.describe()]
+	if _crosshair != null:
+		_crosshair.show_hit(result)
 
 
 ## Alle Munitionssorten, die in die aktuelle Waffe passen.

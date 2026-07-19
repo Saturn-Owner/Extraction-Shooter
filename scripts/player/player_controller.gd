@@ -116,11 +116,25 @@ var _recoil_yaw: float = 0.0
 @onready var weapon: Weapon = $CameraPivot/Weapon
 
 
+## Wird von der Levelszene gesetzt, damit die Waffe das Fadenkreuz
+## ansteuern kann. Bleibt null, wenn kein HUD vorhanden ist.
+var crosshair: Crosshair = null
+
+
 func _ready() -> void:
 	stamina = max_stamina
 	_capture_mouse(true)
 	if weapon != null:
 		weapon.recoil_kick.connect(_on_recoil_kick)
+		weapon.fired.connect(_on_weapon_fired)
+
+
+## Das Fadenkreuz geht bei jedem Schuss auf — proportional zum Rückstoss.
+## Dadurch sieht der Spieler, dass Dauerfeuer ungenau wird.
+func _on_weapon_fired(_ammo: AmmoData, _rounds_left: int) -> void:
+	if crosshair == null or weapon == null or weapon.data == null:
+		return
+	crosshair.add_bloom(weapon.data.recoil_vertical * 0.055)
 
 
 ## Rückstoß hebt die Kamera an. Der Aufschlag ist sofort, die Erholung
