@@ -56,16 +56,68 @@ static func get_gunshot(weapon: WeaponData) -> AudioStream:
 	return stream
 
 
+## Ab dieser Lautstärke gilt eine Waffe als gedämpft und bekommt, falls
+## vorhanden, ihre eigene Aufnahme.
+##
+## Der Schalldämpfer der AR-15 liegt bei 0.32, ein Kompensator über 1.0 —
+## die Grenze trennt beides deutlich und ist kein Zufallswert.
+const SUPPRESSED_BELOW := 0.6
+
+
 ## Sucht eine echte Audiodatei für diese Waffe.
+##
+## Die gedämpfte Aufnahme steht vorn: Ein Schalldämpfer verändert den Klang so
+## grundlegend, dass die laute Aufnahme leiser gedreht nicht dasselbe ist. Sie
+## bleibt ein Knall, nur ein leiserer — statt des dumpfen Schlags, den man
+## erwartet.
 static func _load_file_for(weapon: WeaponData) -> AudioStream:
-	var candidates := [
+	var candidates: Array[String] = []
+	if weapon.loudness_multiplier < SUPPRESSED_BELOW:
+		candidates.append("%s/%s/schuss_gedaempft" % [AUDIO_DIR, _short_name(weapon)])
+		candidates.append("%s/%s_gedaempft" % [AUDIO_DIR, weapon.id])
+
+	candidates.append_array([
 		"%s/%s" % [AUDIO_DIR, weapon.id],
 		"%s/%s" % [AUDIO_DIR, weapon.caliber],
 		"%s/default" % AUDIO_DIR,
-	]
+	])
+	return _first_existing(candidates)
+
+
+## Ein Geräusch aus dem Ordner dieser Waffe, z.B. "nachladen_magazin_raus".
+##
+## Fehlt die Datei, kommt null zurück und der Aufrufer bleibt still. Das ist
+## Absicht: Ein fehlendes Nachladegeräusch soll das Nachladen nicht verhindern.
+static func get_sound(weapon: WeaponData, sound_name: String) -> AudioStream:
+	if weapon == null:
+		return null
+
+	var key := "%s/%s" % [weapon.id, sound_name]
+	if _cache.has(key):
+		return _cache[key]
+
+	var stream := _first_existing([
+		"%s/%s/%s" % [AUDIO_DIR, _short_name(weapon), sound_name],
+		"%s/%s" % [AUDIO_DIR, sound_name],
+	])
+	_cache[key] = stream
+	return stream
+
+
+## Ordnername einer Waffe: "weapon_rifle_ar15" wird zu "ar15".
+##
+## Damit liegen die vielen Geräusche einer Waffe beieinander, statt den
+## Hauptordner mit Dateinamen wie weapon_rifle_ar15_nachladen_magazin_raus
+## zuzupflastern.
+static func _short_name(weapon: WeaponData) -> String:
+	var parts := String(weapon.id).split("_")
+	return parts[parts.size() - 1] if parts.size() > 0 else String(weapon.id)
+
+
+static func _first_existing(candidates: Array) -> AudioStream:
 	for base in candidates:
 		for ext in [".ogg", ".wav", ".mp3"]:
-			var path: String = base + ext
+			var path: String = String(base) + ext
 			if ResourceLoader.exists(path):
 				var res := load(path)
 				if res is AudioStream:

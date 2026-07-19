@@ -88,6 +88,19 @@ var _burst_remaining: int = 0
 var _shots_since_release: int = 0
 var _reload_time_left: float = 0.0
 var _reload_from_empty: bool = false
+
+## Nachladegeraeusche und ihre Stelle im Ablauf (0 = Anfang, 1 = fertig).
+##
+## Der Verschluss kommt nur bei leergeschossener Waffe vor: Steckt noch eine
+## Patrone im Lauf, bleibt er vorn und es gibt nichts vorzulassen.
+const RELOAD_CUES := [
+	{at = 0.08, sound = "nachladen_magazin_raus", only_empty = false},
+	{at = 0.52, sound = "nachladen_magazin_rein", only_empty = false},
+	{at = 0.88, sound = "nachladen_verschluss", only_empty = true},
+]
+
+var _reload_total: float = 0.0
+var _next_cue: int = 0
 var _unjam_time_left: float = 0.0
 
 ## Optionaler Punkt fuer das Muendungsfeuer aus dem sichtbaren Modell.
@@ -414,6 +427,8 @@ func request_reload() -> bool:
 
 	_reload_from_empty = not round_chambered
 	_reload_time_left = data.get_reload_duration(_reload_from_empty)
+	_reload_total = _reload_time_left
+	_next_cue = 0
 	reload_started.emit(_reload_time_left, _reload_from_empty)
 	return true
 
@@ -424,7 +439,31 @@ func cancel_reload() -> void:
 	if _reload_time_left <= 0.0:
 		return
 	_reload_time_left = 0.0
+	_next_cue = RELOAD_CUES.size()
 	reload_cancelled.emit()
+
+
+## Spielt die Nachladegeraeusche an ihrer Stelle im Ablauf.
+##
+## Die Geraeusche haengen am FORTSCHRITT, nicht an festen Sekunden: Eine Waffe
+## mit langsamerem Nachladen soll ihre Klicks entsprechend gedehnt hoeren
+## lassen, statt am Anfang alles abzufeuern und dann still zu sein.
+##
+## Fehlt eine Datei, bleibt es an dieser Stelle einfach still — ein fehlendes
+## Geraeusch darf das Nachladen nicht aufhalten.
+func _play_reload_cues() -> void:
+	if _reload_total <= 0.0:
+		return
+
+	var progress := 1.0 - _reload_time_left / _reload_total
+	while _next_cue < RELOAD_CUES.size():
+		var cue: Dictionary = RELOAD_CUES[_next_cue]
+		if progress < float(cue.at):
+			break
+		_next_cue += 1
+		if bool(cue.only_empty) and not _reload_from_empty:
+			continue
+		_play(WeaponAudio.get_sound(base_data, String(cue.sound)), randf_range(0.97, 1.03))
 
 
 ## Ladehemmung beheben.
@@ -440,6 +479,7 @@ func _advance_reload(delta: float) -> void:
 	if _reload_time_left <= 0.0:
 		return
 	_reload_time_left = maxf(0.0, _reload_time_left - delta)
+	_play_reload_cues()
 	if _reload_time_left > 0.0:
 		return
 

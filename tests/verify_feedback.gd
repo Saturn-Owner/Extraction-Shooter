@@ -45,6 +45,7 @@ func _run_all() -> void:
 	await process_frame
 
 	_test_audio_generation()
+	_test_real_recordings()
 	await _test_effects_spawn()
 	await _test_firing_in_level()
 
@@ -236,3 +237,40 @@ func _count_projectiles(from: Node) -> int:
 		if child is Projectile:
 			count += 1
 	return count
+
+
+## Echte Aufnahmen muessen auch wirklich genommen werden.
+##
+## Die Synthese ist der Notbehelf. Liegt eine Datei da und das Spiel spielt
+## trotzdem das erzeugte Rauschen, faellt das niemandem auf - es klingt ja
+## nach irgendetwas. Deshalb wird hier geprueft, dass die Datei gewinnt.
+func _test_real_recordings() -> void:
+	_section("Echte Aufnahmen")
+
+	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var loud := WeaponAudio.get_gunshot(ar15)
+	_check(loud != null and loud.resource_path.ends_with("weapon_rifle_ar15.wav"),
+		"AR-15 nimmt die echte Aufnahme (%s)" % (loud.resource_path if loud else "nichts"))
+
+	# Mit Schalldaempfer muss eine ANDERE Datei kommen, nicht dieselbe leiser.
+	# Ein gedaempfter Schuss ist ein anderer Klang, kein leiserer Knall.
+	var build := WeaponBuild.new()
+	build.set_attachment(AttachmentData.Slot.MUZZLE, &"ar15_muzzle_suppressor")
+	var suppressed := WeaponBuild.apply(ar15, build)
+	_check(suppressed.loudness_multiplier < WeaponAudio.SUPPRESSED_BELOW,
+		"der Daempfer drueckt die Lautstaerke unter die Grenze (%.2f)"
+			% suppressed.loudness_multiplier)
+
+	var quiet := WeaponAudio.get_gunshot(suppressed)
+	_check(quiet != null and quiet != loud,
+		"gedaempft klingt aus einer eigenen Datei (%s)"
+			% (quiet.resource_path if quiet else "nichts"))
+
+	# Waffen ohne Aufnahme duerfen nicht stumm werden.
+	var glock := ItemRegistry.get_item(&"weapon_pistol_g17") as WeaponData
+	_check(WeaponAudio.get_gunshot(glock) != null,
+		"Waffen ohne Aufnahme fallen auf die Synthese zurueck")
+
+	# Ein fehlendes Nachladegeraeusch muss folgenlos bleiben.
+	_check(WeaponAudio.get_sound(ar15, "gibt_es_nicht") == null,
+		"ein unbekanntes Geraeusch liefert null statt zu knallen")
