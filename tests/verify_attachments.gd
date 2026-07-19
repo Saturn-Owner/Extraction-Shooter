@@ -29,6 +29,8 @@ func _initialize() -> void:
 	_test_attachments_become_visible()
 	_test_sight_line_follows_the_optic()
 	_test_muzzle_follows_the_suppressor()
+	_test_workbench_rejects_nonsense()
+	_test_workbench_options_are_mountable()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -483,3 +485,60 @@ func _to_value(value: Variant) -> Variant:
 
 func _fields_equal(a: WeaponData, b: WeaponData) -> bool:
 	return _snapshot(a) == _snapshot(b)
+
+
+## Die Werkbank muss Unfug ablehnen, BEVOR er im ItemStack landet.
+##
+## Der Test ruft bewusst die statischen Prüfungen auf und nicht die Station
+## selbst: Genau diese Funktionen laufen später auf dem Server, wo es weder
+## Szenenbaum noch Spieler gibt. Was hier grün ist, ist dort abgesichert.
+func _test_workbench_rejects_nonsense() -> void:
+	var rifle := ItemStack.create(&"weapon_rifle_ar15")
+	var ammo := ItemStack.create(&"ammo_556x45_m855a1")
+
+	_check(WorkbenchStation.check_attach(null, AttachmentData.Slot.SIGHT, &"sight_reddot") != "",
+		"Werkbank: ohne Waffe kein Anbau")
+	_check(WorkbenchStation.check_attach(ammo, AttachmentData.Slot.SIGHT, &"sight_reddot") != "",
+		"Werkbank: an Munition laesst sich nichts schrauben")
+	_check(WorkbenchStation.check_attach(rifle, AttachmentData.Slot.SIGHT, &"gibt_es_nicht") != "",
+		"Werkbank: unbekanntes Teil wird abgelehnt")
+	_check(WorkbenchStation.check_attach(rifle, AttachmentData.Slot.MUZZLE, &"sight_reddot") != "",
+		"Werkbank: Visier gehoert nicht in den Muendungsplatz")
+	_check(WorkbenchStation.check_attach(rifle, AttachmentData.Slot.SIGHT, &"sight_reddot") == "",
+		"Werkbank: Rotpunkt passt auf die AR-15")
+
+	# Eine abgelehnte Anfrage darf den Gegenstand nicht anfassen.
+	_check(rifle.attachments.is_empty(), "Werkbank: Pruefung veraendert den Gegenstand nicht")
+
+	# Ein Teil, das an einer fremden Aufnahme sitzt, muss auffliegen.
+	var mismatched := 0
+	for weapon_id in [&"weapon_rifle_ar15", &"weapon_pistol_g17", &"weapon_shotgun_m870"]:
+		var weapon_data := ItemRegistry.get_item(weapon_id) as WeaponData
+		for item in ItemRegistry.get_by_category(ItemData.Category.ATTACHMENT):
+			var attachment := item as AttachmentData
+			var mount := weapon_data.find_mount(attachment.slot)
+			if mount != null and mount.interface_tag != attachment.interface_tag:
+				mismatched += 1
+				_check(WorkbenchStation.check_attach_data(weapon_data, attachment) != "",
+					"Werkbank: %s passt nicht an %s" % [attachment.id, weapon_id])
+	_check(mismatched > 0, "Werkbank: es gibt ueberhaupt unpassende Paarungen zum Pruefen")
+
+
+## Was die Werkbank zur Auswahl anbietet, muss sich auch anbauen lassen.
+##
+## Ohne diesen Test wäre eine Schaltfläche denkbar, die bei jedem Klick eine
+## Fehlermeldung erzeugt — der Spieler sähe ein Angebot, das keines ist.
+func _test_workbench_options_are_mountable() -> void:
+	for weapon_id in [&"weapon_rifle_ar15", &"weapon_pistol_g17", &"weapon_shotgun_m870"]:
+		var weapon_data := ItemRegistry.get_item(weapon_id) as WeaponData
+		var stack := ItemStack.create(weapon_id)
+		var offered := 0
+
+		for slot in weapon_data.get_slots():
+			for attachment in WorkbenchStation.get_options(weapon_data, slot):
+				offered += 1
+				var problem := WorkbenchStation.check_attach(stack, slot, attachment.id)
+				_check(problem == "", "Werkbank: %s bietet %s an und nimmt es auch" % [
+					weapon_id, attachment.id])
+
+		_check(offered > 0, "Werkbank: %s hat ueberhaupt etwas zur Auswahl" % weapon_id)
