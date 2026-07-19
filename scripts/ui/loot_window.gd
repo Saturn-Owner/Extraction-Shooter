@@ -123,7 +123,10 @@ func _play_find_sound(stack: ItemStack) -> void:
 	if stream == null:
 		return
 
+	# Die Abstufung nach Seltenheit sitzt hier, nicht in der Datei: Alle
+	# Gegenstaende einer Kategorie teilen sich dieselbe Aufnahme.
 	_find_sound.stream = stream
+	_find_sound.volume_db = SearchAudio.get_volume_db(data.get_rarity())
 	_find_sound.play()
 
 

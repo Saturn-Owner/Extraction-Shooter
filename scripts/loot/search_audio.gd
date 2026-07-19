@@ -91,13 +91,22 @@ static func clear_cache() -> void:
 	_cache.clear()
 
 
-## Wie laut die Stufe ist. Der Unterschied muss hörbar sein, ohne dass
-## Episch aus den Boxen springt.
-static func _volume_for(rarity: ItemData.Rarity) -> float:
+## Wie laut die Stufe klingt, in Dezibel.
+##
+## WICHTIG: Die Lautstärke gehört an den Abspieler, NICHT in die Datei.
+## Sobald echte Aufnahmen im Spiel sind, teilen sich alle Gegenstände einer
+## Kategorie dieselbe Datei — würde die Abstufung dort stecken, klänge
+## seltene und epische Munition identisch.
+static func get_volume_db(rarity: ItemData.Rarity) -> float:
 	match rarity:
-		ItemData.Rarity.EPIC: return 0.62
-		ItemData.Rarity.RARE: return 0.50
-	return 0.34
+		ItemData.Rarity.EPIC: return 0.0
+		ItemData.Rarity.RARE: return -3.5
+	return -8.0
+
+
+## Aussteuerung der synthetischen Platzhalter. Bewusst für alle Stufen
+## gleich — die Abstufung macht get_volume_db().
+const SYNTH_PEAK := 0.55
 
 
 static func _build(category: ItemData.Category, rarity: ItemData.Rarity) -> AudioStreamWAV:
@@ -170,7 +179,7 @@ static func _build(category: ItemData.Category, rarity: ItemData.Rarity) -> Audi
 		strikes.append({at = 0.0, partials = [52.0, 78.0], decay = 6.0, amp = 0.55, noise = 0.0})
 		duration = maxf(duration, 0.68)
 
-	return _render(strikes, duration, _volume_for(rarity))
+	return _render(strikes, duration, SYNTH_PEAK)
 
 
 ## Mischt alle Anschläge in einen Puffer und schreibt daraus 16-bit-PCM.

@@ -238,33 +238,44 @@ func _check_find_sounds() -> void:
 			continue
 		geprueft[item.category] = true
 
-		var stream := SearchAudio.get_stream(item) as AudioStreamWAV
+		var stream := SearchAudio.get_stream(item)
 		if stream == null:
 			_fail("%s (%s) liefert keinen Klang" % [item.id, ItemData.Category.keys()[item.category]])
 			continue
 
-		var peak := _peak_of(stream)
-		var laenge := float(stream.data.size() / 2) / float(SearchAudio.SAMPLE_RATE)
+		var kategorie: String = ItemData.Category.keys()[item.category]
+
+		# Echte Aufnahmen sind meist .ogg und lassen sich hier nicht
+		# Sample fuer Sample pruefen — dafuer sind sie auch nicht noetig,
+		# weil ein Mensch sie ausgesucht hat. Genau geprueft wird die
+		# Synthese, weil die aus einer Rechnung kommt und still sein
+		# koennte, ohne dass es jemandem auffaellt.
+		var wav := stream as AudioStreamWAV
+		if wav == null:
+			print("  OK  %-12s echte Aufnahme (%s)" % [kategorie, stream.get_class()])
+			continue
+
+		var peak := _peak_of(wav)
+		var laenge := float(wav.data.size() / 2) / float(SearchAudio.SAMPLE_RATE)
 
 		if peak < 0.05:
 			_fail("%s klingt praktisch still (Spitze %.3f)" % [item.id, peak])
 		elif peak > 0.999:
 			_fail("%s uebersteuert (Spitze %.3f)" % [item.id, peak])
 		else:
-			print("  OK  %-12s %.2f s, Spitze %.2f"
-				% [ItemData.Category.keys()[item.category], laenge, peak])
+			print("  OK  %-12s Synthese, %.2f s, Spitze %.2f" % [kategorie, laenge, peak])
 
-	# Seltener muss lauter sein als weniger selten — sonst traegt die
-	# Abstufung keine Information.
-	var m995 := ItemRegistry.get_item(&"ammo_556x45_m995")
-	var m855 := ItemRegistry.get_item(&"ammo_556x45_m855a1")
-	if m995 != null and m855 != null and m995.get_rarity() > m855.get_rarity():
-		var lauter := _peak_of(SearchAudio.get_stream(m995) as AudioStreamWAV)
-		var leiser := _peak_of(SearchAudio.get_stream(m855) as AudioStreamWAV)
-		if lauter <= leiser:
-			_fail("der seltenere Fund ist nicht lauter (%.2f vs %.2f)" % [lauter, leiser])
-		else:
-			print("  OK  seltener klingt deutlicher (%.2f vs %.2f)" % [lauter, leiser])
+	# Seltener muss deutlicher klingen. Das haengt NICHT mehr an der Datei,
+	# sondern an der Lautstaerke beim Abspielen — sonst klaenge seltene und
+	# epische Munition gleich, weil sie sich dieselbe Aufnahme teilen.
+	var leise := SearchAudio.get_volume_db(ItemData.Rarity.UNCOMMON)
+	var mittel := SearchAudio.get_volume_db(ItemData.Rarity.RARE)
+	var laut := SearchAudio.get_volume_db(ItemData.Rarity.EPIC)
+	if not (leise < mittel and mittel < laut):
+		_fail("Lautstaerke steigt nicht mit der Seltenheit (%.1f / %.1f / %.1f dB)"
+			% [leise, mittel, laut])
+	else:
+		print("  OK  Lautstaerke steigt: %.1f / %.1f / %.1f dB" % [leise, mittel, laut])
 
 
 ## Groesster Ausschlag im Puffer, 0 bis 1.

@@ -55,9 +55,14 @@ static func get_gunshot(weapon: WeaponData) -> AudioStream:
 
 ## Sucht eine echte Audiodatei für diese Waffe.
 static func _load_file_for(weapon: WeaponData) -> AudioStream:
+	# Kaliber wie "12/70" enthalten einen Schraegstrich. Unbehandelt wuerde
+	# daraus ein Unterordner "12/" mit der Datei "70.wav" — ein Dateiname,
+	# auf den niemand von selbst kommt. Deshalb ersetzen.
+	var caliber_name := String(weapon.caliber).replace("/", "_")
+
 	var candidates := [
 		"%s/%s" % [AUDIO_DIR, weapon.id],
-		"%s/%s" % [AUDIO_DIR, weapon.caliber],
+		"%s/%s" % [AUDIO_DIR, caliber_name],
 		"%s/default" % AUDIO_DIR,
 	]
 	for base in candidates:
