@@ -34,13 +34,30 @@ func _initialize() -> void:
 ##      noch nicht gelaufen — die Bank hätte weder Modell noch Reichweite.
 ##   2. Area3D meldet einen Körper erst, wenn die Physik gerechnet hat.
 ##      Deshalb wird der Spieler an die Bank gesetzt und dann gewartet.
+## WARTET AUF DIE PHYSIK, NICHT AUF EINE FRAMEZAHL.
+##
+## Vorher standen hier feste 12 Durchlaeufe. Das ging in einem von drei
+## Laeufen schief: _process und _physics_process haengen nicht aneinander, und
+## je nachdem wie lang der erste Frame dauert, hat die Physik danach mal mehr
+## und mal weniger oft getickt. Ein Test, der manchmal durchfaellt, ist
+## schlimmer als einer, der immer durchfaellt — man gewoehnt sich an, ihn
+## nochmal laufen zu lassen, statt hinzusehen.
+##
+## Gewartet wird deshalb auf das Ereignis selbst, mit einer Obergrenze als
+## Notausstieg.
+const MAX_FRAMES := 240
+
 func _process(_delta: float) -> bool:
 	_frames += 1
 
 	if _frames == 3:
 		_walk_to_bench()
 		return false
-	if _frames < 12:
+	if _frames < 5:
+		return false
+
+	var station := _level.get_node_or_null("Werkbank") as WorkbenchStation
+	if station != null and station.user == null and _frames < MAX_FRAMES:
 		return false
 
 	_run()

@@ -48,6 +48,7 @@ func _run_all() -> void:
 	_test_real_recordings()
 	_test_suppressor_changes_the_sound_in_hand()
 	_test_recordings_start_immediately()
+	_test_reload_sounds_are_wired()
 	await _test_effects_spawn()
 	await _test_firing_in_level()
 
@@ -391,3 +392,45 @@ func _first_loud_sample(stream: AudioStreamWAV) -> float:
 		if absi(value) > 1638:
 			return float(i) / float(stream.mix_rate)
 	return -1.0
+
+
+## Die drei Nachladegeraeusche muessen da sein und an ihrer Stelle kommen.
+##
+## Ohne diesen Test faellt ein Tippfehler im Dateinamen nicht auf: get_sound()
+## liefert dann null, es bleibt still, und Stille beim Nachladen wirkt wie
+## eine bewusste Entscheidung statt wie ein Fehler.
+func _test_reload_sounds_are_wired() -> void:
+	_section("Nachladegeraeusche")
+
+	var ar15 := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	for cue in Weapon.RELOAD_CUES:
+		var stream := WeaponAudio.get_sound(ar15, String(cue.sound))
+		_check(stream != null, "%s liegt bereit" % cue.sound)
+
+	# Die Reihenfolge muss stimmen, sonst kommt der Verschluss vor dem Magazin.
+	var previous := -1.0
+	var ordered := true
+	for cue in Weapon.RELOAD_CUES:
+		if float(cue.at) <= previous:
+			ordered = false
+		previous = float(cue.at)
+	_check(ordered, "die Geraeusche stehen in der richtigen Reihenfolge")
+
+	# Der Verschluss darf nur bei leergeschossener Waffe kommen.
+	var bolt_only_empty := false
+	for cue in Weapon.RELOAD_CUES:
+		if String(cue.sound) == "nachladen_verschluss":
+			bolt_only_empty = bool(cue.only_empty)
+	_check(bolt_only_empty, "der Verschluss kommt nur bei leerer Waffe")
+
+	# Und der Ablauf muss sie wirklich abrufen: taktisch zwei, leer drei.
+	_check(_count_cues(false) == 2, "taktisches Nachladen spielt zwei Geraeusche")
+	_check(_count_cues(true) == 3, "aus leerem Magazin kommen drei")
+
+
+func _count_cues(from_empty: bool) -> int:
+	var count := 0
+	for cue in Weapon.RELOAD_CUES:
+		if not bool(cue.only_empty) or from_empty:
+			count += 1
+	return count
