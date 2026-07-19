@@ -72,6 +72,13 @@ func _process_file(path: String) -> bool:
 		printerr("  kein lesbares WAV: ", path)
 		return false
 
+	# Schon fertig? Mono und kurz heisst: lief hier bereits durch. Ein
+	# zweiter Durchlauf wuerde erneut kuerzen und den Anschlag abschneiden.
+	var duration := float(info.data_size) / float(info.rate * info.channels * (info.bits / 8))
+	if info.channels == 1 and duration <= MAX_LENGTH + 0.05:
+		print("  %-16s bereits zugeschnitten, uebersprungen" % path.get_file())
+		return false
+
 	var samples := _to_mono(raw, info)
 	if samples.is_empty():
 		printerr("  keine Daten: ", path)
@@ -122,6 +129,7 @@ func _parse_wav(raw: PackedByteArray) -> Dictionary:
 		var body := pos + 8
 
 		if chunk_id == "fmt ":
+			info["format"] = raw.decode_u16(body)
 			info["channels"] = raw.decode_u16(body + 2)
 			info["rate"] = int(raw.decode_u32(body + 4))
 			info["bits"] = raw.decode_u16(body + 14)
@@ -134,9 +142,19 @@ func _parse_wav(raw: PackedByteArray) -> Dictionary:
 
 	if not (info.has("channels") and info.has("data_start")):
 		return {}
-	if info.get("bits", 0) != 16:
-		printerr("  nur 16 bit unterstuetzt, ist aber ", info.get("bits", 0))
+
+	# Aufnahmen von Freesound und aus Profibibliotheken sind haeufig 24 bit
+	# oder 32 bit Float, nicht 16 bit. Wer das nicht abdeckt, bekommt beim
+	# Einbauen jedes Mal eine Fehlermeldung und weiss nicht, warum.
+	var bits: int = info.get("bits", 0)
+	var format: int = info.get("format", 1)
+	if not (bits in [16, 24, 32]):
+		printerr("  Bittiefe wird nicht unterstuetzt: ", bits)
 		return {}
+	if format not in [1, 3, 0xFFFE]:
+		printerr("  Format wird nicht unterstuetzt (kein PCM/Float): ", format)
+		return {}
+
 	return info
 
 
@@ -145,7 +163,10 @@ func _to_mono(raw: PackedByteArray, info: Dictionary) -> PackedFloat32Array:
 	var channels: int = info.channels
 	var start: int = info.data_start
 	var size: int = info.data_size
-	var frames := size / (2 * channels)
+	var bits: int = info.bits
+	var is_float: bool = info.get("format", 1) == 3
+	var bytes_per_sample := bits / 8
+	var frames := size / (bytes_per_sample * channels)
 
 	var out := PackedFloat32Array()
 	out.resize(frames)
@@ -153,12 +174,30 @@ func _to_mono(raw: PackedByteArray, info: Dictionary) -> PackedFloat32Array:
 	for f in range(frames):
 		var sum := 0.0
 		for c in range(channels):
-			var offset := start + (f * channels + c) * 2
-			var value := raw.decode_s16(offset)
-			sum += float(value) / 32768.0
+			var offset := start + (f * channels + c) * bytes_per_sample
+			sum += _read_sample(raw, offset, bits, is_float)
 		out[f] = sum / float(channels)
 
 	return out
+
+
+## Ein einzelnes Sample, unabhaengig von der Bittiefe, als -1..1.
+func _read_sample(raw: PackedByteArray, offset: int, bits: int, is_float: bool) -> float:
+	match bits:
+		16:
+			return float(raw.decode_s16(offset)) / 32768.0
+		24:
+			# 24 bit hat keine fertige Decodierfunktion: drei Bytes von
+			# niedrig nach hoch, danach das Vorzeichen selbst herstellen.
+			var value := raw[offset] | (raw[offset + 1] << 8) | (raw[offset + 2] << 16)
+			if value >= 0x800000:
+				value -= 0x1000000
+			return float(value) / 8388608.0
+		32:
+			if is_float:
+				return raw.decode_float(offset)
+			return float(raw.decode_s32(offset)) / 2147483648.0
+	return 0.0
 
 
 ## Wo der Schuss anfängt.

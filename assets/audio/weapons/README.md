@@ -23,9 +23,32 @@ den ersten Treffer:
 Dateien decken damit alle zwölf Waffen ab:
 
 ```
-9x19.ogg   .45 ACP.ogg   5.45x39.ogg   5.56x45.ogg   7.62x39.ogg
-7.62x51.ogg   7.62x54R.ogg   .338 LM.ogg   12-70.ogg
+9x19   .45 ACP   5.45x39   5.56x45   7.62x39
+7.62x51   7.62x54R   .338 LM   12_70
 ```
+
+Achtung bei `12_70`: Das Kaliber heißt in den Daten `12/70`. Der
+Schrägstrich wird beim Suchen durch einen Unterstrich ersetzt, sonst
+entstünde ein Unterordner statt einer Datei.
+
+## Neue Aufnahmen einbauen
+
+1. Datei herunterladen — bei Freesound bevorzugt als **WAV**.
+2. Nach dem Kaliber benennen, z. B. `5.56x45.wav`.
+3. In diesen Ordner legen.
+4. Zuschneiden lassen:
+
+```
+godot --headless --path . --script res://tools/trim_gunshots.gd -- assets/audio/weapons
+```
+
+Das Werkzeug kürzt auf den ersten Schuss, mischt nach Mono, normalisiert
+und blendet das Ende aus. Es versteht 16, 24 und 32 bit sowie Float —
+Freesound liefert selten 16 bit. Bereits zugeschnittene Dateien werden
+übersprungen, ein zweiter Durchlauf schadet also nicht.
+
+5. Herkunft in `QUELLEN.md` eintragen. Ohne Nachweis fliegt die Datei
+   später wieder raus.
 
 ## Woher nehmen
 
