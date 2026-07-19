@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_lfyp4"]
+
+[resource]
+script = ExtResource("1_lfyp4")
+slot = 3
+interface_tag = &"mlok"
+recoil_vertical_mult = 0.86
+ergonomics_delta = -3
+ads_move_mult = 0.95
+id = &"foregrip_vertical"
+display_name = "Vordergriff senkrecht"
+description = "Fest zupacken und die Muendung runterziehen. Gegen Hochschlag das Beste, was es gibt - dafuer sperrig."
+category = 11
+grid_height = 2
+weight_kg = 0.13
+base_price = 4800

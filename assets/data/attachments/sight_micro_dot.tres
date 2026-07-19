@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_8qfwq"]
+
+[resource]
+script = ExtResource("1_8qfwq")
+interface_tag = &"pistol_dot"
+ergonomics_delta = 4
+ads_time_mult = 0.85
+id = &"sight_micro_dot"
+display_name = "Mini-Rotpunkt"
+description = "Winziger Punkt auf dem Schlitten. Nimmt der Pistole ihre groesste Schwaeche: die kurze Visierlinie."
+category = 11
+weight_kg = 0.06
+base_price = 9400

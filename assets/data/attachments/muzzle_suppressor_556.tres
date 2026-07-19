@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_iuraw"]
+
+[resource]
+script = ExtResource("1_iuraw")
+slot = 1
+interface_tag = &"thread_556"
+recoil_vertical_mult = 0.88
+recoil_horizontal_mult = 0.94
+ergonomics_delta = -9
+ads_time_mult = 1.12
+muzzle_velocity_delta = 0.03
+loudness_mult = 0.32
+id = &"muzzle_suppressor_556"
+display_name = "Schalldaempfer 5,56"
+description = "Macht dich schwer zu orten. Lang, schwer und kopflastig - die Waffe kommt spuerbar traeger ans Auge."
+category = 11
+grid_width = 2
+weight_kg = 0.46
+base_price = 34000

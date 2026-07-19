@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_b6v1y"]
+
+[resource]
+script = ExtResource("1_b6v1y")
+slot = 1
+interface_tag = &"choke_12"
+ergonomics_delta = -1
+accuracy_moa_mult = 0.72
+id = &"muzzle_choke_12"
+display_name = "Wuergebohrung"
+description = "Verengt den Lauf am Ende und haelt die Schrotgarbe laenger zusammen. Auf Distanz der Unterschied zwischen Treffer und Streuung."
+category = 11
+weight_kg = 0.09
+base_price = 5200

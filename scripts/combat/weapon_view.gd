@@ -245,10 +245,14 @@ func _update_aim(delta: float) -> void:
 	var wants_aim := _aiming and not _sprinting and _sequence_kind == &""
 
 	var ergonomics := 50.0
+	var attachment_factor := 1.0
 	if _weapon != null and _weapon.data != null:
 		ergonomics = float(_weapon.data.ergonomics)
+		# Ein schweres Zielfernrohr kommt spuerbar spaeter ans Auge als ein
+		# Rotpunkt — unabhaengig davon, wie handlich die Waffe selbst ist.
+		attachment_factor = _weapon.data.ads_time_multiplier
 	# Ergonomie 0 -> 1.4x langsamer, 100 -> 0.7x schneller.
-	var duration := ads_base_time * (1.4 - 0.7 * (ergonomics / 100.0))
+	var duration := ads_base_time * (1.4 - 0.7 * (ergonomics / 100.0)) * attachment_factor
 	var step := delta / maxf(0.01, duration)
 
 	_aim_progress = clampf(_aim_progress + (step if wants_aim else -step), 0.0, 1.0)

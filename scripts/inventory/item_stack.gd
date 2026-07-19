@@ -38,6 +38,13 @@ var durability: float = -1.0
 ## null bei allen Gegenständen, die nichts enthalten können.
 var container: InventoryGrid = null
 
+## Angebaute Teile bei Waffen: {int(AttachmentData.Slot): StringName}.
+##
+## Gehört hierher und nicht an die WeaponData: Zwei AR-15 im selben Rucksack
+## können unterschiedlich bestückt sein — genau dieselbe Begründung wie bei
+## der Haltbarkeit oben.
+var attachments: Dictionary = {}
+
 
 static func create(p_item_id: StringName, p_quantity: int = 1) -> ItemStack:
 	var stack := ItemStack.new()
@@ -110,6 +117,10 @@ func can_merge_with(other: ItemStack) -> bool:
 		return false
 	if durability >= 0.0 or other.durability >= 0.0:
 		return false
+	# Eine bestückte Waffe ist ein Einzelstück. Beim Stapeln würde die
+	# Bestückung des einen Exemplars die des anderen überschreiben.
+	if not attachments.is_empty() or not other.attachments.is_empty():
+		return false
 	return get_free_stack_space() > 0
 
 
@@ -143,6 +154,13 @@ func to_dict() -> Dictionary:
 	}
 	if container != null:
 		d["container"] = container.to_dict()
+	if not attachments.is_empty():
+		# Schlüssel als Text, damit die Bestückung durch JSON übersteht —
+		# dort werden Zahlenschlüssel sonst stillschweigend zu Text.
+		var stored := {}
+		for slot in attachments:
+			stored[str(slot)] = String(attachments[slot])
+		d["attachments"] = stored
 	return d
 
 
@@ -155,6 +173,9 @@ static func from_dict(d: Dictionary) -> ItemStack:
 	stack.durability = float(d.get("durability", -1.0))
 	if d.has("container"):
 		stack.container = InventoryGrid.from_dict(d["container"])
+	if d.has("attachments"):
+		for slot in d["attachments"]:
+			stack.attachments[int(slot)] = StringName(d["attachments"][slot])
 	# Zähler mitziehen, damit nach dem Laden keine IDs doppelt vergeben werden.
 	if stack.instance_id >= _next_instance_id:
 		_next_instance_id = stack.instance_id + 1

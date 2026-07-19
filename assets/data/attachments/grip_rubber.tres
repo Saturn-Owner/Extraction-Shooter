@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_qc3l8"]
+
+[resource]
+script = ExtResource("1_qc3l8")
+slot = 2
+interface_tag = &"ar15_grip"
+recoil_vertical_mult = 0.95
+ergonomics_delta = 5
+id = &"grip_rubber"
+display_name = "Gummigriff"
+description = "Weiche Gummiauflage. Schluckt einen Teil des Stosses und rutscht auch mit nassen Haenden nicht."
+category = 11
+weight_kg = 0.08
+base_price = 3400

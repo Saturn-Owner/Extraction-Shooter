@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_1p3qh"]
+
+[resource]
+script = ExtResource("1_1p3qh")
+slot = 2
+interface_tag = &"ar15_grip"
+ergonomics_delta = 8
+ads_time_mult = 0.92
+id = &"grip_target"
+display_name = "Zielgriff"
+description = "Steiler Winkel, ausgeformte Handauflage. Die Waffe liegt ruhiger und kommt schneller hoch."
+category = 11
+base_price = 6100

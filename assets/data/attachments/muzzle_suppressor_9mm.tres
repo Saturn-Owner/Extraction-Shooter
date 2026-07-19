@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_48f5k"]
+
+[resource]
+script = ExtResource("1_48f5k")
+slot = 1
+interface_tag = &"thread_9mm"
+recoil_vertical_mult = 0.9
+ergonomics_delta = -7
+ads_time_mult = 1.1
+muzzle_velocity_delta = 0.02
+loudness_mult = 0.28
+id = &"muzzle_suppressor_9mm"
+display_name = "Schalldaempfer 9 mm"
+description = "Unterschallmunition vorausgesetzt, hoert man davon fast nichts. An der Pistole faellt das Gewicht sofort auf."
+category = 11
+grid_width = 2
+weight_kg = 0.28
+base_price = 21000

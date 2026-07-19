@@ -11,6 +11,10 @@ extends Resource
 
 ## Grobe Einordnung — bestimmt u.a., in welchen Slots ein Item landen darf
 ## und wie der Händler es einsortiert.
+##
+## NEUE WERTE NUR HINTEN ANHÄNGEN. Die .tres-Dateien speichern die ZAHL,
+## nicht den Namen — wer hier etwas einfügt oder umsortiert, verschiebt
+## stillschweigend die Kategorie jedes vorhandenen Gegenstands im Spiel.
 enum Category {
 	MISC,        ## Krimskrams, Wertsachen, Barter-Items
 	AMMO,        ## Munition
@@ -23,6 +27,7 @@ enum Category {
 	FOOD,        ## Essen und Trinken
 	KEY,         ## Schlüssel für verschlossene Bereiche
 	TOOL,        ## Eispickel, Brecheisen — schaltet Wege frei
+	ATTACHMENT,  ## Anbauteile für Waffen: Visiere, Mündungen, Griffe
 }
 
 ## Eindeutige ID, z.B. "ammo_556x45_m995". Wird zum Speichern benutzt —

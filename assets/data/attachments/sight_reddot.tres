@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_kdpvw"]
+
+[resource]
+script = ExtResource("1_kdpvw")
+interface_tag = &"picatinny"
+ergonomics_delta = 3
+ads_time_mult = 0.88
+id = &"sight_reddot"
+display_name = "Rotpunktvisier"
+description = "Beide Augen auf, Punkt drauf, fertig. Kein Zoom - dafuer bist du schneller im Ziel als mit jedem Fernrohr."
+category = 11
+grid_width = 2
+weight_kg = 0.18
+base_price = 11500

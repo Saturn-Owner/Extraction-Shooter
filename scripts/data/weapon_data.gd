@@ -67,6 +67,16 @@ enum FireMode {
 ## damit die Waffe spielbar bleibt statt unsichtbar zu sein.
 @export var viewmodel: Script
 
+@export_group("Anbauteile")
+
+## Welche Steckplätze diese Waffe anbietet.
+##
+## Die Daten entscheiden, was montierbar ist: Eine Pistole bekommt schlicht
+## keinen Vordergriff-Eintrag. Kompatibilität läuft über den interface_tag
+## der Aufnahme, nicht über Listen erlaubter Teile — damit erbt eine neue
+## Waffe mit Picatinny-Schiene sofort das ganze vorhandene Sortiment.
+@export var mounts: Array[WeaponMount] = []
+
 @export_group("Nachladen")
 
 ## Magazinwechsel mit Patrone im Lauf. Schneller, weil der Verschluss
@@ -90,6 +100,22 @@ enum FireMode {
 
 ## Wie stark das Zielen bremst (0.6 = 60 % Tempo).
 @export_range(0.2, 1.0) var ads_move_multiplier: float = 0.62
+
+## Faktor auf die Zeit, bis die Visierlinie steht. Über 1.0 ist träger.
+##
+## Existiert, damit Anbauteile daran drehen können: Ein schweres Zielfernrohr
+## kommt spürbar später ans Auge als ein Rotpunkt. Ohne Anbauteile bleibt der
+## Wert bei 1.0 und ändert nichts.
+@export_range(0.5, 2.5) var ads_time_multiplier: float = 1.0
+
+@export_group("Signatur")
+
+## Faktor auf die wahrgenommene Lautstärke. Der Schalldämpfer lebt hier.
+##
+## Ohne diesen Wert würde die Lautstärke allein aus dem Rückstoß abgeleitet —
+## ein Schalldämpfer wäre dann nur leiser, weil er die Waffe ruhiger macht,
+## und das ist der falsche Zusammenhang.
+@export_range(0.1, 1.5) var loudness_multiplier: float = 1.0
 
 @export_group("Zustand")
 
@@ -128,6 +154,37 @@ func accepts_ammo(ammo: AmmoData) -> bool:
 	return ammo.caliber == caliber
 
 
+## Die Aufnahme für einen Steckplatz, oder null wenn die Waffe ihn nicht hat.
+func find_mount(slot: AttachmentData.Slot) -> WeaponMount:
+	for mount in mounts:
+		if mount != null and mount.slot == slot:
+			return mount
+	return null
+
+
+## Ob dieses Anbauteil an diese Waffe passt.
+##
+## Zwei Bedingungen: Die Waffe muss den Steckplatz überhaupt haben, und die
+## Aufnahme muss dieselbe Schnittstelle sprechen. Ein Schalldämpfer mit
+## 9-mm-Gewinde passt deshalb nicht auf ein 5,56er Gewehr, obwohl beide
+## einen Mündungs-Steckplatz haben.
+func accepts_attachment(attachment: AttachmentData) -> bool:
+	if attachment == null:
+		return false
+	var mount := find_mount(attachment.slot)
+	return mount != null and mount.interface_tag == attachment.interface_tag
+
+
+## Alle Steckplätze in fester Reihenfolge — für die Oberfläche der Werkbank.
+func get_slots() -> Array[AttachmentData.Slot]:
+	var result: Array[AttachmentData.Slot] = []
+	for slot in [AttachmentData.Slot.SIGHT, AttachmentData.Slot.MUZZLE,
+			AttachmentData.Slot.GRIP, AttachmentData.Slot.FOREGRIP]:
+		if find_mount(slot) != null:
+			result.append(slot)
+	return result
+
+
 ## Modell dieser Waffe erzeugen. Faellt auf den Platzhalter zurueck, wenn
 ## noch kein eigenes gebaut wurde.
 func create_viewmodel() -> WeaponViewmodel:
@@ -152,4 +209,18 @@ func validate() -> Array[String]:
 		problems.append("fire_modes ist leer — Waffe kann nicht schießen")
 	if category != Category.WEAPON:
 		problems.append("category sollte WEAPON sein")
+
+	# Doppelte Steckplätze wären zweideutig: find_mount() nähme den ersten,
+	# die Oberfläche zeigte zwei — beides falsch, und schwer zu finden.
+	var seen := {}
+	for mount in mounts:
+		if mount == null:
+			problems.append("leerer Eintrag in mounts")
+			continue
+		for problem in mount.validate():
+			problems.append("Aufnahme %s: %s" % [AttachmentData.slot_name(mount.slot), problem])
+		if seen.has(mount.slot):
+			problems.append("Steckplatz %s doppelt vergeben" % AttachmentData.slot_name(mount.slot))
+		seen[mount.slot] = true
+
 	return problems

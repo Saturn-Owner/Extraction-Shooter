@@ -41,7 +41,10 @@ static func get_gunshot(weapon: WeaponData) -> AudioStream:
 	if weapon == null:
 		return null
 
-	var key := String(weapon.id)
+	# Die Lautstaerke gehoert in den Schluessel: Dieselbe Waffe klingt mit
+	# Schalldaempfer anders. Nur nach der Waffen-ID zu cachen wuerde je nach
+	# Reihenfolge mal den gedaempften, mal den lauten Klang ausliefern.
+	var key := "%s@%.2f" % [weapon.id, weapon.loudness_multiplier]
 	if _cache.has(key):
 		return _cache[key]
 
@@ -189,7 +192,13 @@ static func make_dry_fire() -> AudioStreamWAV:
 
 ## Wie "kräftig" eine Waffe klingen soll, abgeleitet aus ihren Daten.
 ## So muss niemand pro Waffe einen Wert pflegen.
+##
+## Der Rückstoß gibt die Grundlautstärke vor, der Dämpfungsfaktor zieht sie
+## herunter. Beides getrennt, weil ein Schalldämpfer die Waffe zwar auch etwas
+## ruhiger macht, vor allem aber leiser — über den Rückstoß allein käme man
+## nie auf den Unterschied zwischen gedämpft und ungedämpft.
 static func get_power_for_weapon(weapon: WeaponData) -> float:
 	if weapon == null:
 		return 0.6
-	return clampf(weapon.recoil_vertical / 260.0, 0.28, 1.0)
+	var power := weapon.recoil_vertical / 260.0 * weapon.loudness_multiplier
+	return clampf(power, 0.10, 1.0)

@@ -166,8 +166,17 @@ func _on_inventory_changed() -> void:
 func equip_from_inventory(stack: ItemStack) -> bool:
 	if inventory == null or weapon == null or stack == null:
 		return false
+
+	# Zustand der bisherigen Waffe sichern, BEVOR sie aus der Hand geht.
+	_store_condition()
+
 	if not inventory.equip_weapon(stack):
 		return false
+
+	# Bestueckung und Zustand gehoeren zum Exemplar, nicht zum Waffentyp:
+	# Zwei AR-15 im selben Rucksack koennen verschieden bestueckt und
+	# verschieden abgenutzt sein.
+	weapon.build = WeaponBuild.from_stack(stack)
 
 	var weapon_data := stack.get_data() as WeaponData
 	var compatible := inventory.get_compatible_ammo(weapon_data)
@@ -177,11 +186,35 @@ func equip_from_inventory(stack: ItemStack) -> bool:
 		# Waffe ohne passende Munition: trotzdem in die Hand nehmen,
 		# aber sie bleibt leer. Das ist eine gueltige Notlage.
 		weapon.equip_without_ammo(weapon_data)
+		_load_condition(stack)
 		return true
 
 	weapon.setup(stack.item_id, chosen)
+	_load_condition(stack)
 	try_reload()
 	return true
+
+
+## Schreibt den Verschleiss der Waffe in der Hand ins Inventar zurueck.
+##
+## Ohne das lebt der Zustand nur am Waffen-Node und ist beim naechsten
+## Waffenwechsel weg — eine an der Werkbank reparierte Waffe waere nach dem
+## ersten Wechsel wieder so abgenutzt wie vorher.
+func _store_condition() -> void:
+	if inventory == null or weapon == null:
+		return
+	var previous := inventory.equipped_weapon
+	if previous != null and weapon.base_data != null:
+		previous.durability = weapon.condition
+
+
+## Holt den Verschleiss des Exemplars in die Waffe.
+func _load_condition(stack: ItemStack) -> void:
+	if stack.durability < 0.0:
+		# Waffen starten unbeschaedigt. ItemStack.create() setzt das bisher
+		# nur fuer Platten, deshalb hier nachziehen.
+		stack.durability = 100.0
+	weapon.condition = stack.durability
 
 
 ## Nachladen: holt echte Patronen aus dem Inventar.

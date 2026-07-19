@@ -43,7 +43,21 @@ const WEAR_JAM_MULTIPLIER := 20.0
 ## Auf welchen Ebenen Geschosse einschlagen (1 = Welt, 2 = Spieler, 4 = Gegner).
 @export_flags_3d_physics var projectile_mask: int = 1 | 2 | 4
 
+## Die unveränderte Vorlage aus der Registry. NIEMALS hineinschreiben —
+## sie wird von allen Exemplaren dieser Waffe geteilt.
+var base_data: WeaponData
+
+## Die effektiven Werte DIESES Exemplars, also Vorlage plus Anbauteile.
+##
+## ACHTUNG: `data` ist eine eigenständige Kopie und NICHT dasselbe Objekt wie
+## `ItemRegistry.get_item(weapon_id)`. Wer die beiden vergleicht, bekommt
+## immer "ungleich". Diese Trennung ist der ganze Grund, warum eine bestückte
+## Waffe nicht alle anderen Waffen desselben Typs mitverändert.
 var data: WeaponData
+
+## Was an dieser Waffe montiert ist. Nach Änderungen `rebuild()` aufrufen.
+var build: WeaponBuild = WeaponBuild.new()
+
 var loaded_ammo: AmmoData
 var rounds_in_magazine: int = 0
 var current_fire_mode: WeaponData.FireMode = WeaponData.FireMode.SINGLE
@@ -107,7 +121,8 @@ func setup(p_weapon_id: StringName, p_ammo_id: StringName) -> bool:
 		push_error("[Weapon] Unbekannte Munition: %s" % p_ammo_id)
 		return false
 
-	data = w as WeaponData
+	base_data = w as WeaponData
+	data = WeaponBuild.apply(base_data, build)
 	if not data.accepts_ammo(a as AmmoData):
 		push_error("[Weapon] %s passt nicht in %s" % [a.display_name, data.display_name])
 		return false
@@ -333,6 +348,18 @@ func release_trigger() -> void:
 	_shots_since_release = 0
 
 
+## Effektive Werte neu ausrechnen, nachdem sich die Bestückung geändert hat.
+##
+## Meldet über weapon_changed, damit die Darstellung ihr Modell neu aufbaut —
+## dasselbe Signal wie beim Waffenwechsel, weil aus Sicht der Darstellung
+## genau das passiert: Es liegt eine andere Waffe in der Hand.
+func rebuild() -> void:
+	if base_data == null:
+		return
+	data = WeaponBuild.apply(base_data, build)
+	weapon_changed.emit(data)
+
+
 ## Waffe ohne passende Munition in die Hand nehmen.
 ##
 ## Eine gueltige Notlage: Man findet ein Gewehr, hat aber kein Kaliber dafuer.
@@ -342,7 +369,8 @@ func release_trigger() -> void:
 func equip_without_ammo(new_data: WeaponData) -> void:
 	if new_data == null:
 		return
-	data = new_data
+	base_data = new_data
+	data = WeaponBuild.apply(base_data, build)
 	weapon_id = new_data.id
 	loaded_ammo = null
 	rounds_in_magazine = 0

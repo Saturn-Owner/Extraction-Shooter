@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="AttachmentData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/attachment_data.gd" id="1_f07c3"]
+
+[resource]
+script = ExtResource("1_f07c3")
+interface_tag = &"picatinny"
+ergonomics_delta = -7
+accuracy_moa_mult = 0.88
+ads_time_mult = 1.35
+ads_move_mult = 0.85
+ads_fov_override = 22.0
+id = &"sight_scope4x"
+display_name = "Zielfernrohr 4x"
+description = "Holt weit entfernte Ziele heran. Auf kurze Distanz ist es eine Klobrille - du siehst nur noch einen Ausschnitt."
+category = 11
+grid_width = 2
+weight_kg = 0.42
+base_price = 28000
