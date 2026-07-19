@@ -21,8 +21,18 @@ extends Node3D
 @onready var _inventory_window: InventoryWindow = $HUD/InventoryWindow
 
 ## Was der Spieler in den ersten Raid mitnimmt.
+##
+## Grosse Gegenstaende zuerst: Das Inventar sucht den ersten freien Platz,
+## und ein 5x2-Gewehr passt nicht mehr, wenn kleine Dinge die Reihen
+## zerstueckelt haben.
+##
+## HINWEIS: Das ist eine Testausruestung, kein Balancing. Sobald es das
+## Lager und das Terminal gibt, waehlt der Spieler selbst aus, was er
+## mitnimmt — und ein Gewehr gratis zu bekommen widerspricht dem Genre.
 const STARTING_KIT := [
+	{id = &"weapon_rifle_ar15", count = 1},
 	{id = &"weapon_pistol_g17", count = 1},
+	{id = &"ammo_556x45_m855a1", count = 60},
 	{id = &"ammo_9x19_fmj", count = 34},
 ]
 
@@ -48,10 +58,25 @@ func _ready() -> void:
 
 func _give_starting_kit() -> void:
 	for entry in STARTING_KIT:
-		_player.inventory.add(entry.id, entry.count)
+		if not _player.inventory.add(entry.id, entry.count):
+			# Nicht stillschweigend schlucken: Ein fehlendes Gewehr faellt
+			# sonst erst auf, wenn jemand im Raid danach sucht.
+			push_error("[Raid] Startausruestung passt nicht ins Inventar: %s" % entry.id)
+
+	# Gezielt das Gewehr in die Hand nehmen, nicht "irgendeine" Waffe.
+	# get_carried_weapons() garantiert keine Reihenfolge — sobald sich die
+	# Ausruestung aendert, haette man sonst zufaellig die Pistole.
 	var weapons := _player.inventory.get_carried_weapons()
-	if not weapons.is_empty():
-		_player.equip_from_inventory(weapons[0])
+	var chosen: ItemStack = null
+	for stack in weapons:
+		if stack.item_id == &"weapon_rifle_ar15":
+			chosen = stack
+			break
+	if chosen == null and not weapons.is_empty():
+		chosen = weapons[0]
+
+	if chosen != null:
+		_player.equip_from_inventory(chosen)
 
 
 func _on_window_opened() -> void:

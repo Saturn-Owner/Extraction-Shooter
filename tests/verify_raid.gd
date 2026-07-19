@@ -43,6 +43,7 @@ func _run_all() -> void:
 	await _test_progress_is_kept()
 	await _test_hidden_items_are_untouchable()
 	await _test_drag_between_grids()
+	await _test_starting_kit()
 	await _test_extraction_secures_loot()
 	await _test_death_loses_loot()
 	await _test_locked_exit()
@@ -462,6 +463,59 @@ func _test_drag_between_grids() -> void:
 	window.free()
 	container.free()
 	player.free()
+
+
+## Die Startausruestung des Raids muss vollstaendig ankommen.
+##
+## Genau hier ging schon einmal still ein Rucksack verloren, weil er nicht
+## mehr ins Raster passte — bemerkt hat es niemand, weil nichts gemeldet
+## wurde. Ein 5x2-Gewehr ist besonders anfaellig dafuer.
+func _test_starting_kit() -> void:
+	_section("Startausruestung im Raid")
+
+	var packed: PackedScene = load("res://scenes/levels/raid_eisstadt.tscn")
+	if packed == null:
+		_check(false, "raid_eisstadt.tscn laedt")
+		return
+
+	var level: Node = packed.instantiate()
+	root.add_child(level)
+	await process_frame
+	await process_frame
+
+	var player := level.get_node_or_null("Player") as PlayerController
+	_check(player != null, "Spieler gefunden")
+	if player == null:
+		level.free()
+		return
+
+	var script: GDScript = level.get_script()
+	var kit: Array = script.get("STARTING_KIT")
+
+	# Eine Waffe liegt in der Hand, also einen Eintrag weniger im Raster.
+	var expected: int = kit.size() - 1
+	var actual := player.inventory.grid.get_item_count()
+	_check(actual == expected,
+		"komplette Startausruestung passt ins Raster (%d von %d)" % [actual, expected])
+
+	# Gezielt das Gewehr, nicht irgendeine Waffe.
+	var equipped := player.inventory.equipped_weapon
+	_check(equipped != null, "eine Waffe ist in der Hand")
+	if equipped != null:
+		_check(equipped.item_id == &"weapon_rifle_ar15",
+			"es ist das Gewehr, nicht die Pistole (%s)" % equipped.item_id)
+
+	_check(player.weapon.rounds_in_magazine > 0,
+		"das Gewehr ist geladen (%d)" % player.weapon.rounds_in_magazine)
+	_check(player.weapon.ammo_id == &"ammo_556x45_m855a1",
+		"mit passender Munition (%s)" % player.weapon.ammo_id)
+
+	# Ohne Aufnahme faellt die Waffe auf Synthese zurueck — beides ist
+	# gueltig, aber stumm darf sie nicht sein.
+	_check(WeaponAudio.get_gunshot(player.weapon.data) != null,
+		"die Waffe hat einen Schussklang")
+
+	level.free()
 
 
 func _make_player() -> PlayerController:
