@@ -69,6 +69,18 @@ const REVEAL_DURATION := {
 	ItemData.Rarity.LEGENDARY: 1.30,
 }
 
+## Wie weit ein Gegenstand unter dem Mauszeiger wächst.
+##
+## Bewusst spürbar, aber klein: Das ist die Rückmeldung "du bist drauf",
+## bevor irgendetwas passiert. Beim Durchsuchen ist sie besonders wichtig —
+## die schwarzen Umrisse sehen alle gleich aus, und ein Klick zieht einen
+## davon vor. Ohne diese Anzeige klickt man ins Blaue.
+const HOVER_GROW := 0.06
+
+## Wie lange das Wachsen dauert. Kurz genug, um direkt zu wirken, lang
+## genug, dass es nicht springt.
+const HOVER_TIME := 0.10
+
 ## Wie weit der Gegenstand beim Auftauchen über seine Größe hinauswächst.
 ##
 ## Bewusst sehr klein: Ein deutliches Herausspringen sah aus, als loese sich
@@ -110,8 +122,16 @@ var preview_cell: Vector2i = Vector2i(-1, -1)
 
 var _hover_cell: Vector2i = Vector2i(-1, -1)
 
-## Gegenstand unter dem Zeiger. 0 = keiner.
+## Aufgedeckter Gegenstand unter dem Zeiger. 0 = keiner.
+## Steuert die Infoanzeige — verdeckte Gegenstände dürfen nichts verraten.
 var _hover_stack_id: int = 0
+
+## Gegenstand unter dem Zeiger, AUCH ein noch verdeckter. Steuert nur die
+## Hervorhebung: Man soll sehen, was man anklicken würde, um es vorzuziehen.
+var _hover_any_id: int = 0
+
+## Wie weit die Hervorhebung gerade eingeblendet ist, 0 bis 1.
+var _hover_amount: float = 0.0
 
 ## Laufende Fundanimationen: instance_id -> verstrichene Zeit.
 var _reveal_animations: Dictionary = {}
@@ -133,21 +153,29 @@ func play_reveal(stack: ItemStack) -> void:
 
 
 func _process(delta: float) -> void:
-	if _reveal_animations.is_empty():
+	var busy := false
+
+	if not _reveal_animations.is_empty():
+		busy = true
+		var finished: Array = []
+		for id in _reveal_animations:
+			var elapsed: float = _reveal_animations[id] + delta
+			_reveal_animations[id] = elapsed
+			if elapsed >= _duration_for(id):
+				finished.append(id)
+		for id in finished:
+			_reveal_animations.erase(id)
+
+	# Hervorhebung weich ein- und ausblenden.
+	var target := 1.0 if _hover_any_id != 0 else 0.0
+	if not is_equal_approx(_hover_amount, target):
+		_hover_amount = move_toward(_hover_amount, target, delta / HOVER_TIME)
+		busy = true
+
+	if busy:
+		queue_redraw()
+	else:
 		set_process(false)
-		return
-
-	var finished: Array = []
-	for id in _reveal_animations:
-		var elapsed: float = _reveal_animations[id] + delta
-		_reveal_animations[id] = elapsed
-		if elapsed >= _duration_for(id):
-			finished.append(id)
-
-	for id in finished:
-		_reveal_animations.erase(id)
-
-	queue_redraw()
 
 
 ## Wie lange die Animation dieses Gegenstands dauert.
@@ -282,11 +310,25 @@ func _gui_input(event: InputEvent) -> void:
 ## Meldet, welcher Gegenstand unter dem Zeiger liegt. Nicht durchsuchte
 ## zaehlen NICHT — ihre Werte darf der Spieler noch nicht sehen.
 func _update_hovered_stack(cell: Vector2i) -> void:
-	var found: ItemStack = null
+	var under: ItemStack = null
 	if cell.x >= 0:
-		var stack := grid.get_stack_at(cell.x, cell.y)
-		if stack != null and (container == null or container.is_revealed(stack.instance_id)):
-			found = stack
+		under = grid.get_stack_at(cell.x, cell.y)
+
+	# Hervorhebung gilt auch fuer verdeckte Umrisse — man soll sehen, was
+	# man anklicken wuerde. Ein Gegenstand, den man gerade zieht, haengt am
+	# Zeiger und soll sich im Raster nicht mitbewegen.
+	var highlight_id := 0
+	if under != null and under != drag_stack:
+		highlight_id = under.instance_id
+	if highlight_id != _hover_any_id:
+		_hover_any_id = highlight_id
+		set_process(true)
+
+	# Die Infoanzeige dagegen nur fuer Aufgedecktes: Werte eines noch nicht
+	# gefundenen Gegenstands duerfen nicht sichtbar werden.
+	var found: ItemStack = null
+	if under != null and (container == null or container.is_revealed(under.instance_id)):
+		found = under
 
 	var new_id := found.instance_id if found != null else 0
 	if new_id == _hover_stack_id:
@@ -295,10 +337,18 @@ func _update_hovered_stack(cell: Vector2i) -> void:
 	item_hovered.emit(found, self)
 
 
+## Wie stark dieser Gegenstand gerade hervorgehoben ist, 0 bis 1.
+func _hover_factor(instance_id: int) -> float:
+	return _hover_amount if instance_id == _hover_any_id else 0.0
+
+
 ## Der Zeiger hat das Raster verlassen.
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_MOUSE_EXIT:
 		_hover_cell = Vector2i(-1, -1)
+		if _hover_any_id != 0:
+			_hover_any_id = 0
+			set_process(true)
 		if _hover_stack_id != 0:
 			_hover_stack_id = 0
 			item_hovered.emit(null, self)
@@ -311,10 +361,30 @@ func _draw() -> void:
 
 	_draw_cells()
 	_draw_drag_preview()
+
+	# Der hervorgehobene Gegenstand kommt zuletzt: Er waechst ueber sein Feld
+	# hinaus und wuerde sonst von den Nachbarn ueberzeichnet.
+	var highlighted: ItemStack = null
+	var highlighted_hidden := false
+
 	for stack in _hidden_stacks():
+		if stack.instance_id == _hover_any_id:
+			highlighted = stack
+			highlighted_hidden = true
+			continue
 		_draw_hidden_stack(stack)
+
 	for stack in _visible_stacks():
+		if stack.instance_id == _hover_any_id:
+			highlighted = stack
+			continue
 		_draw_stack(stack)
+
+	if highlighted != null:
+		if highlighted_hidden:
+			_draw_hidden_stack(highlighted)
+		else:
+			_draw_stack(highlighted)
 
 
 ## Ein noch nicht durchsuchter Gegenstand: schwarze Flaeche in seiner echten
@@ -331,11 +401,19 @@ func _draw_hidden_stack(stack: ItemStack) -> void:
 		size.y * (CELL_SIZE + CELL_GAP) - CELL_GAP
 	))
 
+	# Unter dem Zeiger wachsen: Alle Umrisse sehen gleich aus, und ein Klick
+	# zieht einen davon vor — ohne Rueckmeldung klickt man ins Blaue.
+	var hover := _hover_factor(stack.instance_id)
+	if hover > 0.0:
+		rect = rect.grow(rect.size.x * HOVER_GROW * hover * 0.5)
+
 	draw_rect(rect, COLOR_HIDDEN)
 
 	var is_current := container != null and container.get_current_target() == stack
 	if is_current and container.is_searching():
 		draw_rect(rect, COLOR_HIDDEN_ACTIVE_BORDER, false, 2.0)
+	elif hover > 0.0:
+		draw_rect(rect, COLOR_HIDDEN_BORDER.lerp(COLOR_HIGHLIGHT, hover), false, 1.0 + hover)
 	else:
 		draw_rect(rect, COLOR_HIDDEN_BORDER, false, 1.0)
 
@@ -424,6 +502,10 @@ func _draw_stack(stack: ItemStack) -> void:
 	var rarity := data.get_rarity()
 	var rarity_color := ItemTooltip.get_rarity_color(rarity)
 	var progress := _reveal_progress(stack.instance_id)
+	var hover := _hover_factor(stack.instance_id)
+
+	if hover > 0.0:
+		rect = rect.grow(rect.size.x * HOVER_GROW * hover * 0.5)
 
 	# Aufploppen: kurz ueber die eigene Groesse hinaus und zurueck.
 	# Nur bei guten Funden — bei jeder Patrone wuerde das Raster zappeln.
@@ -440,8 +522,7 @@ func _draw_stack(stack: ItemStack) -> void:
 	if progress >= 0.0:
 		_draw_reveal_glow(rect, rarity_color, progress, data.is_high_value())
 
-	var hovered := _hover_stack_id == stack.instance_id
-	draw_rect(rect, COLOR_HIGHLIGHT if hovered else COLOR_ITEM_BORDER, false, 2.0 if hovered else 1.0)
+	draw_rect(rect, COLOR_ITEM_BORDER.lerp(COLOR_HIGHLIGHT, hover), false, 1.0 + hover)
 
 	var font := ThemeDB.fallback_font
 	var font_size := 12
