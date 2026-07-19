@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="InjuryData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/injury_data.gd" id="1_l51a1"]
+
+[resource]
+script = ExtResource("1_l51a1")
+id = &"bleed_light"
+display_name = "Leichte Blutung"
+description = "Sickert. Nicht dramatisch, aber es hoert nicht von selbst auf."
+blood_per_second = 0.35

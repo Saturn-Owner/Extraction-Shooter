@@ -35,7 +35,9 @@ const TABLES := {
 			# es nur Waffen und Munition gibt, ist sie deshalb vor allem LEER —
 			# daher die hohe Leerchance statt einer kuenstlich vollen Kiste.
 			{id = "ammo_9x19_fmj", weight = 40, min = 4, max = 16},
+			{id = "med_bandage", weight = 28, min = 1, max = 3},
 			{id = "ammo_9x19_hp", weight = 18, min = 3, max = 10},
+			{id = "med_painkillers", weight = 14, min = 1, max = 2},
 			{id = "ammo_12x70_buckshot", weight = 15, min = 2, max = 6},
 			{id = "ammo_556x45_hp", weight = 10, min = 5, max = 14},
 			# Der eine Fund, der einen Wohnungsraid rechtfertigt.
@@ -52,6 +54,7 @@ const TABLES := {
 			{id = "ammo_545x39_ps", weight = 35, min = 10, max = 30},
 			{id = "ammo_12x70_slug", weight = 20, min = 3, max = 8},
 			{id = "ammo_9x19_ap", weight = 14, min = 8, max = 20},
+			{id = "med_splint", weight = 12, min = 1, max = 1},
 			{id = "weapon_shotgun_m870", weight = 7, min = 1, max = 1},
 			{id = "weapon_rifle_akm", weight = 5, min = 1, max = 1},
 			{id = "weapon_smg_mp5", weight = 4, min = 1, max = 1},
@@ -62,8 +65,14 @@ const TABLES := {
 		entries = [
 			# Panzerbrechendes und die guten Waffen. Der Grund, ueberhaupt
 			# ins Militaerlager zu gehen.
+			{id = "med_bandage", weight = 34, min = 2, max = 4},
 			{id = "ammo_556x45_m855a1", weight = 32, min = 20, max = 60},
+			{id = "med_tourniquet", weight = 26, min = 1, max = 2},
 			{id = "ammo_762x51_m80", weight = 24, min = 10, max = 30},
+			{id = "med_blood_bag", weight = 12, min = 1, max = 1},
+			# Der teuerste Fund der Karte, und der einzige Weg zurueck, wenn
+			# ein Glied ausgefallen ist.
+			{id = "med_surgical_kit", weight = 5, min = 1, max = 1},
 			{id = "ammo_545x39_bt", weight = 22, min = 20, max = 60},
 			{id = "ammo_762x39_bp", weight = 16, min = 15, max = 40},
 			{id = "ammo_556x45_m995", weight = 10, min = 10, max = 30},

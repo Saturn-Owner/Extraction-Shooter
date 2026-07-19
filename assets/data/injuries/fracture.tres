@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="InjuryData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/injury_data.gd" id="1_1a6eu"]
+
+[resource]
+script = ExtResource("1_1a6eu")
+id = &"fracture"
+display_name = "Knochenbruch"
+description = "Gebrochen. Jeder Schritt ist eine eigene Entscheidung."
+kind = 3
+movement_penalty = 0.3
+aim_penalty = 0.3
+relieved_by_painkillers = true

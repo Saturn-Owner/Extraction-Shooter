@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MedicalData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/medical_data.gd" id="1_rra7m"]
+
+[resource]
+script = ExtResource("1_rra7m")
+kind = 4
+use_seconds = 20.0
+id = &"med_surgical_kit"
+display_name = "Chirurgenkit"
+description = "Bringt ein ausgefallenes Koerperteil zurueck. Danach haelt es dauerhaft weniger aus."
+category = 7
+grid_width = 3
+grid_height = 2
+weight_kg = 1.6
+base_price = 9800

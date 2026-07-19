@@ -5,15 +5,35 @@
 [resource]
 script = ExtResource("1_7xfwf")
 entries = Array[Dictionary]([{
+"id": "med_bandage",
+"max": 4,
+"min": 2,
+"weight": 34
+}, {
 "id": "ammo_556x45_m855a1",
 "max": 60,
 "min": 20,
 "weight": 32
 }, {
+"id": "med_tourniquet",
+"max": 2,
+"min": 1,
+"weight": 26
+}, {
 "id": "ammo_762x51_m80",
 "max": 30,
 "min": 10,
 "weight": 24
+}, {
+"id": "med_blood_bag",
+"max": 1,
+"min": 1,
+"weight": 12
+}, {
+"id": "med_surgical_kit",
+"max": 1,
+"min": 1,
+"weight": 5
 }, {
 "id": "ammo_545x39_bt",
 "max": 60,

@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="InjuryData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/injury_data.gd" id="1_nj5nh"]
+
+[resource]
+script = ExtResource("1_nj5nh")
+id = &"cut"
+display_name = "Schnitt"
+description = "Tiefer Schnitt. Blutet und behindert jede Bewegung."
+kind = 2
+blood_per_second = 0.5
+movement_penalty = 0.1
+aim_penalty = 0.1
+relieved_by_painkillers = true

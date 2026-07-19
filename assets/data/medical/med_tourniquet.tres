@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MedicalData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/medical_data.gd" id="1_gou08"]
+
+[resource]
+script = ExtResource("1_gou08")
+kind = 1
+use_seconds = 5.0
+treats = Array[int]([1])
+id = &"med_tourniquet"
+display_name = "Aderpresse"
+description = "Abbinden ueber der Wunde. Das Einzige, was eine Arterie aufhaelt."
+category = 7
+can_rotate = false
+weight_kg = 0.08
+max_stack = 3
+base_price = 950

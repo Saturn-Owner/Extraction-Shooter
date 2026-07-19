@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="InjuryData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/injury_data.gd" id="1_3a7y6"]
+
+[resource]
+script = ExtResource("1_3a7y6")
+id = &"bleed_heavy"
+display_name = "Starke Blutung"
+description = "Eine Arterie. Ohne Aderpresse sind das ein bis zwei Minuten."
+kind = 1
+blood_per_second = 1.2

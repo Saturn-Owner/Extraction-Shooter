@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MedicalData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/medical_data.gd" id="1_v14un"]
+
+[resource]
+script = ExtResource("1_v14un")
+kind = 3
+use_seconds = 3.0
+pain_relief_seconds = 180.0
+id = &"med_painkillers"
+display_name = "Schmerzmittel"
+description = "Nimmt den Schmerz fuer drei Minuten. Heilt nichts — man merkt es nur nicht mehr."
+category = 7
+can_rotate = false
+weight_kg = 0.05
+max_stack = 4
+base_price = 620

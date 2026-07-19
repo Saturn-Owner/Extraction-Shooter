@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="MedicalData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/medical_data.gd" id="1_i2yas"]
+
+[resource]
+script = ExtResource("1_i2yas")
+kind = 5
+use_seconds = 0.0
+blood_per_second = 6.0
+blood_total = 60.0
+id = &"med_blood_bag"
+display_name = "Blutbeutel"
+description = "Laeuft, bis der Koerper voll ist oder der Beutel leer. Ersetzt Blut, keine Wunden."
+category = 7
+grid_height = 2
+weight_kg = 0.6
+max_stack = 2
+base_price = 3200

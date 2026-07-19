@@ -126,6 +126,7 @@ var _recoil_yaw: float = 0.0
 @onready var health: HealthSystem = $Health
 @onready var survival: SurvivalStats = $Survival
 @onready var equipment: Equipment = $Equipment
+@onready var injuries: InjurySystem = $Injuries
 
 ## Sammelt Sekundenbruchteile, damit Hunger- und Kaelteschaden einmal pro
 ## Sekunde wirkt statt in jedem Frame ein Krümelchen.
@@ -343,6 +344,174 @@ func stow_equipment(slot: ItemData.EquipSlot, x: int = -1, y: int = -1) -> bool:
 	return true
 
 
+# ---------------------------------------------------------------------------
+# Behandlung
+#
+# Behandeln dauert. Ein Verband braucht sechs Sekunden, eine Operation
+# zwanzig — und in dieser Zeit ist man beschaeftigt. Genau das soll die
+# Entscheidung erzeugen: jetzt in Deckung versorgen, oder es bis zum Ausgang
+# versuchen.
+#
+# HINWEIS ZUM NETZWERK: Der Client fragt an, der Server laesst die Uhr laufen
+# und entscheidet am Ende. Sonst behandelt sich jeder in null Sekunden.
+# ---------------------------------------------------------------------------
+
+signal treatment_started(med: MedicalData, part: HealthSystem.Part)
+signal treatment_finished(med: MedicalData, part: HealthSystem.Part, success: bool)
+
+## Die laufende Behandlung, oder ein leeres Dictionary.
+## {stack, med, part, elapsed, duration}
+var _treatment: Dictionary = {}
+
+
+## Beginnt eine Behandlung. Gibt zurueck, ob sie ueberhaupt sinnvoll ist —
+## ein Verband an einem gesunden Bein wird gar nicht erst angefangen, statt
+## sechs Sekunden lang nichts zu tun und sich dann zu verbrauchen.
+func start_treatment(stack: ItemStack, part: HealthSystem.Part) -> bool:
+	if stack == null or health == null or health.is_dead:
+		return false
+	var med := stack.get_data() as MedicalData
+	if med == null or not can_treat_with(med, part):
+		return false
+
+	var duration := med.use_seconds
+	if med.kind == MedicalData.Kind.BLOOD:
+		# Der Beutel laeuft, bis der Koerper voll ist oder er leer ist.
+		duration = _blood_duration(med)
+
+	_treatment = {
+		"stack": stack, "med": med, "part": int(part),
+		"elapsed": 0.0, "duration": maxf(0.1, duration),
+	}
+	treatment_started.emit(med, part)
+	return true
+
+
+## Wie lange dieser Beutel laufen wird: so lange, bis der Koerper voll ist —
+## laenger nur, wenn nicht genug drin ist.
+func _blood_duration(med: MedicalData) -> float:
+	if med.blood_per_second <= 0.0:
+		return 1.0
+	var missing := HealthSystem.MAX_BLOOD - health.blood
+	var usable := minf(missing, med.blood_total)
+	return maxf(0.5, usable / med.blood_per_second)
+
+
+## Ob dieses Mittel an diesem Koerperteil etwas ausrichtet.
+func can_treat_with(med: MedicalData, part: HealthSystem.Part) -> bool:
+	if med == null or health == null:
+		return false
+
+	match med.kind:
+		MedicalData.Kind.SURGERY:
+			return health.is_destroyed(part)
+		MedicalData.Kind.BLOOD:
+			return health.blood < HealthSystem.MAX_BLOOD
+		MedicalData.Kind.PAINKILLER:
+			return true
+		_:
+			if injuries != null and injuries.can_treat(med, part):
+				return true
+			# Ein Verband heilt nebenbei ein paar Trefferpunkte — das darf
+			# auch der Grund sein, ihn zu benutzen.
+			return med.heal_hp > 0.0 and health.get_hp(part) < health.get_effective_max_hp(part)
+
+
+func is_treating() -> bool:
+	return not _treatment.is_empty()
+
+
+func get_treatment_progress() -> float:
+	if _treatment.is_empty():
+		return 0.0
+	return clampf(float(_treatment["elapsed"]) / float(_treatment["duration"]), 0.0, 1.0)
+
+
+func get_treatment_label() -> String:
+	if _treatment.is_empty():
+		return ""
+	var med: MedicalData = _treatment["med"]
+	return "%s — %s" % [med.display_name,
+		HealthSystem.get_part_name(_treatment["part"])]
+
+
+## Abbrechen. Der Gegenstand bleibt heil: Wer eine Behandlung abbricht, soll
+## nicht auch noch den Verband verlieren.
+func cancel_treatment() -> void:
+	if _treatment.is_empty():
+		return
+	var med: MedicalData = _treatment["med"]
+	var part: int = _treatment["part"]
+	_treatment = {}
+	treatment_finished.emit(med, part, false)
+
+
+## Laesst die Uhr der laufenden Behandlung weiterlaufen.
+## Oeffentlich, damit Tests sie ohne echte Physikframes vorspulen koennen.
+func tick_treatment(delta: float) -> void:
+	if _treatment.is_empty():
+		return
+
+	if health != null and health.is_dead:
+		cancel_treatment()
+		return
+
+	_treatment["elapsed"] = float(_treatment["elapsed"]) + delta
+	if float(_treatment["elapsed"]) < float(_treatment["duration"]):
+		return
+
+	_finish_treatment()
+
+
+func _finish_treatment() -> void:
+	var stack: ItemStack = _treatment["stack"]
+	var med: MedicalData = _treatment["med"]
+	var part: int = _treatment["part"]
+	_treatment = {}
+
+	_apply_treatment(med, part)
+	_consume(stack)
+	treatment_finished.emit(med, part, true)
+
+
+func _apply_treatment(med: MedicalData, part: int) -> void:
+	match med.kind:
+		MedicalData.Kind.SURGERY:
+			health.apply_surgery(part)
+		MedicalData.Kind.BLOOD:
+			health.restore_blood(med.blood_total)
+		MedicalData.Kind.PAINKILLER:
+			if injuries != null:
+				injuries.apply_painkillers(med.pain_relief_seconds)
+		_:
+			if injuries != null:
+				injuries.treat(med, part)
+			if med.heal_hp > 0.0:
+				health.heal(part, med.heal_hp)
+
+
+## Verbraucht eine Anwendung. Ein Stapel Verbaende wird dabei kleiner, statt
+## dass der ganze Stapel verschwindet.
+func _consume(stack: ItemStack) -> void:
+	if stack == null or inventory == null:
+		return
+	stack.quantity -= 1
+	if stack.quantity <= 0:
+		inventory.grid.remove_item(stack.instance_id)
+	inventory.changed.emit()
+
+
+## Alle medizinischen Gegenstaende im Inventar — fuer die Auswahl im Fenster.
+func get_medical_items() -> Array[ItemStack]:
+	var result: Array[ItemStack] = []
+	if inventory == null or inventory.grid == null:
+		return result
+	for stack in inventory.grid.get_all_stacks():
+		if stack.get_data() is MedicalData:
+			result.append(stack)
+	return result
+
+
 ## Leere Haende. Schiessen ist damit unmoeglich (Weapon.try_fire prueft `data`).
 func _empty_hands() -> void:
 	if weapon != null:
@@ -509,6 +678,12 @@ func _update_survival(delta: float) -> void:
 	survival.metabolism_multiplier = health.get_metabolism_multiplier()
 	survival.tick(delta)
 
+	# Blutungen laufen im selben Takt weiter. Sie sind der Grund, warum man
+	# eine Behandlung nicht "spaeter" macht.
+	if injuries != null:
+		injuries.tick(delta, health)
+	tick_treatment(delta)
+
 	_survival_damage_timer += delta
 	if _survival_damage_timer < 1.0:
 		return
@@ -593,8 +768,11 @@ func get_condition_factor() -> float:
 	var factor := 1.0
 	if health != null:
 		factor *= 1.0 - health.get_movement_penalty()
+		factor *= 1.0 - health.get_blood_penalty()
 	if survival != null:
 		factor *= 1.0 - survival.get_cold_movement_penalty()
+	if injuries != null:
+		factor *= 1.0 - injuries.get_movement_penalty()
 	return maxf(0.15, factor)
 
 
