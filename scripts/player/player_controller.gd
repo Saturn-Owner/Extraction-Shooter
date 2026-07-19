@@ -99,6 +99,13 @@ var stamina: float = 100.0
 var is_crouching: bool = false
 var is_sprinting: bool = false
 
+## Ob gerade ein Fenster offen ist (Loot, Inventar).
+## Solange das gilt, nimmt die Figur KEINE Eingaben entgegen: nicht schiessen,
+## nicht laufen, nicht umschauen. Sonst wuerde ein Klick auf einen Gegenstand
+## gleichzeitig einen Schuss ausloesen — und im Loot-Fenster steht man
+## bewegungsunfaehig vor der Kiste, was genau das Risiko sein soll.
+var ui_open: bool = false
+
 var _pitch: float = 0.0
 var _time_since_sprint: float = 0.0
 var _was_exhausted: bool = false
@@ -206,6 +213,24 @@ func switch_ammo(new_ammo_id: StringName) -> bool:
 	return true
 
 
+## Schaltet die Steuerung ab, solange ein Fenster offen ist.
+##
+## Der Abzug wird dabei bewusst losgelassen: Wer im Dauerfeuer das Inventar
+## oeffnet, soll nicht weiterballern, und beim Schliessen nicht sofort wieder
+## anfangen, nur weil die Maustaste noch gedrueckt war.
+func set_ui_open(open: bool) -> void:
+	if ui_open == open:
+		return
+	ui_open = open
+
+	if open:
+		is_sprinting = false
+		if weapon != null:
+			weapon.release_trigger()
+
+	_capture_mouse(not open)
+
+
 ## Rückstoß hebt die Kamera an. Der Aufschlag ist sofort, die Erholung
 ## langsam — dadurch muss der Spieler bei Dauerfeuer gegenhalten.
 func _on_recoil_kick(vertical: float, horizontal: float) -> void:
@@ -231,7 +256,7 @@ func _update_recoil(delta: float) -> void:
 
 
 func _handle_weapon_input() -> void:
-	if weapon == null:
+	if weapon == null or ui_open:
 		return
 
 	if Input.is_action_just_pressed("fire_mode"):
@@ -264,7 +289,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		)
 		_camera_pivot.rotation_degrees.x = _pitch
 
-	if event.is_action_pressed("toggle_mouse"):
+	# Bei offenem Fenster darf die Maus nicht eingefangen werden — sonst
+	# koennte man nichts mehr anklicken.
+	if event.is_action_pressed("toggle_mouse") and not ui_open:
 		_capture_mouse(Input.mouse_mode != Input.MOUSE_MODE_CAPTURED)
 
 
@@ -283,7 +310,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _update_crouch(delta: float) -> void:
-	is_crouching = Input.is_action_pressed("crouch") and is_on_floor()
+	is_crouching = not ui_open and Input.is_action_pressed("crouch") and is_on_floor()
 	var target_height := crouch_eye_height if is_crouching else stand_eye_height
 	# Weich statt sprunghaft — sonst wirkt das Ducken wie ein Teleport.
 	_camera_pivot.position.y = move_toward(_camera_pivot.position.y, target_height, 6.0 * delta)
@@ -361,10 +388,13 @@ func _update_movement(delta: float) -> void:
 	if not is_on_floor():
 		velocity += get_gravity() * delta
 
-	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	is_sprinting = Input.is_action_pressed("sprint") and can_sprint(input_dir)
+	# Bei offenem Fenster bleibt die Eingabe leer — die Figur bremst dadurch
+	# von selbst aus, statt abrupt stehenzubleiben.
+	var input_dir := Vector2.ZERO if ui_open \
+		else Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	is_sprinting = not ui_open and Input.is_action_pressed("sprint") and can_sprint(input_dir)
 
-	if Input.is_action_just_pressed("jump") and is_on_floor() and stamina > 10.0:
+	if not ui_open and Input.is_action_just_pressed("jump") and is_on_floor() and stamina > 10.0:
 		velocity.y = jump_velocity
 		stamina = maxf(0.0, stamina - 8.0)
 

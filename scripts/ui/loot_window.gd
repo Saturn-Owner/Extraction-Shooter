@@ -13,6 +13,7 @@ class_name LootWindow
 extends Control
 
 signal closed()
+signal opened()
 
 const PANEL_BG := Color(0.09, 0.10, 0.11, 0.96)
 const PANEL_BORDER := Color(0.35, 0.38, 0.42)
@@ -54,8 +55,8 @@ func open_for(p_container: LootContainer, p_inventory: PlayerInventory) -> void:
 	_player_title.text = "Ausruestung"
 
 	show()
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_status()
+	opened.emit()
 
 
 func close() -> void:
@@ -63,7 +64,6 @@ func close() -> void:
 		container.pause_search()
 	_cancel_drag()
 	hide()
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	closed.emit()
 
 

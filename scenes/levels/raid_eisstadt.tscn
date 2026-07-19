@@ -1,8 +1,9 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1_player"]
 [ext_resource type="Script" path="res://scripts/levels/raid_level.gd" id="2_raid_level"]
 [ext_resource type="PackedScene" path="res://scenes/ui/loot_window.tscn" id="9_loot_window"]
+[ext_resource type="PackedScene" path="res://scenes/ui/inventory_window.tscn" id="10_inventory_window"]
 [ext_resource type="PackedScene" path="res://scenes/loot/loot_container.tscn" id="3_loot"]
 [ext_resource type="PackedScene" path="res://scenes/raid/extraction_zone.tscn" id="4_extraction"]
 [ext_resource type="Script" path="res://scripts/raid/raid_manager.gd" id="5_raid_manager"]
@@ -191,6 +192,8 @@ offset_bottom = 320.0
 text = "..."
 
 [node name="LootWindow" parent="HUD" instance=ExtResource("9_loot_window")]
+
+[node name="InventoryWindow" parent="HUD" instance=ExtResource("10_inventory_window")]
 
 [node name="PromptLabel" type="Label" parent="HUD"]
 anchors_preset = 8

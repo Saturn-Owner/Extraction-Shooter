@@ -18,6 +18,8 @@ func _initialize() -> void:
 	_test_level_scene()
 	_test_weight_curve()
 	_test_sprint_rules()
+	_test_ui_lock()
+	_test_inventory_window()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -157,3 +159,66 @@ func _test_sprint_rules() -> void:
 	_check(not p.can_sprint(forward), "hoffnungslos überladen kein Sprint")
 
 	p.free()
+
+
+## Bei offenem Fenster darf die Figur nichts mehr tun.
+##
+## Ohne diese Sperre loest ein Klick auf einen Gegenstand gleichzeitig einen
+## Schuss aus — und wer im Dauerfeuer das Inventar oeffnet, ballert weiter.
+func _test_ui_lock() -> void:
+	_section("Steuerung bei offenem Fenster")
+
+	var packed: PackedScene = load("res://scenes/player/player.tscn")
+	if packed == null:
+		_check(false, "player.tscn lädt")
+		return
+
+	# Ohne Fenster laesst sich der Mausmodus headless nicht pruefen (es gibt
+	# keins), und ein Physikschritt ausserhalb des Baums liefert nur Fehler.
+	# Geprueft wird deshalb der Zustand, den beide Fenster setzen — dass er
+	# dann wirklich greift, steht direkt in den drei Abfragen im Controller.
+	var p := packed.instantiate() as PlayerController
+	root.add_child(p)
+
+	_check(not p.ui_open, "Steuerung ist zu Beginn frei")
+
+	p.is_sprinting = true
+	p.set_ui_open(true)
+	_check(p.ui_open, "Fenster offen sperrt die Steuerung")
+	_check(not p.is_sprinting, "Sprint endet beim Öffnen")
+
+	# Zweimal öffnen darf nichts kaputtmachen — zwei Fenster können sich
+	# überlappen, ohne dass der Spieler danach gelähmt bleibt.
+	p.set_ui_open(true)
+	p.set_ui_open(false)
+	_check(not p.ui_open, "Schliessen gibt die Steuerung wieder frei")
+
+	root.remove_child(p)
+	p.free()
+
+
+## Das Inventarfenster muss die Knoten haben, die sein Skript erwartet —
+## sonst faellt es erst im Spiel mit einem Nullzugriff auf.
+func _test_inventory_window() -> void:
+	_section("Inventarfenster")
+
+	var packed: PackedScene = load("res://scenes/ui/inventory_window.tscn")
+	_check(packed != null, "inventory_window.tscn lädt")
+	if packed == null:
+		return
+
+	var window: Node = packed.instantiate()
+	_check(window is InventoryWindow, "Wurzel ist ein InventoryWindow")
+	_check(window.get_node_or_null("Layout/Inhalt/GridView") is InventoryGridView,
+		"Rasteransicht vorhanden")
+	_check(window.get_node_or_null("Layout/Inhalt/Stats") is Label, "Werteanzeige vorhanden")
+	window.free()
+
+	var level: PackedScene = load("res://scenes/levels/raid_eisstadt.tscn")
+	if level == null:
+		_check(false, "raid_eisstadt.tscn lädt")
+		return
+	var raid: Node = level.instantiate()
+	_check(raid.get_node_or_null("HUD/InventoryWindow") != null,
+		"Inventarfenster hängt im HUD des Raids")
+	raid.free()

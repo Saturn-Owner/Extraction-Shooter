@@ -5,7 +5,7 @@
 ##
 ## Steuerung zusätzlich zu Bewegung und Waffe:
 ##   F         Kiste öffnen / Fenster schliessen
-##   Tab       alles Aufgedeckte nehmen
+##   Tab       Inventar öffnen — oder, vor einer offenen Kiste, alles nehmen
 ##   Esc       Fenster schliessen
 ##   K         Selbsttötung (zum Testen des Verlusts)
 ##   Enter     neuen Raid starten
@@ -18,6 +18,7 @@ extends Node3D
 @onready var _label: Label = $HUD/InfoPanel/InfoLabel
 @onready var _prompt: Label = $HUD/PromptLabel
 @onready var _loot_window: LootWindow = $HUD/LootWindow
+@onready var _inventory_window: InventoryWindow = $HUD/InventoryWindow
 
 ## Was der Spieler in den ersten Raid mitnimmt.
 const STARTING_KIT := [
@@ -34,7 +35,12 @@ func _ready() -> void:
 	_spawn = _player.global_position
 	_raid.setup(_player)
 	_raid.raid_ended.connect(_on_raid_ended)
-	_loot_window.closed.connect(_on_loot_window_closed)
+	# Jedes Fenster legt beim Öffnen die Steuerung still und gibt sie beim
+	# Schliessen wieder frei. Ein Ort dafür, damit kein Fenster den Spieler
+	# gelähmt zurücklassen kann.
+	for window in [_loot_window, _inventory_window]:
+		window.opened.connect(_on_window_opened)
+		window.closed.connect(_on_window_closed)
 
 	_give_starting_kit()
 	_raid.start_raid()
@@ -48,13 +54,26 @@ func _give_starting_kit() -> void:
 		_player.equip_from_inventory(weapons[0])
 
 
-func _on_loot_window_closed() -> void:
+func _on_window_opened() -> void:
+	_player.set_ui_open(true)
+
+
+func _on_window_closed() -> void:
+	# Erst freigeben, wenn wirklich kein Fenster mehr offen ist.
+	if not _any_window_open():
+		_player.set_ui_open(false)
 	_show_message("")
+
+
+func _any_window_open() -> bool:
+	return _loot_window.is_open() or _inventory_window.is_open()
 
 
 func _on_raid_ended(survived: bool, secured: int) -> void:
 	if _loot_window.is_open():
 		_loot_window.close()
+	if _inventory_window.is_open():
+		_inventory_window.close()
 	if survived:
 		_show_message("EXTRAHIERT — %d Gegenstaende ins Lager gebracht. [Enter] fuer neuen Raid" % secured, 30.0)
 	else:
@@ -74,10 +93,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F:
 			_toggle_loot_window()
 		KEY_TAB:
+			# Vor einer offenen Kiste ist "alles nehmen" der haeufigere Wunsch
+			# als das Inventar — sonst muesste man dafuer erst schliessen.
 			if _loot_window.is_open():
 				var left := _loot_window.take_all()
 				_show_message("alles eingesammelt" if left == 0
 					else "Inventar voll — %d Gegenstaende bleiben liegen" % left)
+			else:
+				_toggle_inventory_window()
 		KEY_K:
 			if _raid.state == RaidManager.State.LAEUFT:
 				_raid.die()
@@ -87,6 +110,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_ESCAPE:
 			if _loot_window.is_open():
 				_loot_window.close()
+			elif _inventory_window.is_open():
+				_inventory_window.close()
+
+
+func _toggle_inventory_window() -> void:
+	if _inventory_window.is_open():
+		_inventory_window.close()
+	else:
+		_inventory_window.open_for(_player)
 
 
 ## F öffnet die Kiste, vor der man steht — oder schliesst das Fenster.
@@ -94,6 +126,10 @@ func _toggle_loot_window() -> void:
 	if _loot_window.is_open():
 		_loot_window.close()
 		return
+
+	# Nicht beide Fenster gleichzeitig.
+	if _inventory_window.is_open():
+		_inventory_window.close()
 
 	var target := _player.interaction.current_target if _player.interaction != null else null
 	if target is LootContainer:
@@ -166,6 +202,6 @@ func _update_info() -> void:
 	lines.append("Dabei:     %d Gegenstaende" % _player.inventory.grid.get_item_count())
 	lines.append("Lager:     %d Gegenstaende" % _raid.stash.get_item_count())
 	lines.append("")
-	lines.append("F oeffnen  Tab alles  K sterben  Enter neu")
+	lines.append("F Kiste  Tab Inventar  K sterben  Enter neu")
 
 	_label.text = "\n".join(lines)
