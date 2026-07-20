@@ -381,19 +381,37 @@ const OWN_BODY_LAYER := 2
 ## Alles unterhalb des Kopfes kann sichtbar bleiben. Wer nach unten schaut,
 ## sieht seinen Koerper.
 ##
-## Die ARME kommen dazu, seit der Koerper eine Waffe haelt: Sie greifen sie
-## auf Brusthoehe, also 20 cm vor dem Auge, und standen als grosse Flaechen
-## quer im Bild. Dazu passten sie nicht zur sichtbaren Waffe — die haengt im
-## Kameraraum woanders. Zwei Arme, die ein unsichtbares Gewehr halten, sind
-## schlimmer als keine.
+## ---------------------------------------------------------------------------
+## DA, ABER UNSICHTBAR — UND ZWAR GANZ
 ##
-## Wer den Koerper wirklich sehen will, drueckt F5: dritte Person, siehe
-## `_toggle_third_person()`.
+## Der Koerper ist vollstaendig vorhanden: Er haelt die Waffe, bewegt sich,
+## traegt die Trefferzonen und wuerde von Mitspielern gesehen. Nur die eigene
+## Kamera blendet ihn aus.
+##
+## Vorher waren einzelne Teile ausgenommen, und das war jedes Mal falsch:
+##
+##   1. Erst alles versteckt  -> man sah gar keinen Koerper.
+##   2. Dann nur Kopf         -> die Brust fuellte beim Blick nach unten
+##                               den ganzen Schirm, sie sitzt 13 cm unter
+##                               der Kamera.
+##   3. Dann Kopf und Brust   -> die Arme greifen die Waffe auf Brusthoehe
+##                               und standen als Flaechen quer im Bild, dazu
+##                               versetzt zur sichtbaren Waffe.
+##
+## Der Grund ist immer derselbe: Die Kamera sitzt IM Koerper. Von dort laesst
+## sich kein Teil gefahrlos zeigen — was nah genug ist, um sichtbar zu sein,
+## ist auch nah genug, um im Weg zu stehen.
+##
+## Gesehen wird der Koerper deshalb dort, wo er hingehoert: von aussen. F5
+## schaltet die Schulterkamera, siehe `_toggle_third_person()`.
 const HIDDEN_FROM_SELF := [
 	HealthSystem.Part.HEAD,
 	HealthSystem.Part.CHEST,
+	HealthSystem.Part.STOMACH,
 	HealthSystem.Part.LEFT_ARM,
 	HealthSystem.Part.RIGHT_ARM,
+	HealthSystem.Part.LEFT_LEG,
+	HealthSystem.Part.RIGHT_LEG,
 ]
 
 ## Schulterkamera zum Nachsehen.

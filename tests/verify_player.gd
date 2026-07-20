@@ -107,26 +107,38 @@ func _test_visible_body() -> void:
 		_check(hidden, "%s ist vor der eigenen Kamera versteckt"
 			% BlockyCharacter.part_name(part))
 
-	_check(PlayerController.HIDDEN_FROM_SELF.has(HealthSystem.Part.HEAD)
-			and PlayerController.HIDDEN_FROM_SELF.has(HealthSystem.Part.CHEST),
-		"genau Kopf und Brust, nicht mehr")
+	# Kein Teil darf vergessen werden: Sobald eines fehlt, steht es der
+	# eigenen Kamera im Weg — genau das ist dreimal passiert.
+	var missing: Array[String] = []
+	for part: HealthSystem.Part in BlockyCharacter.VERTICAL:
+		if not PlayerController.HIDDEN_FROM_SELF.has(part):
+			missing.append(BlockyCharacter.part_name(part))
+	_check(missing.is_empty(),
+		"alle sieben Koerperteile stehen in der Liste (fehlt: %s)"
+			% ("nichts" if missing.is_empty() else ", ".join(missing)))
 
-	# Bauch und Beine MUESSEN sichtbar bleiben. Sonst sieht man beim Blick
-	# nach unten wieder nur die Waffe — der Zustand, den der Koerper beheben
-	# soll.
+	# UNSICHTBAR, ABER VORHANDEN — das ist der Unterschied zu "es gibt keinen
+	# Koerper".
 	#
-	# Die Arme sind bewusst NICHT dabei: Seit der Koerper eine Waffe haelt,
-	# greifen sie auf Brusthoehe, also 20 cm vor dem Auge, und standen als
-	# grosse Flaechen quer im Bild. Dazu passten sie nicht zur sichtbaren
-	# Waffe, die im Kameraraum woanders haengt.
-	var visible_parts := 0
-	for part: HealthSystem.Part in [HealthSystem.Part.STOMACH,
-			HealthSystem.Part.LEFT_LEG, HealthSystem.Part.RIGHT_LEG]:
+	# Kein einziges Teil darf die eigene Kamera erreichen. Gleichzeitig muss
+	# alles noch da sein: Meshes, Trefferzonen, Waffe. Wuerde man den Koerper
+	# stattdessen auf `visible = false` setzen, waeren auch die Trefferzonen
+	# weg und der Spieler wieder unverwundbar.
+	var seen_by_self := 0
+	var meshes_total := 0
+	for part: HealthSystem.Part in BlockyCharacter.VERTICAL:
 		for mesh: MeshInstance3D in player.body.meshes_of(part):
+			meshes_total += 1
 			if (mesh.layers & camera.cull_mask) != 0:
-				visible_parts += 1
-	_check(visible_parts >= 5,
-		"Bauch und Beine bleiben sichtbar (%d Kaesten)" % visible_parts)
+				seen_by_self += 1
+	_check(seen_by_self == 0,
+		"kein Koerperteil ist fuer einen selbst sichtbar (%d von %d)"
+			% [seen_by_self, meshes_total])
+	_check(meshes_total >= 11,
+		"und trotzdem sind alle %d Kaesten vorhanden" % meshes_total)
+	_check(player.body.visible,
+		"der Koerper ist NICHT auf unsichtbar gestellt - sonst waeren auch "
+			+ "die Trefferzonen und der eigene Schatten weg")
 
 	# --- Der Koerper HAELT die Waffe, wie die Dummys es tun ---
 	#
