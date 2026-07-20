@@ -52,6 +52,7 @@ func _run_all() -> void:
 	await _test_sounds_do_not_cut_each_other()
 	await _test_empty_weapon_clicks_once()
 	_test_bullet_holes()
+	_test_shot_starts_at_the_muzzle()
 	await _test_effects_spawn()
 	await _test_firing_in_level()
 
@@ -566,4 +567,53 @@ func _test_bullet_holes() -> void:
 	projectile.launch(ammo, Vector3.ZERO, Vector3.FORWARD, 900.0)
 	_check(projectile.get_node_or_null("Leuchtspur") == null,
 		"das Geschoss zieht keine sichtbare Spur")
+	projectile.queue_free()
+
+
+## Der sichtbare Abgang muss an der MUENDUNG haengen, nicht am Geschoss.
+##
+## Vorher steckte in projectile.tscn eine leuchtende Kapsel, die am Geschoss
+## klebte. Sichtbar wurde sie nie am Lauf: Bei 900 m/s und 60 Bildern legt ein
+## Geschoss 15 METER PRO BILD zurueck — im ersten gezeichneten Bild ist es
+## laengst weit weg, und dort liegt die Ziellinie praktisch auf der Bildmitte.
+## Es sah aus, als kaeme der Schuss mitten aus dem Bildschirm.
+func _test_shot_starts_at_the_muzzle() -> void:
+	_section("Der Schuss kommt am Lauf raus")
+
+	var ammo := ItemRegistry.get_item(&"ammo_556x45_m855a1") as AmmoData
+	var muzzle := Vector3(0.15, 1.54, -0.84)
+	var projectile: Projectile = load("res://scenes/combat/projectile.tscn").instantiate()
+	root.add_child(projectile)
+	projectile.launch(ammo, muzzle, Vector3.FORWARD, 900.0)
+
+	var streak := projectile.get_node_or_null("Abgang") as MeshInstance3D
+	_check(streak != null, "der Abgang wird gebaut")
+	if streak == null:
+		projectile.queue_free()
+		return
+
+	# Ein Bild Flug simulieren.
+	projectile._physics_process(1.0 / 60.0)
+
+	_check(streak.visible, "und ist direkt nach dem Schuss sichtbar")
+
+	# DER KERN: Das hintere Ende des Strichs muss an der Muendung sitzen.
+	var half := streak.global_basis.z.normalized() * streak.scale.z * 0.5
+	var tail := streak.global_position - half
+	var head := streak.global_position + half
+	var back := tail if tail.distance_to(muzzle) < head.distance_to(muzzle) else head
+	_check(back.distance_to(muzzle) < 0.2,
+		"das hintere Ende sitzt an der Muendung (%.3f m entfernt)" % back.distance_to(muzzle))
+
+	_check(streak.scale.z <= Projectile.STREAK_MAX_LENGTH + 0.01,
+		"der Strich bleibt kurz (%.1f von hoechstens %.1f m)"
+			% [streak.scale.z, Projectile.STREAK_MAX_LENGTH])
+
+	# Und er verschwindet wieder — sonst ist es eine Leuchtspur quer ueber die
+	# Karte, und die war ausdruecklich nicht gewollt.
+	for i in range(20):
+		projectile._physics_process(1.0 / 60.0)
+	_check(not streak.visible,
+		"nach %.2f s ist er weg" % Projectile.STREAK_SECONDS)
+
 	projectile.queue_free()

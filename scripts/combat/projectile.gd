@@ -26,6 +26,47 @@ const MAX_LIFETIME := 8.0
 ## Ab dieser Geschwindigkeit ist das Geschoss wirkungslos.
 const MIN_VELOCITY := 40.0
 
+## Wie weit das Geschoss sichtbar bleibt, in Metern.
+##
+## ---------------------------------------------------------------------------
+## WARUM MAN EINE KUGEL NICHT DEN LAUF VERLASSEN SIEHT
+##
+## Ein Gewehrgeschoss fliegt 900 m/s. Bei 60 Bildern je Sekunde sind das
+## 15 METER PRO BILD. Im ersten Bild, das die Grafikkarte ueberhaupt zeichnet,
+## ist es also laengst 15 m entfernt — und dort liegt die Ziellinie praktisch
+## auf der Bildmitte. Genau deshalb sah es vorher so aus, als kaeme die Kugel
+## mitten aus dem Bildschirm: Am Lauf war sie nur in einem Moment, den niemand
+## je zu sehen bekommt.
+##
+## Deshalb wird nicht das Geschoss gezeichnet, sondern die STRECKE zwischen
+## Muendung und aktueller Position. Damit beginnt der Strich sichtbar am Lauf.
+##
+## Der Strich verblasst ueber ZEIT, nicht ueber Strecke.
+##
+## Erster Versuch war eine Hoechstentfernung von 22 m. Das war rechnerisch
+## richtig und praktisch unsichtbar: 22 m sind bei 900 m/s ganze 24
+## Millisekunden, also EIN Bild. Man sah nichts.
+##
+## Ueber Zeit gerechnet bleibt der Strich ein paar Bilder stehen und blendet
+## aus — lang genug, um den Abgang zu sehen, kurz genug, um keine Leuchtspur
+## quer ueber die Karte zu ziehen.
+const STREAK_SECONDS := 0.13
+
+## Wie lang der Strich hoechstens wird.
+##
+## Ohne Deckel spannte er bis zum Geschoss, und das ist nach einem Bild
+## fuenfzehn Meter weit weg — dann zeigt er die Flugbahn statt des Abgangs.
+const STREAK_MAX_LENGTH := 7.0
+
+## Dicke des Strichs. Duenn, sonst sieht es nach Laserstrahl aus.
+const STREAK_WIDTH := 0.05
+
+const STREAK_COLOR := Color(1.0, 0.84, 0.45)
+
+var _streak: MeshInstance3D
+var _streak_material: StandardMaterial3D
+var _streak_age: float = 0.0
+
 var ammo: AmmoData
 var shooter: Node = null
 
@@ -46,6 +87,67 @@ func launch(p_ammo: AmmoData, from: Vector3, direction: Vector3, speed: float,
 	global_position = from
 	_start_position = from
 	_velocity = direction.normalized() * speed
+	_build_streak()
+
+
+## Der sichtbare Strich. Ein Quader der Laenge eins, damit sich die Streckung
+## spaeter direkt aus der Entfernung ergibt.
+func _build_streak() -> void:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(STREAK_WIDTH, STREAK_WIDTH, 1.0)
+
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	material.albedo_color = Color(STREAK_COLOR.r, STREAK_COLOR.g, STREAK_COLOR.b, 0.9)
+	mesh.material = material
+	_streak_material = material
+
+	_streak = MeshInstance3D.new()
+	_streak.name = "Abgang"
+	_streak.mesh = mesh
+	_streak.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# NICHT als Kind haengen lassen: Der Strich spannt zwischen zwei Punkten in
+	# der WELT auf. Als Kind wuerde er sich mit dem Geschoss mitbewegen und
+	# muesste jedes Bild zurueckgerechnet werden.
+	_streak.top_level = true
+	add_child(_streak)
+
+
+## Spannt den Strich von der Muendung nach vorn und blendet ihn aus.
+##
+## Verankert an der MUENDUNG, nicht am Geschoss: Genau darum ging es — man
+## soll sehen, dass der Schuss dort herauskommt.
+func _update_streak(delta: float) -> void:
+	if _streak == null:
+		return
+
+	_streak_age += delta
+	if _streak_age >= STREAK_SECONDS:
+		_streak.visible = false
+		return
+
+	var direction := _velocity.normalized()
+	var length := minf(_distance_travelled, STREAK_MAX_LENGTH)
+	if length < 0.05 or direction.length_squared() < 0.01:
+		_streak.visible = false
+		return
+
+	_streak.visible = true
+	_streak.global_position = _start_position + direction * length * 0.5
+
+	# look_at bricht ab, wenn die Richtung parallel zur Hochachse liegt —
+	# beim Schuss senkrecht nach oben.
+	var up := Vector3.UP
+	if absf(direction.dot(up)) > 0.99:
+		up = Vector3.RIGHT
+	_streak.look_at(_start_position + direction * length, up)
+	_streak.scale = Vector3(1.0, 1.0, length)
+
+	# Ausblenden statt schlagartig verschwinden.
+	var fade := 1.0 - _streak_age / STREAK_SECONDS
+	_streak_material.albedo_color.a = 0.9 * fade * fade
 
 
 func _physics_process(delta: float) -> void:
@@ -70,6 +172,7 @@ func _physics_process(delta: float) -> void:
 
 	global_position = to
 	_distance_travelled = _start_position.distance_to(to)
+	_update_streak(delta)
 
 	# Bewusst KEINE Ausrichtung an der Flugrichtung mehr: Das Geschoss ist
 	# unsichtbar, seit die Leuchtspur raus ist. Ein look_at pro Geschoss und
