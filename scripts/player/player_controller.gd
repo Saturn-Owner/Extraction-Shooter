@@ -518,16 +518,7 @@ func _arm_body() -> void:
 	# Fuer die dritte Person bleibt es trotzdem stimmig: Dort ist das
 	# Kameramodell ausgeblendet, und die Koerperwaffe steht dicht genug an
 	# derselben Stelle.
-	var view_model: WeaponViewmodel = null
-	if weapon_view != null:
-		view_model = weapon_view.get_viewmodel()
-	if view_model == null:
-		view_model = body_weapon.viewmodel
-	if view_model != null:
-		_body_animation.grip_target = view_model.grip_point
-		_body_animation.support_target = view_model.support_point
-		_body_animation.magwell_target = view_model.magwell_point
-		_body_animation.charge_target = view_model.charging_handle
+	_refresh_grip_targets()
 
 	# Die echte Waffe treibt die sichtbare an.
 	weapon.fired.connect(_on_body_weapon_fired)
@@ -535,6 +526,39 @@ func _arm_body() -> void:
 	weapon.reload_started.connect(_on_body_reload_started)
 	weapon.reload_finished.connect(_on_body_reload_ended)
 	weapon.reload_cancelled.connect(_on_body_reload_cancelled)
+
+
+## Holt die Griffpunkte des Kameramodells - JEDES BILD, nicht einmal.
+##
+## ---------------------------------------------------------------------------
+## SONST GREIFEN DIE ARME INS NICHTS
+##
+## Die Punkte einmal in `_ready()` zu merken sah richtig aus und war es nicht:
+## `WeaponView` baut sein Modell bei jedem Waffenwechsel NEU auf und wirft das
+## alte weg. Die gemerkten Knoten waren danach geloescht.
+##
+## Im Testgelaende faellt das sofort auf, weil dort beim Start ausgeruestet
+## wird — die Arme standen von der ersten Sekunde an im Himmel, weit weg von
+## der Waffe. Gemessen: `is_instance_valid(grip_target)` war nach dem Wechsel
+## `false`.
+##
+## Ein Signal "Modell gewechselt" waere sparsamer, aber es gibt keines, und
+## vier Zuweisungen pro Bild sind billiger als ein weiteres Signal, das
+## irgendwann jemand zu verbinden vergisst.
+func _refresh_grip_targets() -> void:
+	if _body_animation == null:
+		return
+	var view_model: WeaponViewmodel = null
+	if weapon_view != null:
+		view_model = weapon_view.get_viewmodel()
+	if view_model == null and body_weapon != null:
+		view_model = body_weapon.viewmodel
+	if view_model == null:
+		return
+	_body_animation.grip_target = view_model.grip_point
+	_body_animation.support_target = view_model.support_point
+	_body_animation.magwell_target = view_model.magwell_point
+	_body_animation.charge_target = view_model.charging_handle
 
 
 func _on_body_weapon_fired(_ammo: AmmoData, _rounds: int) -> void:
@@ -657,6 +681,9 @@ static func _all_children(node: Node) -> Array[Node]:
 func _update_body(_delta: float) -> void:
 	if _body_animation == null:
 		return
+	# Vor allem anderen: Das Kameramodell wird bei jedem Waffenwechsel neu
+	# gebaut, die gemerkten Griffpunkte waeren danach geloescht.
+	_refresh_grip_targets()
 	_update_body_reload(_delta)
 	_body_animation.speed = Vector2(velocity.x, velocity.z).length()
 	_body_animation.stance = (CharacterAnimation.Stance.CROUCH if is_crouching

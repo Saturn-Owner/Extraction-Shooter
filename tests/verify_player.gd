@@ -215,6 +215,35 @@ func _test_visible_body() -> void:
 				"beide Haende liegen daran (%.0f / %.0f mm)"
 					% [to_grip * 1000.0, to_fore * 1000.0])
 
+		# --- DER WAFFENWECHSEL DARF DIE GRIFFPUNKTE NICHT ZERREISSEN ---
+		#
+		# `WeaponView` baut sein Modell bei jedem Wechsel NEU auf und wirft
+		# das alte weg. Einmal gemerkte Griffpunkte sind danach geloescht —
+		# gemessen: `is_instance_valid()` war false, und die Arme standen im
+		# Spiel sichtbar im Himmel statt an der Waffe.
+		#
+		# Im Testgelaende passiert das sofort beim Start, weil dort
+		# ausgeruestet wird. Deshalb werden die Punkte jedes Bild neu geholt.
+		player.weapon.setup(&"weapon_rifle_ar15", &"ammo_556x45_m855a1")
+		for i in range(30):
+			await process_frame
+
+		var fresh_model: WeaponViewmodel = player.weapon_view.get_viewmodel() \
+			if player.weapon_view != null else null
+		_check(anim.grip_target != null and is_instance_valid(anim.grip_target),
+			"nach einem Waffenwechsel zeigt der Griffpunkt auf einen "
+				+ "gueltigen Knoten")
+		if fresh_model != null:
+			_check(anim.grip_target == fresh_model.grip_point,
+				"und zwar auf den des NEUEN Modells")
+
+		var hand_after := player.body.hand_of(HealthSystem.Part.RIGHT_ARM)
+		var gap_after := hand_after.global_position.distance_to(
+			anim.grip_target.global_position)
+		_check(gap_after < 0.05,
+			"die Hand liegt weiterhin an der Waffe (%.0f mm)"
+				% (gap_after * 1000.0))
+
 		# Die Koerperwaffe ist fuer den Traeger unsichtbar — sie ist die, die
 		# andere sehen. Sichtbar ist das Modell im Kameraraum.
 		var visible_weapon := 0
