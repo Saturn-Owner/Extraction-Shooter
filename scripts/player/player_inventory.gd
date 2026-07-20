@@ -42,11 +42,39 @@ var grid: InventoryGrid
 ## Die Waffe, die gerade in der Hand ist. null = unbewaffnet.
 var equipped_weapon: ItemStack = null
 
+## Was der Spieler am Koerper traegt. Wird vom PlayerController gesetzt.
+##
+## Das Inventar braucht das nur fuer den Rucksack: Sein Innenraster gehoert
+## genauso zum Mitgefuehrten wie die Taschen. Ohne diese Verbindung waere
+## Munition im Rucksack beim Nachladen unsichtbar — man stuende mit vollem
+## Rucksack vor einer leeren Waffe.
+var equipment: Equipment = null
+
 
 func _ready() -> void:
 	ItemRegistry.ensure_loaded()
 	grid = InventoryGrid.new(grid_width, grid_height)
 	grid.changed.connect(func(): changed.emit())
+
+
+## Das Innenraster des angelegten Rucksacks, oder null ohne Rucksack.
+func get_backpack_grid() -> InventoryGrid:
+	if equipment == null:
+		return null
+	var worn := equipment.get_item(ItemData.EquipSlot.BACKPACK)
+	return worn.container if worn != null else null
+
+
+## Alle Raster, die der Spieler dabeihat — Taschen zuerst, dann der Rucksack.
+##
+## Die Reihenfolge ist Absicht: Was in die Taschen passt, gehoert dorthin.
+## An den Rucksack kommt man spaeter (geplant) nur langsamer heran.
+func get_all_grids() -> Array[InventoryGrid]:
+	var grids: Array[InventoryGrid] = [grid]
+	var backpack := get_backpack_grid()
+	if backpack != null:
+		grids.append(backpack)
+	return grids
 
 
 ## Gesamtgewicht inklusive der Waffe in der Hand.
@@ -64,10 +92,33 @@ func add(item_id: StringName, quantity: int = 1) -> bool:
 	if stack.get_data() == null:
 		push_error("[PlayerInventory] Unbekanntes Item: %s" % item_id)
 		return false
-	var ok := grid.add_item(stack)
+	var ok := stow(stack)
 	if ok:
 		changed.emit()
 	return ok
+
+
+## Legt einen Gegenstand ins erste Raster, in dem er Platz findet.
+##
+## Erst die Taschen, dann der Rucksack. Ohne den zweiten Versuch waere ein
+## angelegter Rucksack beim Aufsammeln wertlos.
+func stow(stack: ItemStack) -> bool:
+	for target in get_all_grids():
+		if target.add_item(stack):
+			return true
+	return false
+
+
+## Ob dieser Gegenstand irgendwo Platz findet, ohne ihn schon abzulegen.
+##
+## Gebraucht, bevor getauscht wird: Erst pruefen, dann verdraengen — sonst
+## steht man mit einem Gegenstand da, der nirgends hinpasst.
+func has_room(stack: ItemStack) -> bool:
+	for target in get_all_grids():
+		if target.can_place_or_merge(stack, 0, 0) \
+				or target.find_free_position(stack).x >= 0:
+			return true
+	return false
 
 
 ## Nimmt eine Waffe aus dem Inventar in die Hand.
@@ -86,15 +137,26 @@ func equip_weapon(stack: ItemStack) -> bool:
 	# Erst zurücklegen, dann herausnehmen — sonst kann die alte Waffe
 	# verloren gehen, wenn das Raster inzwischen voll ist.
 	var previous := equipped_weapon
-	if grid.get_stack(stack.instance_id) != null:
-		grid.remove_item(stack.instance_id)
+	# Aus dem Raster nehmen, in dem sie wirklich liegt. Wuerde hier nur in den
+	# Taschen gesucht, bliebe eine Waffe aus dem Rucksack dort liegen UND
+	# waere gleichzeitig in der Hand — der Spieler haette sie doppelt.
+	var came_from: InventoryGrid = null
+	for source in get_all_grids():
+		if source.get_stack(stack.instance_id) != null:
+			source.remove_item(stack.instance_id)
+			came_from = source
+			break
 
 	equipped_weapon = stack
 
-	if previous != null and not grid.add_item(previous):
+	if previous != null and not stow(previous):
 		# Kein Platz für die alte Waffe: lieber die neue nicht nehmen,
-		# als dem Spieler stillschweigend Ausrüstung zu löschen.
-		grid.add_item(stack)
+		# als dem Spieler stillschweigend Ausrüstung zu löschen. Sie geht dabei
+		# genau dorthin zurueck, wo sie hergekommen ist — dort war sie eben noch.
+		if came_from != null:
+			came_from.add_item(stack)
+		else:
+			stow(stack)
 		equipped_weapon = previous
 		return false
 
@@ -138,7 +200,10 @@ func notify_changed() -> void:
 
 ## Wie viele Patronen dieser Sorte vorhanden sind.
 func count_ammo(ammo_id: StringName) -> int:
-	return grid.count_items(ammo_id, true)
+	var total := 0
+	for source in get_all_grids():
+		total += source.count_items(ammo_id, true)
+	return total
 
 
 ## Entnimmt bis zu `wanted` Patronen und gibt zurück, wie viele es wirklich
@@ -151,28 +216,34 @@ func take_ammo(ammo_id: StringName, wanted: int) -> int:
 		return 0
 
 	var taken := 0
+	var sources := get_all_grids()
+
+	# Erst alles, was lose herumliegt — in den Taschen wie im Rucksack.
 	# Kopie durchlaufen, weil wir dabei Stapel entfernen.
-	for stack in grid.get_all_stacks():
-		if taken >= wanted:
-			break
-		if stack.item_id != ammo_id:
-			continue
-
-		var from_this := mini(stack.quantity, wanted - taken)
-		stack.quantity -= from_this
-		taken += from_this
-
-		if stack.quantity <= 0:
-			grid.remove_item(stack.instance_id)
-
-	# Auch verschachtelte Container durchsuchen (Rucksack).
-	if taken < wanted:
-		for stack in grid.get_all_stacks():
+	for source in sources:
+		for stack in source.get_all_stacks():
 			if taken >= wanted:
 				break
-			if stack.container == null:
+			if stack.item_id != ammo_id:
 				continue
-			taken += _take_from_container(stack.container, ammo_id, wanted - taken)
+
+			var from_this := mini(stack.quantity, wanted - taken)
+			stack.quantity -= from_this
+			taken += from_this
+
+			if stack.quantity <= 0:
+				source.remove_item(stack.instance_id)
+
+	# Erst danach in Behaelter hineingreifen. Wer eine Schachtel aufmachen
+	# muss, tut das zuletzt.
+	if taken < wanted:
+		for source in sources:
+			for stack in source.get_all_stacks():
+				if taken >= wanted:
+					break
+				if stack.container == null:
+					continue
+				taken += _take_from_container(stack.container, ammo_id, wanted - taken)
 
 	if taken > 0:
 		changed.emit()
@@ -202,8 +273,9 @@ func get_compatible_ammo(weapon_data: WeaponData) -> Array[StringName]:
 	if weapon_data == null:
 		return result
 
-	for stack in grid.get_all_stacks():
-		_collect_ammo(stack, weapon_data, result)
+	for source in get_all_grids():
+		for stack in source.get_all_stacks():
+			_collect_ammo(stack, weapon_data, result)
 	return result
 
 

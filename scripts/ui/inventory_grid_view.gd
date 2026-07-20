@@ -24,6 +24,14 @@ signal cell_released(grid_position: Vector2i, view: InventoryGridView)
 ## Der Zeiger steht auf einem erkannten Gegenstand (null = auf keinem).
 signal item_hovered(stack: ItemStack, view: InventoryGridView)
 
+## Rechtsklick auf einen erkannten Gegenstand — das Wirtfenster macht daraus
+## ein Kontextmenü. `at_position` ist die Bildschirmposition des Zeigers.
+##
+## Nicht durchsuchte Umrisse loesen das NICHT aus: Ein Menue mit "Oeffnen"
+## verriete, dass dort ein Behaelter liegt, und die Entscheidung "warte ich
+## das ab?" waere entwertet.
+signal item_right_clicked(stack: ItemStack, view: InventoryGridView, at_position: Vector2)
+
 const CELL_SIZE := 52.0
 const CELL_GAP := 2.0
 
@@ -282,6 +290,12 @@ func _gui_input(event: InputEvent) -> void:
 		return
 
 	var button := event as InputEventMouseButton
+
+	if button.button_index == MOUSE_BUTTON_RIGHT:
+		if button.pressed:
+			_emit_right_click(button)
+		return
+
 	if button.button_index != MOUSE_BUTTON_LEFT:
 		return
 
@@ -312,6 +326,20 @@ func _gui_input(event: InputEvent) -> void:
 		item_pressed.emit(stack, self)
 	else:
 		cell_released.emit(cell, self)
+
+
+## Rechtsklick auf ein Feld. Auf leeren Feldern und auf noch nicht
+## durchsuchten Umrissen passiert bewusst nichts.
+func _emit_right_click(button: InputEventMouseButton) -> void:
+	var cell := position_to_cell(button.position)
+	if cell.x < 0:
+		return
+	var stack := grid.get_stack_at(cell.x, cell.y)
+	if stack == null:
+		return
+	if container != null and not container.is_revealed(stack.instance_id):
+		return
+	item_right_clicked.emit(stack, self, button.global_position)
 
 
 ## Meldet, welcher Gegenstand unter dem Zeiger liegt. Nicht durchsuchte

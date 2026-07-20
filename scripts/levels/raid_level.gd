@@ -208,7 +208,7 @@ func _toggle_loot_window() -> void:
 
 	var target := _player.interaction.current_target if _player.interaction != null else null
 	if target is LootContainer:
-		_loot_window.open_for(target as LootContainer, _player.inventory)
+		_loot_window.open_for(target as LootContainer, _player.inventory, _player)
 
 
 func _restart_raid() -> void:

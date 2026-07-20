@@ -196,6 +196,9 @@ func _ready() -> void:
 	sounds.setup(self)
 
 	if inventory != null:
+		# Das Inventar muss die getragene Ausruestung kennen, sonst ist der
+		# Rucksack fuer Nachladen und Aufsammeln nicht vorhanden.
+		inventory.equipment = equipment
 		inventory.changed.connect(_on_inventory_changed)
 		_on_inventory_changed()
 	if equipment != null:
@@ -263,16 +266,19 @@ func assign_weapon(stack: ItemStack, slot: ItemData.EquipSlot = ItemData.EquipSl
 	# verschwindet sie beim Tauschen stillschweigend.
 	var displaced := equipment.get_item(target)
 	if displaced != null and displaced != stack:
-		if not inventory.grid.can_place_or_merge(displaced, 0, 0) \
-				and inventory.grid.find_free_position(displaced).x < 0:
+		if not inventory.has_room(displaced):
 			return false
 
-	if inventory.grid.get_stack(stack.instance_id) != null:
-		inventory.grid.remove_item(stack.instance_id)
+	# Aus dem Raster nehmen, in dem sie wirklich liegt — Taschen oder Rucksack.
+	# Sonst liegt eine Waffe aus dem Rucksack dort weiter UND haengt am Koerper.
+	for source in inventory.get_all_grids():
+		if source.get_stack(stack.instance_id) != null:
+			source.remove_item(stack.instance_id)
+			break
 
 	equipment.equip(stack, target)
 	if displaced != null and displaced != stack:
-		inventory.grid.add_item(displaced)
+		inventory.stow(displaced)
 
 	# Der Platz, auf den gerade gelegt wurde, kommt auch in die Hand.
 	select_weapon_slot(target)
@@ -369,6 +375,79 @@ func equip_from_inventory(stack: ItemStack) -> bool:
 	return assign_weapon(stack)
 
 
+## Legt einen Gegenstand an, egal aus welchem Raster er kommt.
+##
+## `from` sagt, wo er gerade liegt. Ohne Angabe wird er in den eigenen Rastern
+## gesucht; kommt er von woanders her (etwa aus einer Kiste), muss der Aufrufer
+## ihn vorher dort entnommen haben.
+##
+## Erst pruefen, dann verschieben — wie `assign_weapon()` und
+## `stow_equipment()`. Scheitert es, bleibt alles unveraendert; ein halb
+## erledigtes Anlegen wuerde Ausruestung verschwinden lassen.
+func equip_item(stack: ItemStack, from: InventoryGrid = null) -> bool:
+	if equipment == null or inventory == null or stack == null:
+		return false
+
+	var slot := equipment.find_slot_for(stack)
+	if slot == ItemData.EquipSlot.NONE:
+		return false
+
+	# Waffen koennen das schon vollstaendig: Verdraengung, Magazin, Handwechsel.
+	if Equipment.is_weapon_slot(slot):
+		return assign_weapon(stack, slot)
+
+	var displaced := equipment.get_item(slot)
+	if displaced == stack:
+		return true
+
+	# ZUERST herausnehmen, dann Platz fuer den Verdraengten suchen.
+	#
+	# Andersherum belegt der Gegenstand seine Felder noch, waehrend fuer den
+	# Verdraengten Platz gesucht wird — bei zwoelf Feldern scheitert das
+	# regelmaessig, obwohl der Tausch aufgegangen waere.
+	var source := from
+	if source == null:
+		for grid_of in inventory.get_all_grids():
+			if grid_of.get_stack(stack.instance_id) != null:
+				source = grid_of
+				break
+	if source != null:
+		source.remove_item(stack.instance_id)
+
+	if displaced != null:
+		# Abnehmen, BEVOR ein Platz gesucht wird. Sonst zaehlt das Innenraster
+		# des alten Rucksacks noch als Ziel, und er wanderte in sich selbst —
+		# samt allem, was darin liegt.
+		equipment.unequip(slot)
+		if not inventory.stow(displaced):
+			# Kein Platz: alles zurueck auf Anfang. Lieber nicht anlegen, als
+			# dem Spieler stillschweigend Ausruestung zu loeschen.
+			equipment.equip(displaced, slot)
+			if source != null:
+				source.add_item(stack)
+			return false
+
+	equipment.equip(stack, slot)
+	inventory.notify_changed()
+	return true
+
+
+## Ob `needle` dasselbe Raster ist wie `haystack` oder irgendwo darin steckt.
+##
+## Gebraucht, um zu verhindern, dass ein Behaelter in sich selbst wandert.
+## Rekursiv, weil eine Tasche im Rucksack liegen kann: Der Rucksack darf auch
+## nicht in diese Tasche.
+static func _contains_grid(haystack: InventoryGrid, needle: InventoryGrid) -> bool:
+	if haystack == null or needle == null:
+		return false
+	if haystack == needle:
+		return true
+	for stack in haystack.get_all_stacks():
+		if stack.container != null and _contains_grid(stack.container, needle):
+			return true
+	return false
+
+
 ## Packt weg, was in einem Platz steckt: vom Koerper zurueck ins Raster.
 ##
 ## Mit `x`/`y` landet es auf einem bestimmten Feld — das ist der Fall beim
@@ -377,12 +456,23 @@ func equip_from_inventory(stack: ItemStack) -> bool:
 ## Passt es NIRGENDS hin, bleibt es angelegt und die Funktion gibt `false`
 ## zurueck. Etwas fallen zu lassen, weil kein Platz ist, waere im Raid ein
 ## stiller Verlust — und zwar meist der teuerste Gegenstand, den man hat.
-func stow_equipment(slot: ItemData.EquipSlot, x: int = -1, y: int = -1) -> bool:
+##
+## `into` bestimmt, in welches Raster es wandert — die Taschen oder das
+## Innenraster des Rucksacks. Ohne Angabe sind es die Taschen.
+func stow_equipment(slot: ItemData.EquipSlot, x: int = -1, y: int = -1,
+		into: InventoryGrid = null) -> bool:
 	if equipment == null or inventory == null:
 		return false
 
 	var stack := equipment.get_item(slot)
 	if stack == null:
+		return false
+
+	var target := into if into != null else inventory.grid
+
+	# Ein Rucksack kann nicht in sich selbst. Ohne diese Sperre verschwaende
+	# er im eigenen Innenraster — samt allem, was darin liegt.
+	if stack.container != null and _contains_grid(stack.container, target):
 		return false
 
 	# Das Magazin gehoert zur Waffe und muss mitwandern, bevor die Hand
@@ -391,10 +481,10 @@ func stow_equipment(slot: ItemData.EquipSlot, x: int = -1, y: int = -1) -> bool:
 		_remember_magazine()
 
 	var placed := false
-	if x >= 0 and y >= 0 and inventory.grid.can_place(stack, x, y):
-		placed = inventory.grid.place(stack, x, y)
+	if x >= 0 and y >= 0 and target.can_place(stack, x, y):
+		placed = target.place(stack, x, y)
 	if not placed:
-		placed = inventory.grid.add_item(stack)
+		placed = target.add_item(stack)
 	if not placed:
 		return false
 

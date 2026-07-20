@@ -28,6 +28,10 @@ const FIND_SOUNDS_ENABLED := false
 var container: LootContainer = null
 var player_inventory: PlayerInventory = null
 
+## Nur fuer das Anlegen aus dem Kontextmenue. Alles andere laeuft ueber das
+## Inventar — dieses Fenster soll den Spieler nicht mehr wissen als noetig.
+var player: PlayerController = null
+
 var _drag_stack: ItemStack = null
 var _drag_source: InventoryGridView = null
 
@@ -48,6 +52,10 @@ var _drag_ctrl: bool = false
 ## liegen wie vorher, sonst passt er nicht mehr auf seinen eigenen Platz.
 var _drag_original_rotated: bool = false
 
+## Worauf sich das offene Kontextmenue bezieht, und aus welchem Raster.
+var _menu_stack: ItemStack = null
+var _menu_source: InventoryGridView = null
+
 ## Was nach dem Loslassen noch auf die Mengenabfrage wartet.
 var _split_stack: ItemStack = null
 var _split_source: InventoryGridView = null
@@ -56,6 +64,8 @@ var _split_cell: Vector2i = Vector2i(-1, -1)
 
 @onready var _container_view: InventoryGridView = $Layout/Columns/Left/ContainerView
 @onready var _player_view: InventoryGridView = $Layout/Columns/Right/PlayerView
+@onready var _context_menu: ContextMenu = $ContextMenu
+@onready var _container_window: ContainerWindow = $ContainerWindow
 @onready var _container_title: Label = $Layout/Columns/Left/ContainerTitle
 @onready var _player_title: Label = $Layout/Columns/Right/PlayerTitle
 @onready var _status: Label = $Layout/Columns/Left/Status
@@ -72,29 +82,36 @@ func _ready() -> void:
 	# immer an das Control, auf dem gedrueckt wurde. Beim Ziehen von der Kiste
 	# ins Inventar kam es also nie beim Inventar an. Das Ziel bestimmt deshalb
 	# das Fenster selbst anhand der Zeigerposition.
-	for view in [_container_view, _player_view]:
+	for view in [_container_view, _player_view, _container_window.view]:
 		view.item_pressed.connect(_on_item_pressed)
 		view.item_double_clicked.connect(_on_item_double_clicked)
 		view.hidden_item_pressed.connect(_on_hidden_item_pressed)
 		view.item_hovered.connect(_on_item_hovered)
+		view.item_right_clicked.connect(_on_item_right_clicked)
 
 	_split_prompt.confirmed.connect(_on_split_confirmed)
 	_split_prompt.cancelled.connect(_on_split_cancelled)
+	_context_menu.chosen.connect(_on_menu_chosen)
+	_container_window.closed.connect(_cancel_drag)
 
 
 ## Öffnet das Fenster für eine Kiste.
-func open_for(p_container: LootContainer, p_inventory: PlayerInventory) -> void:
+## `p_player` wird fuer das Anlegen aus dem Kontextmenue gebraucht. Es darf
+## fehlen — dann bietet das Menue "Ausruesten" schlicht nicht an.
+func open_for(p_container: LootContainer, p_inventory: PlayerInventory,
+		p_player: PlayerController = null) -> void:
 	container = p_container
 	player_inventory = p_inventory
+	player = p_player
 
 	container.open()
 	if not container.item_revealed.is_connected(_on_item_revealed):
 		container.item_revealed.connect(_on_item_revealed)
 
 	_container_view.setup(container.contents, container.display_name, container)
-	_player_view.setup(player_inventory.grid, "Ausruestung")
+	_player_view.setup(player_inventory.grid, "Taschen")
 	_container_title.text = container.display_name
-	_player_title.text = "Ausruestung"
+	_player_title.text = "Taschen"
 
 	show()
 	_update_status()
@@ -106,6 +123,11 @@ func close() -> void:
 		container.pause_search()
 	if _split_prompt != null and _split_prompt.is_open():
 		_split_prompt.cancel()
+	if _context_menu != null:
+		_context_menu.close()
+	# Das schwebende Fenster gehoert diesem hier und geht mit ihm zu.
+	if _container_window != null:
+		_container_window.close()
 	if _tooltip != null:
 		_tooltip.clear()
 	_cancel_drag()
@@ -201,8 +223,9 @@ func _update_status() -> void:
 # ---------------------------------------------------------------------------
 
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
-	# Solange die Mengenabfrage offen ist, wird nichts Neues angefasst.
-	if _split_prompt.is_open():
+	# Solange Mengenabfrage oder Kontextmenue offen sind, wird nichts Neues
+	# angefasst.
+	if _split_prompt.is_open() or _context_menu.is_open():
 		return
 
 	_drag_stack = stack
@@ -219,7 +242,7 @@ func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 	var pixel_offset := local - view.cell_to_position(origin) if origin.x >= 0 else Vector2.ZERO
 
 	_ghost.show_stack(stack, pixel_offset)
-	for v in [_container_view, _player_view]:
+	for v in _views():
 		v.drag_stack = stack
 		v.drag_source = view
 		v.preview_cell = Vector2i(-1, -1)
@@ -268,7 +291,7 @@ func _update_drag_target() -> void:
 	_drag_target_cell = Vector2i(-1, -1)
 
 	var mouse := get_global_mouse_position()
-	for v: InventoryGridView in [_container_view, _player_view]:
+	for v: InventoryGridView in _views():
 		if not v.get_global_rect().has_point(mouse):
 			continue
 		var cell := v.position_to_cell(v.get_local_mouse_position())
@@ -277,7 +300,7 @@ func _update_drag_target() -> void:
 			_drag_target_cell = cell - _drag_offset
 		break
 
-	for v: InventoryGridView in [_container_view, _player_view]:
+	for v: InventoryGridView in _views():
 		v.preview_cell = _drag_target_cell if v == _drag_target else Vector2i(-1, -1)
 		v.queue_redraw()
 
@@ -432,20 +455,33 @@ func _clear_split() -> void:
 
 func _on_item_double_clicked(stack: ItemStack, view: InventoryGridView) -> void:
 	if view == _container_view:
-		if container.take_item(stack.instance_id, player_inventory.grid):
+		if _take_into_player(stack):
 			_notify_changed()
 	else:
-		# Vom Spieler in die Kiste zurücklegen.
+		# Vom Spieler in die Kiste zurücklegen — aus dem Raster, in dem er
+		# wirklich liegt. Sonst waere ein Doppelklick im Rucksack folgenlos.
 		var spot := container.contents.find_free_position(stack)
 		if spot.x < 0:
 			return
-		var removed := player_inventory.grid.remove_item(stack.instance_id)
+		var removed := view.grid.remove_item(stack.instance_id)
 		if removed == null:
 			return
 		if not container.put_item(removed, spot.x, spot.y):
-			player_inventory.grid.add_item(removed)
+			view.grid.add_item(removed)
 			return
 		_notify_changed()
+
+
+## Nimmt einen Gegenstand aus der Kiste: erst in die Taschen, dann in den
+## Rucksack. Ohne den zweiten Versuch waere ein Rucksack beim Looten wertlos —
+## und genau dabei braucht man ihn.
+func _take_into_player(stack: ItemStack) -> bool:
+	if player_inventory == null:
+		return false
+	for target in player_inventory.get_all_grids():
+		if container.take_item(stack.instance_id, target):
+			return true
+	return false
 
 
 func _cancel_drag() -> void:
@@ -462,7 +498,7 @@ func _cancel_drag() -> void:
 	_drag_ctrl = false
 	if _ghost != null:
 		_ghost.clear()
-	for v in [_container_view, _player_view]:
+	for v in _views():
 		if v == null:
 			continue
 		v.drag_stack = null
@@ -474,14 +510,79 @@ func _cancel_drag() -> void:
 func _notify_changed() -> void:
 	if player_inventory != null:
 		player_inventory.changed.emit()
-	_container_view.queue_redraw()
-	_player_view.queue_redraw()
+	for v in _views():
+		v.queue_redraw()
+
+
+## Die Raster, zwischen denen gerade gezogen werden darf: Kiste und Taschen
+## immer, das schwebende Behaelterfenster nur, solange es offen ist.
+func _views() -> Array[InventoryGridView]:
+	var views: Array[InventoryGridView] = [_container_view, _player_view]
+	if _container_window != null and _container_window.is_open() \
+			and _container_window.view.grid != null:
+		views.append(_container_window.view)
+	return views
+
+
+## Rechtsklick auf einen Gegenstand — in der Kiste wie in den Taschen.
+func _on_item_right_clicked(stack: ItemStack, view: InventoryGridView,
+		at_position: Vector2) -> void:
+	if stack == null or player_inventory == null:
+		return
+	var entries := ContextMenu.entries_for(stack, player_inventory.equipment)
+	if entries.is_empty():
+		return
+
+	_cancel_drag()
+	_tooltip.clear()
+	_menu_stack = stack
+	_menu_source = view
+	_context_menu.open(entries, at_position)
+
+
+func _on_menu_chosen(id: StringName) -> void:
+	var stack := _menu_stack
+	var source := _menu_source
+	_menu_stack = null
+	_menu_source = null
+	if stack == null:
+		return
+
+	match id:
+		&"oeffnen":
+			_container_window.open_for(stack, get_global_mouse_position())
+		&"ausruesten":
+			_equip(stack, source)
+
+
+## Legt einen Gegenstand direkt an — auch aus der Kiste heraus.
+##
+## Aus der Kiste wird er dafuer erst entnommen. Klappt das Anlegen nicht,
+## geht er unveraendert zurueck: Der Weg an den Koerper darf kein Weg sein,
+## auf dem etwas verlorengeht.
+func _equip(stack: ItemStack, source: InventoryGridView) -> void:
+	if player == null:
+		return
+
+	if source == _container_view and container != null:
+		var spot := container.contents.get_position(stack.instance_id)
+		var taken := container.take_out(stack.instance_id)
+		if taken == null:
+			return
+		if not player.equip_item(taken):
+			container.put_item(taken, spot.x, spot.y)
+		_notify_changed()
+		return
+
+	player.equip_item(stack, source.grid if source != null else null)
+	_notify_changed()
 
 
 ## Nimmt alles Aufgedeckte mit, was passt.
 func take_all() -> int:
 	if container == null or player_inventory == null:
 		return 0
-	var left := container.take_all(player_inventory.grid)
+	for stack in container.get_revealed_stacks():
+		_take_into_player(stack)
 	_notify_changed()
-	return left
+	return container.contents.get_item_count()

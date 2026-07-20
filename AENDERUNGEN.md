@@ -8,6 +8,106 @@ Begründungen im Einzelnen stehen weiterhin in den Commits.
 
 ---
 
+## 20.07.2026 — Der Rucksack
+
+Merge von `feature/rucksack` nach `main`.
+
+Die Taschen fassen zwölf Felder, und ein Sturmgewehr belegt zehn davon. Es gab
+bis dahin keinen Weg, daran etwas zu ändern — man konnte Ausrüstung finden,
+aber nichts, was mehr Platz schafft.
+
+### Das Item
+
+- **Wanderrucksack** (`assets/data/gear/rucksack_wander.tres`) — reine Daten,
+  kein neuer Item-Code. Innen **6x4 = 24 Felder**, doppelt so viel wie die
+  eigenen Taschen.
+- Zusammengelegt ist er selbst **4x2 gross** und passt damit noch in die
+  Taschen. Das ist Absicht: Ein Fund, den man nicht aufheben kann, weil er
+  nirgends hineinpasst, wäre schlimmer als gar keiner.
+- 1,4 kg leer. Was drin liegt, **wiegt mit** und bremst.
+
+### Die Kiste vor dem Einstieg
+
+- Neue **Ausruestungskiste** 2,5 m vor dem Spawn, eigene Loot-Tabelle
+  (`assets/data/loot/ausruestung.tres`) mit `empty_weight = 0`: Sie enthält
+  **immer genau einen Rucksack**, nie nichts. Der Test würfelt 50 Mal und
+  prüft das.
+- Durchsuchzeit auf 0,6 gekürzt — direkt beim Start soll man nicht drei
+  Sekunden stehen.
+
+### Rechtsklick → Öffnen → schwebendes Fenster
+
+- **Rechtsklick auf einen Rucksack** öffnet ein kleines Menü mit dem Eintrag
+  **"Oeffnen"**. Der Inhalt erscheint in einem eigenen Fenster, das man an der
+  **Titelleiste verschieben** und mit dem **X schliessen** kann.
+- Der Rechtsklick funktioniert **überall**, wo ein Behälter liegt: auf dem
+  Ausrüstungsplatz, auf einem Rucksack in den Taschen und auf einem in der
+  Loot-Kiste. Damit kann man in eine gefundene Tasche hineinsehen, **bevor**
+  man sie mitnimmt — genau die Entscheidung, um die es beim Looten geht.
+- **Nicht auf einem unaufgedeckten Umriss.** Ein Menü mit "Oeffnen" würde
+  verraten, dass dort ein Behälter liegt, und die Frage "warte ich das ab?"
+  wäre entwertet.
+- Zweiter Eintrag darunter: **"Ausruesten"**, aber nur, solange der Gegenstand
+  **nicht** schon am Körper hängt. Damit geht ein gefundener Rucksack in zwei
+  Klicks an den Mann, statt über ins-Raster-ziehen → Tab → auf den Platz
+  ziehen. Gilt für **jedes** Ausrüstungsteil, nicht nur für Rucksäcke — eine
+  Sonderregel wäre willkürlich gewesen.
+- Aus der Kiste heraus funktioniert das auch: Der Gegenstand wird entnommen,
+  ohne je durch ein Raster zu wandern. Scheitert das Anlegen, geht er
+  unverändert auf seinen Platz in der Kiste zurück.
+- Zwei neue, bewusst allgemein gehaltene Bausteine: `ContextMenu` (Einträge
+  kommen von aussen — "Ablegen" und "Aufteilen" sind absehbar) und
+  `ContainerWindow`. Beide gab es im Projekt vorher nicht: **kein `PopupMenu`,
+  kein `Window`, kein verschiebbares Panel und kein einziger Rechtsklick.**
+
+### Die Falle beim Tauschen
+
+Wer einen zweiten Rucksack anzieht, verdrängt den ersten. Der muss irgendwohin —
+und die naheliegende Reihenfolge (neuen anlegen, dann den alten wegräumen)
+hätte den alten **in den neuen gelegt**, samt allem, was darin lag. Ein
+Rucksack im Rucksack, unbemerkt, bis man ihn ablegt und alles weg ist.
+
+`equip_item()` nimmt deshalb erst ab, sucht dann Platz, und legt erst zuletzt
+an. Geht etwas schief, wird alles zurückgedreht. Der Test legt einen gefüllten
+Rucksack an, tauscht ihn gegen einen zweiten und prüft danach, dass der erste
+in den Taschen liegt, **nicht** im neuen, und seine 20 Patronen noch hat.
+- Das Fenster lässt sich **nicht aus dem Bild schieben** — es bleibt immer ein
+  Streifen Titelleiste greifbar. Sonst bekäme man es nie wieder zu fassen und
+  auch nicht mehr zu.
+- Es gehört seinem Wirtfenster und geht mit ihm zu. Ein Rucksackfenster, das
+  offen bleibt, während man weiterläuft, wäre ein zweiter Bildschirm mitten im
+  Raid.
+- Das linke Raster heisst jetzt **"Taschen"** statt "Ausruestung". Es zeigte
+  noch nie die Ausrüstung, und der Name war schon vorher irreführend.
+
+### Drei stille Verluste, die dabei aufgefallen sind
+
+Ein zweites Raster bricht jede Stelle, die selbstverständlich von einem
+einzigen ausging. Jeder dieser Fehler fällt im Spiel erst auf, wenn schon
+etwas weg ist:
+
+- **Munition im Rucksack war beim Nachladen unsichtbar.** Man hätte mit vollem
+  Rucksack vor einer leeren Waffe gestanden. `count_ammo`, `take_ammo` und
+  `get_compatible_ammo` durchsuchen jetzt beide Raster.
+- **Eine Waffe aus dem Rucksack in die Hand hätte sie verdoppelt.**
+  `equip_weapon` und `assign_weapon` suchten sie nur in den Taschen und
+  entfernten sie dort — also nirgends. Sie hätte danach zweimal existiert.
+- **Der Rucksack hätte in sich selbst wandern können**, samt Inhalt.
+  `PlayerController._contains_grid()` sperrt das, rekursiv — auch über eine
+  Tasche im Rucksack hinweg.
+
+### Verifikation
+
+Zwei neue Suiten: `tests/verify_backpack.gd` (**35 Prüfungen**) und
+`tests/verify_container_window.gd` (**34 Prüfungen**). Alle 15 Suiten grün,
+zusammen 1.143 Prüfungen.
+
+**Von einem Menschen zu prüfen:** ob sich das Fenster gut anfassen und
+verschieben lässt, ob das Menü an der richtigen Stelle aufgeht, ob 24 Felder
+die richtige Grösse sind und ob die Kiste an der richtigen Stelle steht.
+
+---
+
 ## 20.07.2026 — Schritte im Schnee und Keuchen beim Sprinten
 
 Merge von `feature/schrittgeraeusche` nach `main`. **3 Commits.**

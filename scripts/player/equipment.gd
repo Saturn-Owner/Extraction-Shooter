@@ -85,6 +85,41 @@ func can_equip(stack: ItemStack, slot: ItemData.EquipSlot) -> bool:
 	return data.equip_slot == slot
 
 
+## In welchem Platz dieser Gegenstand gerade steckt, oder NONE.
+##
+## Verglichen wird das EXEMPLAR, nicht die Vorlage: Zwei Rucksäcke derselben
+## Sorte sind verschiedene Dinge, und nur einer davon hängt am Körper.
+func get_slot_of(stack: ItemStack) -> ItemData.EquipSlot:
+	if stack == null:
+		return ItemData.EquipSlot.NONE
+	for slot in _slots:
+		if _slots[slot] == stack:
+			return slot
+	return ItemData.EquipSlot.NONE
+
+
+## Wohin dieser Gegenstand gehören würde, wenn man ihn anlegt.
+##
+## Waffen sind wieder der Sonderfall: Sie passen in beide Waffenplätze, und
+## der freie hat Vorrang. Ist keiner frei, wird die Primärwaffe verdrängt —
+## dieselbe Regel, nach der `PlayerController.assign_weapon()` ohne Angabe
+## entscheidet.
+func find_slot_for(stack: ItemStack) -> ItemData.EquipSlot:
+	if stack == null:
+		return ItemData.EquipSlot.NONE
+
+	var data := stack.get_data()
+	if data == null:
+		return ItemData.EquipSlot.NONE
+
+	if data.category == ItemData.Category.WEAPON:
+		var free := get_free_weapon_slot()
+		return free if free != ItemData.EquipSlot.NONE else ItemData.EquipSlot.PRIMARY
+
+	return data.equip_slot if can_equip(stack, data.equip_slot) \
+		else ItemData.EquipSlot.NONE
+
+
 ## Der erste freie Waffenplatz, oder NONE wenn beide belegt sind.
 func get_free_weapon_slot() -> ItemData.EquipSlot:
 	for slot in WEAPON_SLOTS:

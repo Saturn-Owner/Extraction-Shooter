@@ -1,0 +1,66 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/container_window.gd" id="1_container_window"]
+[ext_resource type="Script" path="res://scripts/ui/inventory_grid_view.gd" id="2_grid_view"]
+
+[sub_resource type="StyleBoxFlat" id="Style_fenster"]
+bg_color = Color(0.075, 0.082, 0.094, 0.99)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.48, 0.53, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+
+[node name="ContainerWindow" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("1_container_window")
+
+[node name="Fenster" type="PanelContainer" parent="."]
+offset_left = 300.0
+offset_top = 200.0
+offset_right = 660.0
+offset_bottom = 460.0
+mouse_filter = 1
+theme_override_styles/panel = SubResource("Style_fenster")
+
+[node name="Inhalt" type="VBoxContainer" parent="Fenster"]
+theme_override_constants/separation = 8
+
+[node name="Titelleiste" type="HBoxContainer" parent="Fenster/Inhalt"]
+custom_minimum_size = Vector2(0, 26)
+mouse_filter = 0
+theme_override_constants/separation = 10
+
+[node name="Titel" type="Label" parent="Fenster/Inhalt/Titelleiste"]
+size_flags_horizontal = 3
+mouse_filter = 2
+text = "Behaelter"
+theme_override_font_sizes/font_size = 15
+
+[node name="Frei" type="Label" parent="Fenster/Inhalt/Titelleiste"]
+mouse_filter = 2
+text = "0 von 0 frei"
+theme_override_colors/font_color = Color(0.6, 0.63, 0.67, 1)
+theme_override_font_sizes/font_size = 11
+vertical_alignment = 1
+
+[node name="Schliessen" type="Button" parent="Fenster/Inhalt/Titelleiste"]
+custom_minimum_size = Vector2(26, 26)
+tooltip_text = "Schliessen"
+text = "X"
+
+[node name="Raster" type="Control" parent="Fenster/Inhalt"]
+custom_minimum_size = Vector2(340, 230)
+mouse_filter = 1
+script = ExtResource("2_grid_view")
