@@ -177,14 +177,26 @@ func _place_humanoids() -> void:
 	if container == null:
 		return
 
+	# Durchnummeriert, damit man ueber eine bestimmte Figur reden kann.
+	#
+	# Ohne Nummer heissen fuenf Figuren "15 m" und man muss sie umstaendlich
+	# umschreiben ("die dritte von links, die nachlaedt"). Mit Nummer sagt
+	# man "Nummer 6" — beim Berichten eines Fehlers ist das der Unterschied
+	# zwischen einer klaren Angabe und Raten.
+	var number := 0
+
 	for place in HUMANOID_PLACES:
 		var distance: float = place.distance
+		number += 1
 		var figure := HumanoidTarget.new()
-		# Entfernung UND Beschriftung im Namen: Bei 15 m stehen inzwischen
-		# fünf Figuren, die sonst alle "Figur15m" hiessen und von Godot
-		# durchnummeriert würden. Im Szenenbaum sucht man dann, welche welche
-		# ist.
-		figure.name = "Figur%dm_%s" % [int(distance), String(place.label).capitalize()]
+		# Nummer UND Beschriftung im Namen: Bei 15 m stehen inzwischen fuenf
+		# Figuren, die sonst alle "Figur15m" hiessen und von Godot
+		# durchnummeriert wuerden. Im Szenenbaum sucht man dann, welche
+		# welche ist.
+		figure.name = "Figur%02d_%s" % [number, String(place.label).capitalize()]
+		# Die Nummer als eigenes Feld, NICHT in label_text: Dort wuerde ein
+		# Umbruch auch die einzeilige HUD-Ausgabe zerreissen.
+		figure.marking = "#%d" % number
 		figure.label_text = "%d m  %s" % [int(distance), place.label]
 		figure.patrol_width = place.patrol
 		figure.patrol_speed = place.speed

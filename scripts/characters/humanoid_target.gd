@@ -24,6 +24,21 @@ extends BlockyCharacter
 ## Beschriftung über dem Kopf.
 @export var label_text: String = "Figur"
 
+## Kurze Kennzeichnung, meist eine Nummer.
+##
+## ---------------------------------------------------------------------------
+## EIGENES FELD, KEIN UMBRUCH IN label_text
+##
+## Naheliegend waere, die Nummer einfach vorne an `label_text` zu haengen. Das
+## geht schief: Ueber dem Kopf steht die Beschriftung ZWEIZEILIG, im HUD
+## dagegen EINZEILIG — siehe `label_lines()` gegen `describe()`. Ein
+## Zeilenumbruch in `label_text` landet in beiden und reisst die HUD-Zeile
+## auseinander.
+##
+## Als eigenes Feld kann jede der beiden Darstellungen selbst entscheiden, wo
+## die Kennzeichnung hingehoert: oben in eine eigene Zeile, im HUD davor.
+@export var marking: String = ""
+
 ## Wie hoch über dem Scheitel die Schrift schwebt.
 const LABEL_HEIGHT := 0.32
 
@@ -343,10 +358,13 @@ func reset() -> void:
 ## Zwei kurze Zeilen sind schmaler als eine lange, und solange nichts kaputt
 ## ist, steht in der zweiten gar nichts.
 func label_lines() -> String:
+	# Die Kennzeichnung bekommt eine eigene erste Zeile: Auf 300 m ist die
+	# Schrift klein, und eine Zahl allein liest man dort noch.
+	var head := "%s\n%s" % [marking, label_text] if marking != "" else label_text
 	if health == null:
-		return label_text
+		return head
 	if health.is_dead:
-		return "%s\nTOT (%d)" % [label_text, _hits]
+		return "%s\nTOT (%d)" % [head, _hits]
 
 	var broken := 0
 	for part: HealthSystem.Part in VERTICAL:
@@ -354,18 +372,20 @@ func label_lines() -> String:
 			broken += 1
 
 	if _hits == 0:
-		return label_text
+		return head
 	if broken == 0:
-		return "%s\n%.0f TP (%d)" % [label_text, health.get_total_hp(), _hits]
-	return "%s\n%.0f TP (%d), %d ab" % [label_text, health.get_total_hp(), _hits, broken]
+		return "%s\n%.0f TP (%d)" % [head, health.get_total_hp(), _hits]
+	return "%s\n%.0f TP (%d), %d ab" % [head, health.get_total_hp(), _hits, broken]
 
 
 ## Was gerade mit der Figur los ist, als Zeile fürs HUD.
 func describe() -> String:
+	# Im HUD bleibt alles auf EINER Zeile, die Kennzeichnung steht davor.
+	var named := "%s %s" % [marking, label_text] if marking != "" else label_text
 	if health == null:
-		return label_text
+		return named
 	if health.is_dead:
-		return "%s: TOT nach %d Treffern" % [label_text, _hits]
+		return "%s: TOT nach %d Treffern" % [named, _hits]
 
 	var broken: Array[String] = []
 	for part: HealthSystem.Part in VERTICAL:
@@ -373,9 +393,9 @@ func describe() -> String:
 			broken.append(part_name(part))
 
 	if broken.is_empty():
-		return "%s: %.0f TP, %d Treffer" % [label_text, health.get_total_hp(), _hits]
+		return "%s: %.0f TP, %d Treffer" % [named, health.get_total_hp(), _hits]
 	return "%s: %.0f TP, %d Treffer, ab: %s" % [
-		label_text, health.get_total_hp(), _hits, ", ".join(broken)]
+		named, health.get_total_hp(), _hits, ", ".join(broken)]
 
 
 func _update_label() -> void:

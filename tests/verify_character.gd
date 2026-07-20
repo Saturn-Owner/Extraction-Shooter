@@ -30,6 +30,7 @@ func _initialize() -> void:
 	await _test_weapon_in_hand()
 	await _test_vest()
 	await _test_stances()
+	await _test_marking()
 	_test_colours()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
@@ -1073,6 +1074,54 @@ func _foot_height(figure: HumanoidTarget) -> float:
 	var lower := size.y - size.y * at
 	var knee := figure.hinge_of(HealthSystem.Part.LEFT_LEG)
 	return (knee.global_transform * Vector3(0.0, -lower, 0.0)).y
+
+
+## Die Kennzeichnung — eine Nummer, damit man ueber eine bestimmte Figur
+## reden kann.
+##
+## ---------------------------------------------------------------------------
+## DIE HUD-ZEILE MUSS EINZEILIG BLEIBEN
+##
+## Die Schrift ueber dem Kopf ist zweizeilig, die HUD-Ausgabe einzeilig — das
+## ist Absicht und in `label_lines()` begruendet. Die Nummer einfach vorne an
+## `label_text` zu haengen waere der kurze Weg gewesen und haette die HUD-Zeile
+## mitten im Namen zerrissen. Deshalb ein eigenes Feld, und deshalb diese
+## Pruefung.
+func _test_marking() -> void:
+	_section("Kennzeichnung")
+
+	var figure := HumanoidTarget.new()
+	figure.marking = "#7"
+	figure.label_text = "15 m  zielt"
+	root.add_child(figure)
+	await process_frame
+
+	_check(figure.label_lines().begins_with("#7\n"),
+		"ueber dem Kopf steht die Nummer in einer eigenen Zeile")
+	_check(figure.describe().begins_with("#7 15 m"),
+		"im HUD steht sie davor, ohne Umbruch")
+	_check(not ("\n" in figure.describe()),
+		"und die HUD-Zeile bleibt einzeilig")
+
+	# Auch beschaedigt darf die HUD-Zeile nicht umbrechen.
+	figure.health.apply_damage(HealthSystem.Part.CHEST, 30.0)
+	_check(not ("\n" in figure.describe()),
+		"auch nach einem Treffer")
+
+	# Ohne Kennzeichnung muss alles bleiben wie vorher — sonst haetten die
+	# Figuren im Raid ploetzlich eine leere Zeile ueber dem Kopf.
+	var plain := HumanoidTarget.new()
+	plain.label_text = "ohne Nummer"
+	root.add_child(plain)
+	await process_frame
+	_check(plain.label_lines() == "ohne Nummer",
+		"ohne Kennzeichnung bleibt die Beschriftung unveraendert")
+	_check(plain.describe().begins_with("ohne Nummer:"),
+		"und die HUD-Zeile ebenso")
+
+	figure.queue_free()
+	plain.queue_free()
+	await process_frame
 
 
 func _test_colours() -> void:
