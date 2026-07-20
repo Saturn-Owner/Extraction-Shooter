@@ -137,6 +137,11 @@ func _build_points() -> void:
 	# Der Pistolengriff steht hinter und unter dem Abzug, die Faust umschliesst
 	# ihn also etwa eine Handbreit darunter. Der Vorderschaft liegt vor dem
 	# Magazin auf halbem Weg zur Muendung.
+	# Diese Punkte sind am Modell gemessen, deshalb darf der Spieler seine
+	# Haende hier sehen. Bei den uebrigen Waffen fehlt das noch — siehe
+	# `shows_hands` in WeaponViewmodel.
+	shows_hands = true
+
 	add_child(GlbParts.pivot("GripPoint", Vector3(0.0, -0.085, -0.050)))
 	# Der Stuetzgriff sitzt bewusst weit hinten am Schaft, dicht hinter dem
 	# Magazin: Weiter vorn kaeme die linke Hand nicht mehr hin, seit die

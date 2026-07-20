@@ -412,9 +412,17 @@ func _update_recoil(delta: float) -> void:
 ## Abstimmen auseinanderlaufen — dieselbe Ueberlegung wie bei der
 ## Nachladedrehung, die aus dem Waffenmodell kommt.
 func _update_arms() -> void:
-	if _arms == null or _viewmodel == null:
+	if _arms == null:
 		return
-	if _viewmodel.grip_point == null or _viewmodel.support_point == null:
+
+	# Nur Waffen mit gemessenen Griffpunkten bekommen Haende. Bei allen
+	# anderen fassten sie sichtbar daneben, und das ist schlimmer als gar
+	# keine Haende — siehe `shows_hands` in WeaponViewmodel.
+	var wanted := (_viewmodel != null and _viewmodel.shows_hands
+		and _viewmodel.grip_point != null and _viewmodel.support_point != null)
+	if _arms.visible != wanted:
+		_arms.visible = wanted
+	if not wanted:
 		return
 
 	var grip := _viewmodel.grip_point.global_position

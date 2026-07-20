@@ -60,6 +60,26 @@ var mounted: Dictionary = {}
 
 @export_group("Haltung")
 
+## Ob der Spieler seine eigenen Hände an dieser Waffe sieht.
+##
+## ---------------------------------------------------------------------------
+## JEDE WAFFE ENTSCHEIDET DAS SELBST
+##
+## `ViewmodelArms` greift `grip_point` und `support_point` — die muss es
+## geben, und sie müssen an dieser Waffe auch stimmen. Bei der AR-15 sind sie
+## am Modell gemessen; bei den übrigen gibt es sie noch nicht.
+##
+## Hände an eine Waffe zu setzen, deren Griffpunkte nicht stimmen, sieht
+## schlimmer aus als gar keine: Sie fassen dann sichtbar daneben. Deshalb
+## steht der Schalter hier und nicht als Liste im Kameracode — dieselbe
+## Überlegung wie bei Grundsatzentscheidung 5, wo jede Waffe ihr eigenes
+## Modell und ihre eigene Mechanik mitbringt.
+##
+## Wer eine Waffe mit Händen ausstatten will, misst ihre Griffpunkte und
+## setzt das hier auf `true`. `verify_weapon_handling` prüft danach, ob die
+## Arme wirklich hinreichen.
+var shows_hands: bool = false
+
 ## Ruhelage in der Hand.
 var hip_position := Vector3(0.115, -0.125, -0.22)
 var hip_rotation_degrees := Vector3(0.0, -3.5, 0.0)

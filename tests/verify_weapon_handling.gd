@@ -407,6 +407,35 @@ func _test_viewmodel_arms() -> void:
 
 	var reach: float = ViewmodelArms.UPPER_LENGTH + ViewmodelArms.LOWER_LENGTH
 
+	# --- HAENDE GIBT ES NUR, WO DIE GRIFFPUNKTE GEMESSEN SIND ---
+	#
+	# Eine Waffe ohne gemessene Punkte bekaeme Haende, die sichtbar daneben
+	# fassen - schlimmer als gar keine. Jede Waffe entscheidet das selbst
+	# ueber `shows_hands`, nicht eine Liste im Kameracode.
+	#
+	# Geprueft wird die BEDINGUNG, nicht die Auswahl: Wer den Schalter setzt,
+	# muss auch Griffpunkte liefern. Damit darf die naechste Waffe jederzeit
+	# dazukommen, ohne dass dieser Test angefasst wird.
+	var with_hands: Array[String] = []
+	for entry in ItemRegistry.get_by_category(ItemData.Category.WEAPON):
+		var wd := entry as WeaponData
+		var vm := wd.create_viewmodel()
+		vm.weapon_data = wd
+		root.add_child(vm)
+		await process_frame
+		if vm.shows_hands:
+			with_hands.append(String(wd.id))
+			_check(vm.grip_point != null and vm.support_point != null,
+				"%s zeigt Haende und nennt dafuer Griff und Vorderschaft"
+					% wd.id)
+		vm.queue_free()
+		await process_frame
+
+	_check(with_hands.size() >= 1,
+		"mindestens eine Waffe hat Haende (%s)" % ", ".join(with_hands))
+	_check(with_hands.size() == 1 and with_hands[0] == "weapon_rifle_ar15",
+		"und zwar vorerst nur die AR-15 (%s)" % ", ".join(with_hands))
+
 	# Wie weit muessen die Haende wirklich? Aus den Griffpunkten der AR-15 in
 	# ihrer Ruhelage, nicht geschaetzt.
 	var data := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
