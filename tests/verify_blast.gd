@@ -28,6 +28,8 @@ func _initialize() -> void:
 	_test_everything_returns_to_rest()
 	_test_envelopes_have_different_memory()
 	_test_never_leaves_range()
+	_test_tinnitus_loops_without_clicking()
+	_test_volume_follows_loudness()
 	await _test_in_level()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
@@ -285,6 +287,129 @@ func _test_never_leaves_range() -> void:
 ## darunter. Schriebe das Wackeln versehentlich auf denselben Knoten, wanderte
 ## die Blickrichtung mit jedem Magazin ein Stück weg — und das merkt man im
 ## Spiel erst nach Minuten, wenn man plötzlich in den Himmel schaut.
+## Liest einen 16-Bit-Wert aus den Rohdaten, -1 bis 1.
+func _sample_at(data: PackedByteArray, index: int) -> float:
+	var low := data[index * 2]
+	var high := data[index * 2 + 1]
+	var value := low | (high << 8)
+	if value >= 32768:
+		value -= 65536
+	return float(value) / 32767.0
+
+
+## DIE SCHLEIFE DARF NICHT KNACKEN.
+##
+## Ein Sinus, der an der Nahtstelle nicht gerade durch null geht, springt beim
+## Zurueckspringen — und das hoert man als Knacken. Bei einer Sekunde
+## Schleifenlaenge knackt es einmal pro Sekunde, dauerhaft, solange es pfeift.
+##
+## Das faellt beim Spielen als "das Pfeifen klingt komisch" auf, und die
+## Ursache sucht man dann in der Lautstaerke oder im Filter statt in der
+## Pufferlaenge. Deshalb steht es hier fest.
+func _test_tinnitus_loops_without_clicking() -> void:
+	_section("Tinnitus")
+
+	var stream := GameAudio.make_tinnitus(4500.0, 4508.0)
+	_check(stream != null, "der Klang wird erzeugt")
+	if stream == null:
+		return
+
+	_check(stream.loop_mode == AudioStreamWAV.LOOP_FORWARD, "er ist als Schleife markiert")
+	_check(stream.loop_end == int(GameAudio.SAMPLE_RATE * GameAudio.TINNITUS_SECONDS),
+		"und die Schleife umfasst den ganzen Puffer (%d)" % stream.loop_end)
+
+	var data := stream.data
+	var count := data.size() / 2
+	_check(count > 0, "es sind Daten drin (%d Werte)" % count)
+	if count < 2:
+		return
+
+	# Der groesste Schritt INNERHALB des Puffers ist der Massstab. Der Sprung
+	# an der Naht darf nicht groesser sein — sonst ist er hoerbar.
+	var biggest_step := 0.0
+	for i in range(count - 1):
+		biggest_step = maxf(biggest_step, absf(_sample_at(data, i + 1) - _sample_at(data, i)))
+
+	var seam := absf(_sample_at(data, 0) - _sample_at(data, count - 1))
+	_check(seam <= biggest_step * 1.5,
+		"der Sprung an der Naht ist nicht groesser als im Puffer (%.5f gegen %.5f)"
+			% [seam, biggest_step])
+
+	# Und mit krummen Frequenzen ebenso — die stehen in einer .tres und
+	# koennen dort auf beliebige Kommastellen gesetzt werden.
+	var odd := GameAudio.make_tinnitus(4507.3, 4513.9)
+	var odd_data := odd.data
+	var odd_count := odd_data.size() / 2
+	var odd_step := 0.0
+	for i in range(odd_count - 1):
+		odd_step = maxf(odd_step, absf(_sample_at(odd_data, i + 1) - _sample_at(odd_data, i)))
+	var odd_seam := absf(_sample_at(odd_data, 0) - _sample_at(odd_data, odd_count - 1))
+	_check(odd_seam <= odd_step * 1.5,
+		"auch bei krummen Frequenzen (%.5f gegen %.5f)" % [odd_seam, odd_step])
+
+	# ZWEI TOENE, NICHT EINER. Ein reiner Sinus klingt nach Messgeraet. Die
+	# Schwebung erkennt man daran, dass die Huellkurve pulsiert: Es gibt
+	# Stellen mit fast voller Auslenkung und Stellen nahe null.
+	var loudest := 0.0
+	var quietest := 1.0
+	var window := int(GameAudio.SAMPLE_RATE * 0.01)
+	var at := 0
+	while at + window < count:
+		var peak := 0.0
+		for i in range(at, at + window):
+			peak = maxf(peak, absf(_sample_at(data, i)))
+		loudest = maxf(loudest, peak)
+		quietest = minf(quietest, peak)
+		at += window
+
+	_check(loudest > 0.8, "die Schwebung erreicht volle Staerke (%.2f)" % loudest)
+	_check(quietest < 0.3,
+		"und faellt zwischendurch fast auf null — das ist die Schwebung (%.2f)" % quietest)
+
+
+## Ein Schalldämpfer muss die Waffe HÖRBAR leiser machen.
+##
+## ---------------------------------------------------------------------------
+## DAS HAT VORHER GEFEHLT, UND ZWAR VOLLSTÄNDIG
+##
+## `loudness_multiplier` steuerte die Sample-Auswahl, die Synthese und die
+## Knall-Belastung — aber nie die Abspiellautstärke. Ein Dämpfer machte damit
+## bei Glock, AKM und M870 gar nichts leiser. Aufgefallen ist das nie, weil
+## die AR-15 eine eigene gedämpfte Aufnahme hat und deshalb anders klang —
+## der einzige Fall, in dem es zufällig funktionierte.
+func _test_volume_follows_loudness() -> void:
+	_section("Lautstärke")
+
+	var loud := _weapon(&"weapon_rifle_ar15")
+	var quiet := _weapon(&"weapon_rifle_ar15", &"ar15_muzzle_suppressor")
+
+	_check(quiet.loudness_multiplier < loud.loudness_multiplier,
+		"der Dämpfer senkt loudness_multiplier (%.2f gegen %.2f)"
+			% [quiet.loudness_multiplier, loud.loudness_multiplier])
+
+	var loud_db := WeaponAudio.volume_db_for(loud)
+	var quiet_db := WeaponAudio.volume_db_for(quiet)
+
+	_check(is_zero_approx(loud_db), "ungedämpft läuft auf voller Lautstärke (%.1f dB)" % loud_db)
+	_check(quiet_db < loud_db, "gedämpft ist leiser (%.1f dB)" % quiet_db)
+
+	# DIE GRÖSSE DES UNTERSCHIEDS IST DER PUNKT, nicht sein Vorhandensein.
+	# Ein halbes Dezibel wäre technisch "leiser" und im Spiel nicht zu
+	# bemerken — die Prüfung darüber bliebe trotzdem grün.
+	_check(quiet_db < -6.0,
+		"und zwar deutlich: mindestens 6 dB (%.1f dB)" % quiet_db)
+
+	# Nach unten begrenzt, sonst könnte eine .tres die Waffe stummschalten.
+	var silent := WeaponData.new()
+	silent.loudness_multiplier = 0.0
+	_check(WeaponAudio.volume_db_for(silent) > -30.0,
+		"selbst bei loudness_multiplier = 0 bleibt sie hörbar (%.1f dB)"
+			% WeaponAudio.volume_db_for(silent))
+
+	_check(is_zero_approx(WeaponAudio.volume_db_for(null)),
+		"ohne Waffe kommt 0 dB heraus statt eines Fehlers")
+
+
 func _test_in_level() -> void:
 	_section("Im Spielerbaum")
 
@@ -443,6 +568,107 @@ func _test_in_level() -> void:
 		_check(blast.smoke_cloud.emitting, "bei voller Belastung raucht es")
 		_check(blast.smoke_cloud.amount_ratio > 0.9,
 			"und zwar dicht (%.2f)" % blast.smoke_cloud.amount_ratio)
+
+	# --- Das Gehör ---
+	var world := GameAudio.bus_index(GameAudio.WORLD_BUS)
+	var ringing := GameAudio.bus_index(GameAudio.TINNITUS_BUS)
+	_check(world > 0, "der Welt-Bus ist angelegt (Index %d)" % world)
+	_check(ringing > 0, "der Tinnitus-Bus ist angelegt (Index %d)" % ringing)
+
+	if world > 0 and ringing > 0:
+		_check(world != ringing, "und es sind wirklich zwei verschiedene")
+
+		# DIE TRENNUNG IST DER GANZE PUNKT. Haengt das Pfeifen am selben Bus
+		# wie die Welt, wird es mit steigender Belastung selbst gedaempft — es
+		# wuerde also genau dann leiser, wenn es lauter werden soll.
+		_check(AudioServer.get_bus_effect_count(world) == 1,
+			"am Welt-Bus haengt genau ein Filter (%d)"
+				% AudioServer.get_bus_effect_count(world))
+		_check(AudioServer.get_bus_effect(world, 0) is AudioEffectLowPassFilter,
+			"und zwar ein Tiefpass")
+		_check(AudioServer.get_bus_effect_count(ringing) == 0,
+			"das Pfeifen laeuft an ihm vorbei — es entsteht im Ohr, nicht in der Welt")
+
+		# Mehrfaches ensure_buses() darf nichts stapeln. Sonst klaenge nach
+		# dem dritten Levelwechsel alles dumpf, ohne dass ein Schuss fiel.
+		GameAudio.ensure_buses()
+		GameAudio.ensure_buses()
+		_check(AudioServer.get_bus_effect_count(world) == 1,
+			"auch nach dreimaligem Anlegen (%d Filter)"
+				% AudioServer.get_bus_effect_count(world))
+
+		var filter := AudioServer.get_bus_effect(world, 0) as AudioEffectLowPassFilter
+
+		# Ruhe: offen und laut.
+		blast.reset()
+		blast._process(1.0 / 60.0)
+		_check(filter.cutoff_hz > 20000.0,
+			"ohne Belastung ist das Gehoer offen (%.0f Hz)" % filter.cutoff_hz)
+		_check(is_zero_approx(AudioServer.get_bus_volume_db(world)),
+			"und die Welt auf voller Lautstaerke (%.1f dB)"
+				% AudioServer.get_bus_volume_db(world))
+		_check(not blast._tinnitus_player.playing, "es pfeift nicht")
+
+		# Der Anschlag, ueber die oeffentliche Schnittstelle gemessen.
+		#
+		# NICHT ueber _process(): Das klingt die Huellkurve erst ab und
+		# aktualisiert dann das Gehoer, es stehen also 0,9986 statt 1,0 an —
+		# und damit 603 Hz statt 600. Das ist richtig so, taugt aber nicht,
+		# um den Endwert zu pruefen.
+		GameAudio.set_muffle(1.0, blast.config.muffle_cutoff_hz, blast.config.muffle_volume_db)
+		_check(is_equal_approx(filter.cutoff_hz, blast.config.muffle_cutoff_hz),
+			"am Anschlag steht genau der Wert aus der .tres (%.1f von %.1f Hz)"
+				% [filter.cutoff_hz, blast.config.muffle_cutoff_hz])
+		_check(is_equal_approx(AudioServer.get_bus_volume_db(world), blast.config.muffle_volume_db),
+			"und genau die eingestellte Lautstaerke (%.1f dB)"
+				% AudioServer.get_bus_volume_db(world))
+
+		# Und jetzt der Weg, den das Spiel wirklich geht.
+		blast.tinnitus = 1.0
+		blast._process(1.0 / 60.0)
+		_check(filter.cutoff_hz < blast.config.muffle_cutoff_hz * 1.05,
+			"bei voller Belastung ist es dumpf (%.0f Hz)" % filter.cutoff_hz)
+		_check(AudioServer.get_bus_volume_db(world) < blast.config.muffle_volume_db * 0.95,
+			"und leise (%.1f dB)" % AudioServer.get_bus_volume_db(world))
+		_check(blast._tinnitus_player.playing, "und es pfeift")
+
+		# DIE GRENZFREQUENZ MUSS LOGARITHMISCH LAUFEN.
+		#
+		# Linear laege die Mitte zwischen 20500 und 600 bei 10550 Hz — und
+		# zwischen 20500 und 10550 hoert praktisch niemand einen Unterschied.
+		# Die halbe Skala waere dann wirkungslos, und niemand merkte es, weil
+		# der Effekt bei voller Belastung ja trotzdem stimmt.
+		blast.tinnitus = 0.5
+		blast._process(1.0 / 60.0)
+		_check(filter.cutoff_hz < 6000.0,
+			"bei halber Belastung schon deutlich dumpf (%.0f Hz statt linearer 10550)"
+				% filter.cutoff_hz)
+		_check(filter.cutoff_hz > blast.config.muffle_cutoff_hz,
+			"aber noch nicht ganz zu (%.0f Hz)" % filter.cutoff_hz)
+
+		# UND ES MUSS SICH WIEDER OEFFNEN. Der Bus ueberlebt einen
+		# Levelwechsel — ohne Zuruecksetzen betraete man das naechste Level
+		# mit den Ohren vom letzten, und niemand kaeme auf die Ursache.
+		blast.reset()
+		_check(filter.cutoff_hz > 20000.0,
+			"reset() macht die Ohren wieder auf (%.0f Hz)" % filter.cutoff_hz)
+		_check(is_zero_approx(AudioServer.get_bus_volume_db(world)),
+			"und die Welt wieder laut (%.1f dB)" % AudioServer.get_bus_volume_db(world))
+		_check(not blast._tinnitus_player.playing, "und das Pfeifen hoert auf")
+
+		# --- Die Waffe haengt am Welt-Bus, sonst daempft der Filter sie nicht ---
+		var weapon := player.get_node_or_null("CameraPivot/Weapon") as Weapon
+		_check(weapon != null, "Waffe gefunden")
+		if weapon != null:
+			var off_bus := 0
+			for voice in weapon._voices:
+				if voice.bus != GameAudio.WORLD_BUS:
+					off_bus += 1
+			_check(weapon._voices.size() == Weapon.AUDIO_VOICES,
+				"alle %d Stimmen sind da" % Weapon.AUDIO_VOICES)
+			_check(off_bus == 0,
+				"und alle haengen am Welt-Bus — sonst daempft der Tiefpass sie nicht (%d daneben)"
+					% off_bus)
 
 	player.queue_free()
 

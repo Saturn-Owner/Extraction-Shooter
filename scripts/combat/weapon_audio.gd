@@ -254,3 +254,29 @@ static func get_power_for_weapon(weapon: WeaponData) -> float:
 		return 0.6
 	var power := weapon.recoil_vertical / 260.0 * weapon.loudness_multiplier
 	return clampf(power, 0.10, 1.0)
+
+
+## Wie laut ein Schuss dieser Waffe abgespielt wird, in Dezibel.
+##
+## ---------------------------------------------------------------------------
+## DAS HAT VORHER GEFEHLT, UND ZWAR VOLLSTAENDIG
+##
+## `loudness_multiplier` steuerte die Sample-Auswahl, die Synthese und die
+## Knall-Belastung — aber nie die tatsaechliche Abspiellautstaerke. Ein
+## Schalldaempfer machte damit bei Glock, AKM und M870 gar nichts hoerbar
+## leiser. Nur die AR-15 klang gedaempft, und auch das nur, weil sie eine
+## eigene Aufnahme mit anderem Charakter hat.
+##
+## Die eigene Aufnahme ersetzt diese Rechnung uebrigens NICHT: Alle Aufnahmen
+## sind auf denselben Spitzenpegel normalisiert, `schuss_gedaempft.wav` ist
+## also nicht leiser, sondern nur anders. Charakter kommt aus der Datei,
+## Lautstaerke von hier.
+##
+## Bei 0,32 (Schalldaempfer der AR-15) sind das rund -10 dB, also etwa halb so
+## laut empfunden. Realistisch waeren eher -25 dB, aber dann hoerte man den
+## eigenen Schuss praktisch nicht mehr, und das fuehlt sich kaputt an statt
+## leise.
+static func volume_db_for(weapon: WeaponData) -> float:
+	if weapon == null:
+		return 0.0
+	return linear_to_db(clampf(weapon.loudness_multiplier, 0.05, 2.0))

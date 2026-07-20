@@ -68,6 +68,20 @@ var overlay: BlastOverlay
 
 ## Der Pulverdampf. Ebenfalls selbst angelegt.
 var smoke_cloud: PowderSmoke
+
+## Das Pfeifen im Ohr.
+##
+## AudioStreamPlayer, nicht AudioStreamPlayer3D: Ein Tinnitus hat keinen Ort
+## im Raum. Er wird im Ohr erzeugt, nicht gehoert — er darf also weder leiser
+## werden, wenn man sich wegdreht, noch von links kommen.
+var _tinnitus_player: AudioStreamPlayer
+
+## Unter diesem Wert schweigt das Pfeifen ganz und der Spieler wird gestoppt.
+##
+## Nicht nur der Sauberkeit wegen: linear_to_db(0) ist minus unendlich, und
+## das faengt Godot zwar ab, aber ein dauerhaft laufender Spieler bei -80 dB
+## mischt trotzdem jeden Frame mit.
+const TINNITUS_SILENCE := 0.01
 var _time_since_shot: float = 999.0
 var _shake_time: float = 0.0
 
@@ -109,6 +123,14 @@ func _ready() -> void:
 	smoke_cloud = PowderSmoke.new()
 	smoke_cloud.name = "PowderSmoke"
 	add_child(smoke_cloud)
+
+	GameAudio.ensure_buses()
+	_tinnitus_player = AudioStreamPlayer.new()
+	_tinnitus_player.name = "Tinnitus"
+	_tinnitus_player.stream = GameAudio.make_tinnitus(config.tinnitus_hz, config.tinnitus_beat_hz)
+	_tinnitus_player.bus = GameAudio.TINNITUS_BUS
+	_tinnitus_player.volume_db = -80.0
+	add_child(_tinnitus_player)
 
 	for noise in [_noise_pitch, _noise_yaw, _noise_roll]:
 		noise.frequency = NOISE_FREQUENCY
@@ -246,6 +268,47 @@ func _process(delta: float) -> void:
 		overlay.set_alpha(flash * config.flash_alpha)
 
 	_update_smoke()
+	_update_hearing()
+
+
+## Dumpfes Gehoer und Pfeifen.
+##
+## ---------------------------------------------------------------------------
+## BEIDES HAENGT AN DERSELBEN HUELLKURVE, UND DAS IST WICHTIG
+##
+## `tinnitus` faellt mit Abstand am langsamsten (12 s gegen 1,2 s bei der
+## Blendung). Das Ohr ist also noch lange zu, wenn man optisch laengst wieder
+## klarkommt — man sieht das Ziel, hoert aber nichts. Genau dieses
+## Auseinanderfallen ist der Effekt: Wer eine lange Salve schiesst, ist danach
+## sehend taub, und in einem Extraction-Shooter ist Hoeren das, womit man
+## ueberlebt.
+##
+## ---------------------------------------------------------------------------
+## EHRLICHE EINSCHRAENKUNG
+##
+## Solange die Waffe die einzige Tonquelle im Spiel ist, ist das Stimmung und
+## kein Nachteil — es gibt keine Schritte und keine Gegner, die man ueberhoeren
+## koennte. Sobald es die gibt, wird daraus von selbst eine Mechanik, ohne dass
+## hier etwas geaendert werden muesste.
+func _update_hearing() -> void:
+	GameAudio.set_muffle(tinnitus, config.muffle_cutoff_hz, config.muffle_volume_db)
+
+	if _tinnitus_player == null:
+		return
+
+	if tinnitus < TINNITUS_SILENCE:
+		if _tinnitus_player.playing:
+			_tinnitus_player.stop()
+		return
+
+	# linear_to_db statt einer linearen Rampe: Lautstaerke wird logarithmisch
+	# gehoert. Linear ueber die Huellkurve zu fahren hiesse, dass das Pfeifen
+	# gefuehlt sofort auf voller Staerke steht und dann ewig auf demselben
+	# Pegel haengt — der Abfall passierte fast vollstaendig in den letzten
+	# Zehnteln der Kurve.
+	_tinnitus_player.volume_db = linear_to_db(tinnitus) + config.tinnitus_volume_db
+	if not _tinnitus_player.playing:
+		_tinnitus_player.play()
 
 
 ## Haelt den Dampf an der Muendung. Die Schwaden selbst bleiben stehen.
@@ -341,6 +404,12 @@ func reset() -> void:
 		overlay.set_alpha(0.0)
 	if smoke_cloud != null:
 		smoke_cloud.emitting = false
+
+	# Der Bus ueberlebt einen Levelwechsel. Ohne das Zuruecksetzen betraete man
+	# das naechste Level mit den Ohren vom letzten.
+	GameAudio.reset_muffle()
+	if _tinnitus_player != null and _tinnitus_player.playing:
+		_tinnitus_player.stop()
 
 
 func _load_config() -> MuzzleBlastData:

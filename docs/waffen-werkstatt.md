@@ -1,6 +1,6 @@
 # Branch `feature/waffen-werkstatt`
 
-Stand: 20.07.2026 · 30 Commits · 190 Dateien · rund 10.500 Zeilen
+Stand: 20.07.2026 · 32 Commits · 193 Dateien · rund 11.000 Zeilen
 
 Dieser Branch macht aus der Waffe ein sichtbares, hörbares und anpassbares
 Ding. Vorher war eine Waffe eine Zahl im Inventar, die beim Klicken einen
@@ -131,7 +131,7 @@ steigt und mit der Zeit fällt. Abstimmung komplett in
 | 1 | Belastungswert, Kamerawackeln | fertig |
 | 2 | Blendung (`blast_overlay.gd`) | fertig |
 | 3 | Pulverdampf (`powder_smoke.gd`) | fertig |
-| 4 | **Gehör: Busse, Dämpfung, Tinnitus** | **offen** |
+| 4 | Gehör (`game_audio.gd`) | fertig |
 
 Zwei Entscheidungen, die kein Zufall sind:
 
@@ -147,6 +147,50 @@ Was hängengeblieben ist: **Langsam schlägt schnell.** Schnelle kleine
 Ausschläge lesen sich als Wackelkontakt, langsames Schwanken als Wucht.
 `shake_speed` steht deshalb auf 6,5, nicht auf 14.
 
+### 7. Audio-Busse und Gehör
+
+`scripts/audio/game_audio.gd` legt zwei Busse **zur Laufzeit** an — bewusst
+nicht im Editor, weil die dann in `project.godot` landen, und an der Datei
+arbeitet ihr beide gleichzeitig.
+
+```
+Master
+ ├── Welt      Schüsse, Nachladen, später Schritte und Gegner.
+ │             Hängt am Tiefpass — wird dumpf, wenn die Ohren zu sind.
+ └── Tinnitus  Das Pfeifen. Geht NICHT durch den Tiefpass.
+```
+
+**Die Trennung ist der ganze Punkt.** Hinge das Pfeifen am selben Bus, würde
+es mit steigender Belastung selbst gedämpft — es würde also genau dann leiser,
+wenn es lauter werden soll. Ein Fehler, den man beim Spielen nur als
+„irgendwie schwach" bemerkt und nie findet.
+
+Zwei Sachen, die man leicht falsch macht:
+
+- **Die Grenzfrequenz läuft logarithmisch, nicht linear.** Linear läge die
+  Mitte zwischen 20500 und 600 Hz bei 10550 — und zwischen 20500 und 10550
+  hört praktisch niemand etwas. Die halbe Skala wäre wirkungslos, und niemand
+  merkte es, weil der Effekt am Anschlag ja trotzdem stimmt. Logarithmisch
+  liegt die Mitte bei 3524 Hz und ist deutlich dumpf.
+- **Die Tinnitus-Schleife muss ganze Schwingungen enthalten.** Sonst springt
+  der Sinus an der Naht, und das knackt — einmal pro Sekunde, dauerhaft.
+  `make_tinnitus()` rundet die Frequenzen deshalb auf die nächste passende;
+  bei 4500/4508 Hz ändert das nichts, bei krummen Werten aus der `.tres`
+  verschiebt es um Bruchteile eines Hertz. Ein Knacken hört dagegen jeder.
+
+Dabei ist ein Fehler mit aufgefallen, der **vollständig** war: Der
+`loudness_multiplier` steuerte die Sample-Auswahl, die Synthese und die
+Knall-Belastung — aber nie die Abspiellautstärke. Ein Schalldämpfer machte
+damit bei Glock, AKM und M870 gar nichts hörbar leiser. Bemerkt hat es
+niemand, weil die AR-15 eine eigene gedämpfte Aufnahme hat und deshalb anders
+klang: der einzige Fall, in dem es zufällig funktionierte.
+`WeaponAudio.volume_db_for()` schliesst das, der Dämpfer bringt jetzt −9,9 dB.
+
+Ehrlich zur Wirkung: Der Gehör-Nachteil **verpufft vorerst**. Die Waffe ist
+die einzige Tonquelle im Spiel, es gibt keine Schritte und keine Gegner, die
+man überhören könnte. Heute ist es Stimmung. Sobald es sie gibt, wird daraus
+von selbst eine Mechanik, ohne dass am Code etwas geändert werden müsste.
+
 ---
 
 ## Tests
@@ -155,14 +199,18 @@ Ausschläge lesen sich als Wackelkontakt, langsames Schwanken als Wucht.
 
 | Suite | Prüfungen |
 | --- | --- |
-| `verify_attachments.gd` | 87 |
-| `verify_weapon_handling.gd` | 82 |
-| `verify_blast.gd` | 79 |
-| `verify_feedback.gd` | 77 |
-| `verify_workbench.gd` | 40 |
+| `verify_attachments.gd` | 155 |
+| `verify_weapon_handling.gd` | 147 |
+| `verify_blast.gd` | 106 |
+| `verify_feedback.gd` | 67 |
+| `verify_inventory.gd` | 61 |
+| `verify_loadout.gd` | 49 |
+| `verify_player.gd` | 42 |
+| `verify_ballistics.gd` | 36 |
+| `verify_workbench.gd` | 34 |
 
-Dazu die bestehenden `verify_ballistics`, `verify_inventory`,
-`verify_item_data`, `verify_loadout`, `verify_player`.
+Dazu `verify_item_data`, das keine Einzelprüfungen zählt, sondern jede `.tres`
+im Projekt gegen ihr Datenmodell hält.
 
 **Drei Lehren aus Tests, die grün waren und trotzdem nichts wert:**
 
@@ -184,30 +232,22 @@ Leuchtkapsel in `projectile.tscn` gefunden.
 
 ## Offen
 
-**Als Nächstes:** Mündungsknall Schritt 4 — Gehör. Audio-Busse zur Laufzeit
-über `AudioServer.add_bus()` (bewusst **kein** `project.godot`-Eintrag, die
-Datei ist zwischen den Branches ohnehin auseinandergelaufen),
-`AudioEffectLowPassFilter` auf einem Bus `Welt`, die sechs Waffenstimmen
-dorthin routen, Tinnitus als geloopter Doppelsinus (4500/4508 Hz).
+**Der Branch ist fertig und reif für einen PR.** Alles Weitere gehört in einen
+neuen — bei 190 Dateien ist die Grenze dessen erreicht, was sich am Stück
+reviewen lässt.
 
-Dabei fällt ein vorhandener Fehler mit ab: **`loudness_multiplier` erreicht
-die Lautstärke gar nicht.** Ein gedämpfter Schuss klingt bei jeder Waffe
-ausser der AR-15 exakt so laut wie ein ungedämpfter — nur die AR-15 hat eine
-eigene leise Aufnahme.
+Was als Nächstes ansteht, aber nicht mehr hierher:
 
-Ehrlich dazu: Der Gehör-Nachteil verpufft vorerst. Die Waffe ist die einzige
-Tonquelle im Spiel; es gibt keine Schritte und keine Gegner, die man
-überhören könnte. Heute ist es Stimmung.
-
-Weiter offen:
-
-- Glock, AKM und M870 laufen auf Code-Modellen und synthetischem Ton
+- Glock, AKM und M870 laufen auf Code-Modellen und synthetischem Ton —
+  das ist die Arbeit der AR-15 mal drei
 - Glock-Sortiment an der Werkbank ist dünn — je ein Teil pro Steckplatz
-- `assets/data/gear/backpack_small.tres` hat `category = 7` statt 6
+- Innen/Aussen- und Entfernungston für `schuss_innen.wav`, `schuss_fern.wav`
+  und `schuss_fenster_offen.wav` — braucht ein System, das Räume kennt
 - `PlayerInteraction._raycast_forward()` (Kollege) liefert nur
-  `LootContainer` — braucht nach dem Merge eine gemeinsame Schnittstelle
-- Innen/Aussen- und Entfernungston für die drei ungenutzten Aufnahmen
-- Der Branch ist reif für einen PR
+  `LootContainer` — braucht nach dem Merge eine gemeinsame Schnittstelle.
+  **Das ist der Grund, den PR nicht liegen zu lassen:** `player.tscn` und
+  `testgelaende.tscn` sind hier angefasst, und `.tscn`-Dateien lassen sich
+  bei Konflikten praktisch nicht mergen.
 
 ---
 
@@ -221,5 +261,9 @@ Nichts davon kann ein Test beantworten:
 - Steht der Dampf im Weg, ohne zu nerven? Er soll ein Nachteil sein, den man
   durch Zurseitetreten löst.
 - Ist die Schwelle richtig — bleiben Einzelschüsse wirklich folgenlos?
+- Klingt der Tinnitus unangenehm genug, ohne dass man das Spiel ausmacht?
+  Und knackt die Schleife wirklich nicht? Der Test misst den Sprung an der
+  Naht, aber ob man ihn hört, entscheidet ein Ohr.
+- Ist der Schalldämpfer mit −9,9 dB hörbar leiser, oder wirkt es zu wenig?
 - Sitzt die AR-15 gut in der Hand, und bewegen sich alle fünf Teile?
 - Reicht die Auswahl an der Werkbank, oder ist die Entscheidung trivial?

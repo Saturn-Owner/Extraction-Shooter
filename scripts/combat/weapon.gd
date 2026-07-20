@@ -156,6 +156,13 @@ func _ready() -> void:
 func _build_voices() -> void:
 	if _audio == null:
 		return
+
+	# Alles Diegetische haengt am Welt-Bus, damit der Muendungsknall es
+	# daempfen kann. Vor dem Duplizieren setzen, sonst muesste es sechsmal
+	# passieren.
+	GameAudio.ensure_buses()
+	_audio.bus = GameAudio.WORLD_BUS
+
 	_voices.append(_audio)
 	for i in range(AUDIO_VOICES - 1):
 		var voice := _audio.duplicate() as AudioStreamPlayer3D
@@ -327,7 +334,11 @@ func _play_shot_feedback() -> void:
 		MuzzleFlash.spawn(get_spawn_parent(), flash_from.global_transform, 0.6 + power)
 
 	# Tonhöhe leicht variieren, damit Dauerfeuer nicht wie eine Maschine klingt.
-	_play(_shot_sound, randf_range(0.94, 1.06))
+	#
+	# Die Lautstaerke bekommt NUR der Schuss. Ein Schalldaempfer macht das
+	# Magazin nicht leiser — er sitzt vorn am Lauf und hat mit dem Schacht
+	# nichts zu tun. Die Nachladegeraeusche laufen deshalb weiter auf 0 dB.
+	_play(_shot_sound, randf_range(0.94, 1.06), WeaponAudio.volume_db_for(data))
 
 
 ## Spielt ein Geraeusch, ohne das vorherige abzuschneiden.
@@ -335,7 +346,7 @@ func _play_shot_feedback() -> void:
 ## Gesucht wird zuerst eine freie Stimme. Ist keine frei, wird reihum die
 ## naechste genommen — dann klingt der aelteste Schuss ab, und das ist der,
 ## den man am wenigsten vermisst.
-func _play(stream: AudioStream, pitch: float) -> void:
+func _play(stream: AudioStream, pitch: float, volume_db: float = 0.0) -> void:
 	if stream == null or _voices.is_empty():
 		return
 
@@ -350,6 +361,10 @@ func _play(stream: AudioStream, pitch: float) -> void:
 
 	voice.stream = stream
 	voice.pitch_scale = pitch
+	# Die Stimmen werden reihum wiederverwendet — ohne ausdrueckliches Setzen
+	# behielte eine Stimme die Lautstaerke des vorigen Geraeuschs. Nach einem
+	# gedaempften Schuss klaenge dann das naechste Nachladen zu leise.
+	voice.volume_db = volume_db
 	voice.play()
 
 
