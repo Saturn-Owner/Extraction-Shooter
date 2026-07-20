@@ -81,6 +81,9 @@ $suites = @(
     "verify_attachments",
     "verify_workbench",
     "verify_blast",
+    "verify_player_audio",
+    "verify_backpack",
+    "verify_container_window",
     "verify_character"
 )
 

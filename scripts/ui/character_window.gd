@@ -69,6 +69,11 @@ var _drag_stack: ItemStack = null
 var _drag_offset: Vector2i = Vector2i.ZERO
 var _drag_target_cell: Vector2i = Vector2i(-1, -1)
 
+## Aus welchem Raster gezogen wird und in welches gerade gezielt wird.
+## Seit es den Rucksack gibt, sind es zwei — vorher genuegte das eine.
+var _drag_source: InventoryGridView = null
+var _drag_target_view: InventoryGridView = null
+
 ## Aus welchem Ausruestungsplatz gezogen wird (NONE = aus dem Raster),
 ## und auf welchen gerade gezielt wird.
 var _drag_from_slot: ItemData.EquipSlot = ItemData.EquipSlot.NONE
@@ -77,7 +82,13 @@ var _drag_target_slot: ItemData.EquipSlot = ItemData.EquipSlot.NONE
 ## Ob beim Anfassen Strg gedrueckt war — dann wird nach der Menge gefragt.
 var _drag_ctrl: bool = false
 
+## Worauf sich das offene Kontextmenue bezieht — und aus welchem Raster der
+## Gegenstand kommt (null, wenn er an einem Ausruestungsplatz haengt).
+var _menu_stack: ItemStack = null
+var _menu_source: InventoryGrid = null
+
 var _split_stack: ItemStack = null
+var _split_target: InventoryGridView = null
 var _split_cell: Vector2i = Vector2i(-1, -1)
 
 ## Wie der Gegenstand lag, bevor er angefasst wurde — siehe LootWindow.
@@ -96,6 +107,8 @@ var _slot_buttons: Dictionary = {}
 @onready var _inventory_column: VBoxContainer = $Layout/Inhalt/Mitte/Inventar
 @onready var _inventory_view: InventoryGridView = $Layout/Inhalt/Mitte/Inventar/Raster
 @onready var _inventory_title: Label = $Layout/Inhalt/Mitte/Inventar/Titel
+@onready var _context_menu: ContextMenu = $ContextMenu
+@onready var _container_window: ContainerWindow = $ContainerWindow
 @onready var _stats: HBoxContainer = $Layout/Inhalt/Werte
 @onready var _effects: Label = $Layout/Inhalt/Auswirkung
 @onready var _ghost: DragGhost = $DragGhost
@@ -112,9 +125,14 @@ func _ready() -> void:
 
 	# cell_released bleibt ungenutzt — siehe LootWindow: das Loslassen geht
 	# immer an das Control, auf dem gedrueckt wurde.
-	_inventory_view.item_pressed.connect(_on_item_pressed)
-	_inventory_view.item_double_clicked.connect(_on_item_double_clicked)
-	_inventory_view.item_hovered.connect(_on_item_hovered)
+	for view: InventoryGridView in [_inventory_view, _container_window.view]:
+		view.item_pressed.connect(_on_item_pressed)
+		view.item_double_clicked.connect(_on_item_double_clicked)
+		view.item_hovered.connect(_on_item_hovered)
+		view.item_right_clicked.connect(_on_item_right_clicked)
+
+	_context_menu.chosen.connect(_on_menu_chosen)
+	_container_window.closed.connect(_cancel_drag)
 	_split_prompt.confirmed.connect(_on_split_confirmed)
 	_split_prompt.cancelled.connect(_on_split_cancelled)
 
@@ -136,6 +154,12 @@ func open_for(p_player: PlayerController) -> void:
 func close() -> void:
 	if _split_prompt != null and _split_prompt.is_open():
 		_split_prompt.cancel()
+	if _context_menu != null:
+		_context_menu.close()
+	# Das schwebende Fenster gehoert diesem hier und geht mit ihm zu. Sonst
+	# stuende der Rucksackinhalt noch auf dem Bild, waehrend man weiterlaeuft.
+	if _container_window != null:
+		_container_window.close()
 	if _tooltip != null:
 		_tooltip.clear()
 	_cancel_drag()
@@ -157,7 +181,7 @@ func _process(_delta: float) -> void:
 			if _drag_target_slot != ItemData.EquipSlot.NONE:
 				drop_on_slot(_drag_target_slot)
 			else:
-				drop_at(_drag_target_cell)
+				drop_at(_drag_target_view, _drag_target_cell)
 
 	if player != null:
 		_refresh()
@@ -223,6 +247,11 @@ func _make_slot(slot: ItemData.EquipSlot) -> Control:
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button.add_theme_font_size_override("font_size", 12)
 	button.pressed.connect(_on_slot_pressed.bind(slot))
+	# Rechtsklick geht an `gui_input` vorbei an `pressed` — ein Button hoert
+	# von sich aus nur auf die linke Taste. Die Maske zu erweitern waere der
+	# falsche Weg: Dann wuerde ein Rechtsklick auch `button_down` ausloesen
+	# und damit ein Ziehen starten.
+	button.gui_input.connect(_on_slot_gui_input.bind(slot))
 	# Gedrueckt halten und ziehen holt den Gegenstand heraus. Der Klick
 	# (pressed) kommt erst beim Loslassen und weiss dann schon, ob gezogen
 	# wurde — siehe _on_slot_pressed.
@@ -235,7 +264,8 @@ func _make_slot(slot: ItemData.EquipSlot) -> Control:
 
 ## Anfassen: Gedrueckt halten und ziehen holt heraus, was im Platz steckt.
 func _on_slot_grabbed(slot: ItemData.EquipSlot) -> void:
-	if player == null or player.equipment == null or _split_prompt.is_open():
+	if player == null or player.equipment == null \
+			or _split_prompt.is_open() or _context_menu.is_open():
 		return
 
 	var worn := player.equipment.get_item(slot)
@@ -253,6 +283,59 @@ func _on_slot_grabbed(slot: ItemData.EquipSlot) -> void:
 	# Feld, an dem man ihn "angefasst" haette.
 	var step := InventoryGridView.CELL_SIZE + InventoryGridView.CELL_GAP
 	_ghost.show_stack(worn, Vector2(worn.get_size()) * step * 0.5)
+
+
+## Rechtsklick auf einen Ausruestungsplatz: Menue fuer das, was darin steckt.
+func _on_slot_gui_input(event: InputEvent, slot: ItemData.EquipSlot) -> void:
+	var button := event as InputEventMouseButton
+	if button == null or not button.pressed \
+			or button.button_index != MOUSE_BUTTON_RIGHT:
+		return
+	if player == null or player.equipment == null:
+		return
+	# Aus einem Ausruestungsplatz kommt kein Quellraster — er haengt am Koerper.
+	_open_menu_for(player.equipment.get_item(slot), null, button.global_position)
+
+
+## Rechtsklick auf einen Gegenstand im Raster.
+func _on_item_right_clicked(stack: ItemStack, view: InventoryGridView,
+		at_position: Vector2) -> void:
+	_open_menu_for(stack, view.grid, at_position)
+
+
+## Oeffnet das Kontextmenue — oder gar nichts, wenn es fuer diesen Gegenstand
+## nichts anzubieten gibt.
+func _open_menu_for(stack: ItemStack, source: InventoryGrid,
+		at_position: Vector2) -> void:
+	if stack == null or player == null:
+		return
+	var entries := ContextMenu.entries_for(stack, player.equipment)
+	if entries.is_empty():
+		return
+	_menu_source = source
+
+	# Ein Menue mitten im Ziehen waere ein Gegenstand, der am Zeiger klebt,
+	# waehrend man etwas anderes anklickt.
+	_cancel_drag()
+	_tooltip.clear()
+	_menu_stack = stack
+	_context_menu.open(entries, at_position)
+
+
+func _on_menu_chosen(id: StringName) -> void:
+	var stack := _menu_stack
+	var source := _menu_source
+	_menu_stack = null
+	_menu_source = null
+	if stack == null:
+		return
+
+	match id:
+		&"oeffnen":
+			_container_window.open_for(stack, get_global_mouse_position())
+		&"ausruesten":
+			player.equip_item(stack, source)
+			_refresh()
 
 
 ## Klick auf einen belegten Platz legt ab — zurueck ins Inventar.
@@ -478,7 +561,7 @@ func _refresh() -> void:
 
 	if player.inventory != null and player.inventory.grid != null:
 		var grid := player.inventory.grid
-		_inventory_title.text = "Inventar  —  %d von %d Feldern frei" % [
+		_inventory_title.text = "Taschen  —  %d von %d Feldern frei" % [
 			grid.get_free_cell_count(), grid.width * grid.height]
 		_inventory_view.queue_redraw()
 
@@ -571,10 +654,11 @@ func _on_item_hovered(stack: ItemStack, _source: InventoryGridView) -> void:
 
 
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
-	if _split_prompt.is_open():
+	if _split_prompt.is_open() or _context_menu.is_open():
 		return
 
 	_drag_stack = stack
+	_drag_source = view
 	_drag_ctrl = Input.is_key_pressed(KEY_CTRL)
 	_drag_original_rotated = stack.rotated
 	_tooltip.clear()
@@ -586,10 +670,11 @@ func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 	var pixel_offset := local - view.cell_to_position(origin) if origin.x >= 0 else Vector2.ZERO
 
 	_ghost.show_stack(stack, pixel_offset)
-	_inventory_view.drag_stack = stack
-	_inventory_view.drag_source = view
-	_inventory_view.preview_cell = Vector2i(-1, -1)
-	_inventory_view.queue_redraw()
+	for v in _grid_views():
+		v.drag_stack = stack
+		v.drag_source = view
+		v.preview_cell = Vector2i(-1, -1)
+		v.queue_redraw()
 
 
 func _update_drag_target() -> void:
@@ -599,15 +684,21 @@ func _update_drag_target() -> void:
 	# Platz zielt, meint auch den Platz.
 	_drag_target_slot = _slot_under(mouse)
 
+	_drag_target_view = null
 	_drag_target_cell = Vector2i(-1, -1)
-	if _drag_target_slot == ItemData.EquipSlot.NONE \
-			and _inventory_view.get_global_rect().has_point(mouse):
-		var cell := _inventory_view.position_to_cell(_inventory_view.get_local_mouse_position())
-		if cell.x >= 0:
-			_drag_target_cell = cell - _drag_offset
+	if _drag_target_slot == ItemData.EquipSlot.NONE:
+		for v: InventoryGridView in _grid_views():
+			if not v.get_global_rect().has_point(mouse):
+				continue
+			var cell := v.position_to_cell(v.get_local_mouse_position())
+			if cell.x >= 0:
+				_drag_target_view = v
+				_drag_target_cell = cell - _drag_offset
+			break
 
-	_inventory_view.preview_cell = _drag_target_cell
-	_inventory_view.queue_redraw()
+	for v: InventoryGridView in _grid_views():
+		v.preview_cell = _drag_target_cell if v == _drag_target_view else Vector2i(-1, -1)
+		v.queue_redraw()
 	_highlight_slots()
 
 
@@ -644,6 +735,8 @@ func drop_on_slot(slot: ItemData.EquipSlot) -> bool:
 
 	var stack := _drag_stack
 	var from := _drag_from_slot
+	# Aus welchem Raster er kommt, muss vor _cancel_drag() feststehen.
+	var from_grid: InventoryGrid = _drag_source.grid if _drag_source != null else null
 	_cancel_drag()
 
 	# Auf den eigenen Platz zurueck: nichts zu tun.
@@ -671,6 +764,8 @@ func drop_on_slot(slot: ItemData.EquipSlot) -> bool:
 
 	if from != ItemData.EquipSlot.NONE:
 		player.equipment.unequip(from)
+	elif from_grid != null:
+		from_grid.remove_item(stack.instance_id)
 	else:
 		player.inventory.grid.remove_item(stack.instance_id)
 
@@ -682,24 +777,26 @@ func drop_on_slot(slot: ItemData.EquipSlot) -> bool:
 	return true
 
 
-func drop_at(cell: Vector2i) -> void:
+func drop_at(target: InventoryGridView, cell: Vector2i) -> void:
 	if _drag_stack == null:
 		return
-	if cell.x < 0 or cell.y < 0:
+	if target == null or cell.x < 0 or cell.y < 0:
 		_cancel_drag()
 		return
 
 	# Vom Koerper ins Raster: Der Spieler packt etwas weg.
 	if _drag_from_slot != ItemData.EquipSlot.NONE:
 		var slot := _drag_from_slot
+		var into := target.grid
 		_cancel_drag()
-		player.stow_equipment(slot, cell.x, cell.y)
+		player.stow_equipment(slot, cell.x, cell.y, into)
 		_refresh()
 		return
 
 	# Mit Strg wird nach der Menge gefragt, statt alles zu verschieben.
 	if _drag_ctrl and _drag_stack.quantity > 1:
 		_split_stack = _drag_stack
+		_split_target = target
 		_split_cell = cell
 		var data := _split_stack.get_data()
 		_split_prompt.ask(
@@ -710,17 +807,8 @@ func drop_at(cell: Vector2i) -> void:
 		_cancel_drag()
 		return
 
-	# Auf einen passenden Stapel drauflegen, statt am belegten Feld zu scheitern.
-	var moved := false
-	var existing := _inventory_view.grid.get_stack_at(cell.x, cell.y)
-	if existing != null and existing.can_merge_with(_drag_stack):
-		existing.merge_from(_drag_stack)
-		if _drag_stack.quantity <= 0:
-			_inventory_view.grid.remove_item(_drag_stack.instance_id)
-		_inventory_view.grid.changed.emit()
-		moved = true
-	else:
-		moved = _inventory_view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
+	var moved := _move_within(target, cell) if target == _drag_source \
+		else _move_between(target, cell)
 
 	# Nur ein wirklich umgezogener Gegenstand behaelt seine neue Lage.
 	if moved:
@@ -729,30 +817,73 @@ func drop_at(cell: Vector2i) -> void:
 	_cancel_drag()
 
 
+## Innerhalb desselben Rasters verschieben — oder auf einen passenden Stapel
+## drauflegen. Wortgleich zum Loot-Fenster; beide Fenster machen dasselbe.
+func _move_within(view: InventoryGridView, cell: Vector2i) -> bool:
+	var existing := view.grid.get_stack_at(cell.x, cell.y)
+	if existing != null and existing.can_merge_with(_drag_stack):
+		existing.merge_from(_drag_stack)
+		if _drag_stack.quantity <= 0:
+			view.grid.remove_item(_drag_stack.instance_id)
+		view.grid.changed.emit()
+		return true
+	return view.grid.move_item(_drag_stack.instance_id, cell.x, cell.y)
+
+
+## Zwischen Taschen und Rucksack. Erst pruefen, dann verschieben — sonst kann
+## der Gegenstand zwischen beiden Rastern verlorengehen.
+func _move_between(target: InventoryGridView, cell: Vector2i) -> bool:
+	if _drag_source == null:
+		return false
+
+	# Der Rucksack darf nicht in sich selbst wandern.
+	if _drag_stack.container != null \
+			and PlayerController._contains_grid(_drag_stack.container, target.grid):
+		return false
+
+	if not target.grid.can_place_or_merge(_drag_stack, cell.x, cell.y):
+		return false
+
+	var removed := _drag_source.grid.remove_item(_drag_stack.instance_id)
+	if removed == null:
+		return false
+
+	var leftover := target.grid.place_or_merge(removed, cell.x, cell.y)
+	if leftover != null:
+		_drag_source.grid.add_item(leftover)
+		if leftover == removed:
+			return false
+
+	return true
+
+
 func _on_split_confirmed(amount: int) -> void:
 	var stack := _split_stack
 	var cell := _split_cell
+	var target := _split_target
 	_split_stack = null
+	_split_target = null
 	_split_cell = Vector2i(-1, -1)
 
-	if stack == null or amount >= stack.quantity:
+	if stack == null or target == null or amount >= stack.quantity:
 		return
 
 	var part := stack.split(amount)
 	if part == null:
 		return
 
-	var leftover := _inventory_view.grid.place_or_merge(part, cell.x, cell.y)
+	var leftover := target.grid.place_or_merge(part, cell.x, cell.y)
 	if leftover != null:
 		# Passte nicht: zurueck auf den Ursprungsstapel, nichts geht verloren.
 		stack.quantity += leftover.quantity
 		return
 
-	_inventory_view.queue_redraw()
+	target.queue_redraw()
 
 
 func _on_split_cancelled() -> void:
 	_split_stack = null
+	_split_target = null
 	_split_cell = Vector2i(-1, -1)
 
 
@@ -801,6 +932,8 @@ func _cancel_drag() -> void:
 		_drag_stack.rotated = _drag_original_rotated
 
 	_drag_stack = null
+	_drag_source = null
+	_drag_target_view = null
 	_drag_offset = Vector2i.ZERO
 	_drag_target_cell = Vector2i(-1, -1)
 	_drag_from_slot = ItemData.EquipSlot.NONE
@@ -809,9 +942,21 @@ func _cancel_drag() -> void:
 	_highlight_slots()
 	if _ghost != null:
 		_ghost.clear()
+	for v in _grid_views():
+		v.drag_stack = null
+		v.drag_source = null
+		v.preview_cell = Vector2i(-1, -1)
+		v.queue_redraw()
+
+
+## Die Raster, in denen gerade gezogen werden darf. Das Taschenraster immer,
+## das schwebende Behaelterfenster nur, solange es offen ist.
+func _grid_views() -> Array[InventoryGridView]:
+	var views: Array[InventoryGridView] = []
 	if _inventory_view != null:
-		_inventory_view.drag_stack = null
-		_inventory_view.drag_source = null
-		_inventory_view.preview_cell = Vector2i(-1, -1)
-		_inventory_view.queue_redraw()
+		views.append(_inventory_view)
+	if _container_window != null and _container_window.is_open() \
+			and _container_window.view.grid != null:
+		views.append(_container_window.view)
+	return views
 

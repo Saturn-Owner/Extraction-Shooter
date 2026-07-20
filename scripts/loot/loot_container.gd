@@ -285,6 +285,21 @@ func take_item(instance_id: int, into: InventoryGrid) -> bool:
 	return true
 
 
+## Nimmt einen aufgedeckten Gegenstand heraus, OHNE ihn irgendwo hinzulegen.
+##
+## Gebraucht fuers direkte Anlegen aus der Kiste: Der Rucksack wandert an den
+## Koerper und nie durch ein Raster. Der Aufrufer uebernimmt damit die
+## Verantwortung — bringt er ihn nicht unter, muss er ihn per put_item()
+## zurueckgeben.
+func take_out(instance_id: int) -> ItemStack:
+	if not is_revealed(instance_id):
+		return null
+	var stack := contents.remove_item(instance_id)
+	if stack != null:
+		_revealed.erase(instance_id)
+	return stack
+
+
 ## Legt einen Gegenstand in die Kiste — für Ablegen per Ziehen.
 func put_item(stack: ItemStack, x: int, y: int) -> bool:
 	if stack == null:
