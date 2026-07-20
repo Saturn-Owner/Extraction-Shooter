@@ -9,24 +9,32 @@ später niemand mehr, ob man es weitergeben darf.
 | | |
 | --- | --- |
 | **Datei im Repo** | `container_20ft.res` + drei `.webp` |
-| **Quelle** | `container_pack.glb`, laut Lucas selbst erstellt |
-| **Lizenz** | **noch zu klären — siehe unten** |
+| **Quelle** | `container_pack.glb` — **fremdes Modell**, nicht selbst erstellt |
+| **Generator laut Datei** | `Sketchfab-14.68.0` |
+| **Nutzungsrecht** | Lucas gibt an, es benutzen zu dürfen |
+| **Weitergaberecht** | **ungeklärt — siehe unten** |
 | **Material im Paket** | `20Ft_Generic_Old` |
 
-### Offene Frage zur Lizenz
+### Warum das noch nicht gepusht werden darf
 
-Im Kopf der Originaldatei steht:
+Benutzen und weitergeben sind zwei verschiedene Rechte. Ein öffentliches
+Repository ist **Weitergabe**: Jeder, der es klont, bekommt `container_20ft.res`
+und die Texturen und kann sie herausziehen.
 
-```
-"generator": "Sketchfab-14.68.0"
-```
+Die meisten Asset-Lizenzen (Sketchfab Standard, die üblichen Store-Lizenzen)
+erlauben den Einsatz im fertigen Spiel, verbieten aber genau das — die Datei so
+abzulegen, dass sie sich wieder entnehmen lässt.
 
-Die Datei wurde also von **Sketchfab** exportiert. Das muss kein Widerspruch
-sein — es kann sein, dass der Weg über Sketchfab lief. Aber solange nicht
-geklärt ist, ob und unter welcher Lizenz das Modell weitergegeben werden darf,
-**gehört es nicht in ein öffentliches Repository.**
+**Zu klären, bevor dieser Ordner gepusht wird:**
 
-Zu klären, bevor gepusht wird: Wer ist der Urheber, und unter welcher Lizenz?
+1. Woher stammt `container_pack.glb` genau (Seite, Autor, Titel)?
+2. Erlaubt die Lizenz die Weitergabe der Quelldatei in einem Repository?
+
+Falls nein, gibt es einen sauberen Ausweg: Die Dateien bleiben lokal und
+kommen in die `.gitignore`. `WorldParts.has_container_model()` prüft das
+bereits — ohne die Modelldateien baut die Karte wieder Quader statt roter
+Fehler. Der Kollege sähe dann Kisten, wo Lucas Container sieht; unschön, aber
+lauffähig.
 
 ### Nachbearbeitung
 
@@ -65,9 +73,17 @@ jemand eine andere Variante extrahiert.
 
 ## Snow006 (noch nicht eingebaut)
 
-In `Weathered Shipping Container Model.zip` lag ein Schnee-Texturensatz von
-**ambientCG** (`Snow006`, 1K JPG, CC0) — Color, Normal, Roughness, Ambient
-Occlusion, sogar mit fertiger `.tres`. Ein Containermodell war **nicht** darin.
+In `Weathered Shipping Container Model.zip` — **von Lucas selbst erstellt**,
+eine three.js-Seite, die einen Container aus 16 Quadern zeichnet — lag ein
+Schnee-Texturensatz von **ambientCG** (`Snow006`, 1K JPG, **CC0**): Color,
+NormalGL, NormalDX, Roughness, Ambient Occlusion, dazu eine fertige `.tres`.
+
+Ein Containermodell war in dem Zip **nicht** enthalten; die Geometrie dort ist
+three.js-Code, keine Mesh.
+
+Die mitgelieferte `.tres` ist nicht direkt verwendbar: Sie verweist auf eine
+`Displacement`-Karte, die im Zip fehlt, und sie hat kein Triplanar — auf der
+330 m langen Bodenplatte würde die Textur zu Matsch gezogen.
 
 Bisher nicht eingebaut: Der Schnee läuft über prozedurales Rauschen mit
 Triplanar (`WorldParts._surface()`). Wäre der nächste Kandidat, wenn der Boden
