@@ -8,6 +8,104 @@ Begründungen im Einzelnen stehen weiterhin in den Commits.
 
 ---
 
+## 20.07.2026 — Zweite Karte: Frachthafen
+
+Branch `feature/karte-frachthafen`.
+
+Die alte Karte war ein Platzhalter, und die Zahlen sagten es deutlich:
+160 × 160 m Boden, aber der ganze Inhalt passte in 50 × 48 m — **9 % genutzt**.
+Vier freistehende Wände ohne Dach, kein Innenraum, keine Höhenunterschiede.
+
+Das Schlimmste war der Süd-Ausgang: **10 m vom Spawn**. Man konnte einen Raid
+in zwölf Sekunden beenden, ohne eine Kiste anzufassen — es gab also nichts zu
+entscheiden, und die Entscheidung *„gehe ich noch tiefer rein?"* ist der ganze
+Sinn des Genres.
+
+`raid_eisstadt.tscn` bleibt unangetastet und spielbar. Die neue Karte ist eine
+eigene Szene daneben.
+
+### Der Schauplatz
+
+Ein eingefrorener **Frachthafen** — und das ist keine Geschmacksfrage, sondern
+folgt aus dem Bestand: Es gibt **null Umgebungsmodelle** im Projekt, nur
+AR-15-Teile. Jede Geometrie muss aus Quadern entstehen. Seecontainer *sind*
+Quader; sie stapeln sich zu Gassen, Dächern und Sackgassen. Graubox sieht hier
+nicht nach fehlendem Asset aus, sondern nach Hafen.
+
+Von Süd nach Nord: **Kai** (Spawn, Wohnungsloot, Rucksack) → **Containerfeld**
+(sieben Reihen, Werkstattloot, begehbare Dächer) → **Kranbrücke** auf 6 m mit
+zwei 18-m-Türmen → **Lagerhalle** 34 × 22 m mit drei Zugängen und dem
+Militärloot.
+
+Bespielt: rund **110 × 125 m**, gut fünfmal so viel wie vorher. 114 Festkörper,
+13 Kisten, 3 Ausgänge.
+
+### Die Entscheidung, um die es geht
+
+Das beste Zeug liegt **101 m vom Spawn** in der Lagerhalle. Zurück kommt man
+
+- über den **Eisbrecher** — mit 38 m der nächste Ausgang, aber **15 Sekunden
+  stillstehen**, tief in der Karte, oder
+- den ganzen Weg zurück zum **Fischerkai**: sicher, aber 110 m beladen.
+
+Der dritte, **Kranhaus**, liegt oben auf der Brücke: kurzer Timer, mitten auf
+der Karte — man steht dabei sechs Meter hoch und für jeden sichtbar.
+
+Der nächste Ausgang liegt jetzt **52 m vom Spawn** statt 10. Der schnellste
+mögliche Raid dauert **33 Sekunden** statt zwölf.
+
+### Gebaut im Code, Layout als Daten
+
+Eine Karte mit hundert Quadern wäre eine riesige `.tscn` — und die lassen sich
+bei Konflikten nicht mergen. Die Szene bleibt deshalb dünn (Himmel, Sonne,
+Boden, Player, HUD); die Welt baut `scripts/levels/frachthafen_layout.gd`,
+genau wie `workbench_station.gd` es für die Werkbank vormacht.
+
+Damit die Karte trotzdem anfassbar bleibt, steht das **Layout als Daten oben in
+der Datei**. Eine Gasse aufmachen heisst: eine Zahl aus einer Reihe streichen.
+
+Neu dazu `scripts/world/world_parts.gd` — das Gegenstück zu `ViewmodelParts`,
+das es für Waffen längst gab und für die Welt fehlte: `solid()` (Mesh **und**
+Kollision in einem, sonst baut man Kulissen), `ramp()`, `container_stack()` und
+`building()` mit echten Wandöffnungen.
+
+### Höhe nur über Rampen
+
+Der Spieler springt knapp **0,8 m** — ein Container ist 2,59 m hoch. Es gibt
+keine Stufenbehandlung im `PlayerController`. Also drei Rampen zwischen 19° und
+20°, weit unter Godots 45°-Grenze, und keine einzige Stufe.
+
+### Was die Tests an einer Karte prüfen können
+
+Mehr als man denkt — 73 Prüfungen in `tests/verify_frachthafen.gd`. Die zwei
+interessantesten sind keine Geometrieprüfungen, sondern **Design-Prüfungen**:
+
+- **„Gutes Zeug liegt weit weg"** ist eine Behauptung über Koordinaten: Jede
+  Militärkiste liegt tiefer drin als jede Wohnungskiste (101 m gegen 30 m), und
+  der nächste Ausgang beim Militärloot hat mindestens 12 Sekunden Timer. Wer
+  die Halle später verschiebt, bekommt es hier gesagt statt im Spiel.
+- **Die Brücke muss frei bleiben.** Der Laufsteg beginnt bei 5,60 m, ein
+  Zweierstapel endet bei 5,18 m — vier Zentimeter mehr als eine Handbreit. Wer
+  in `CONTAINER_ROWS` bei z = 6 eine Höhe von 2 auf 3 setzt, schiebt einen
+  Container mitten durch die Brücke.
+
+Dazu: Rampenwinkel, keine Kiste in einer Wand, Spawn im Freien, Loot-Tabellen
+gültig, alles unter 4 km vom Ursprung, alle Festkörper auf Ebene 1.
+
+### Nebenbei: ein toter Ausgang auf der alten Karte
+
+`AusgangKlippe` verlangte `backpack_small` — **ein Item, das es nicht gibt**.
+Der Ausgang war damit dauerhaft unbenutzbar und zeigte nur „benoetigt:
+backpack_small". Ist auf `backpack_wander` korrigiert; der neue Test fängt
+diese Sorte Fehler künftig ab.
+
+### Starten
+
+`project.godot` bleibt unangetastet — `raid_eisstadt` ist weiterhin die
+Startszene. Die neue Karte öffnet man in Godot und drückt **F6**.
+
+---
+
 ## 20.07.2026 — Der Rucksack
 
 Merge von `feature/rucksack` nach `main`.
