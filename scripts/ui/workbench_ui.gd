@@ -88,6 +88,8 @@ func _build_layout() -> void:
 	title.add_theme_font_size_override("font_size", 26)
 	root.add_child(title)
 
+	_build_arsenal_row(root)
+
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 24)
 	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -137,6 +139,49 @@ func _build_right_panel(parent: HBoxContainer) -> void:
 	_repair_button.text = "Instandsetzen"
 	_repair_button.pressed.connect(_on_repair)
 	repair_row.add_child(_repair_button)
+
+
+## Der Waffenschrank: eine Zeile Knöpfe, die Waffen ausgibt und Munition
+## auffüllt. Auch hier entscheidet die Station, nicht die Oberfläche.
+func _build_arsenal_row(parent: VBoxContainer) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	parent.add_child(row)
+
+	var heading := Label.new()
+	heading.text = "Waffenschrank:"
+	heading.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
+	row.add_child(heading)
+
+	for weapon_id in WorkbenchStation.ARSENAL:
+		var data := ItemRegistry.get_item(weapon_id)
+		if data == null:
+			continue
+		var button := Button.new()
+		button.text = data.display_name
+		button.pressed.connect(_on_take_weapon.bind(weapon_id))
+		row.add_child(button)
+
+	var ammo_button := Button.new()
+	ammo_button.text = "Munition auffüllen"
+	ammo_button.pressed.connect(_on_take_ammo)
+	row.add_child(ammo_button)
+
+
+func _on_take_weapon(weapon_id: StringName) -> void:
+	_message = station.request_take_weapon(weapon_id)
+	if _message == "":
+		# Die neue Waffe liegt jetzt in der Hand — gleich zum Umbauen anbieten.
+		_stack = _player.inventory.equipped_weapon if _player != null else null
+		_slot = -1
+	refresh()
+
+
+func _on_take_ammo() -> void:
+	_message = station.request_ammo()
+	if _message == "":
+		_message = "Munition aufgefüllt"
+	refresh()
 
 
 ## Eine Spalte mit Überschrift. Gibt den Behälter für die Knöpfe zurück.

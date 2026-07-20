@@ -14,6 +14,9 @@ extends Node
 
 var _rig: PlayerController
 var _avatar: RemoteAvatar
+## Die Waffe, an deren fired-Signal wir gerade hängen. Der Controller baut
+## die Waffe bei jedem Wechsel neu — deshalb wird jede Runde verglichen.
+var _hooked_weapon: Weapon
 
 
 func _ready() -> void:
@@ -23,6 +26,7 @@ func _ready() -> void:
 func _physics_process(_delta: float) -> void:
 	if _rig == null:
 		return
+	_hook_weapon()
 	# Der Avatar kann später kommen als der Spieler — jede Runde nachsehen,
 	# bis er da ist. Und nach einem Verbindungsabriss kann er wieder weg sein.
 	if _avatar == null or not is_instance_valid(_avatar):
@@ -48,3 +52,31 @@ func _physics_process(_delta: float) -> void:
 	# Person sieht.
 	if _rig._body_animation != null:
 		_avatar.reload_progress = _rig._body_animation.reload_progress
+
+
+## Hängt sich an die aktuelle Waffe: Ihr fired-Signal wird zur Schussmeldung
+## an den Server, und ihre Geschosse treffen nur noch die Welt.
+func _hook_weapon() -> void:
+	var current := _rig.weapon
+	if current == _hooked_weapon:
+		return
+	if _hooked_weapon != null and is_instance_valid(_hooked_weapon):
+		_hooked_weapon.fired.disconnect(_on_weapon_fired)
+	_hooked_weapon = current
+	if current == null:
+		return
+	current.fired.connect(_on_weapon_fired)
+	# Die örtlichen Geschosse werden zur reinen Leuchtspur: Sie schlagen in
+	# Wände ein, aber nie in Spieler — über Spieler entscheidet der Server.
+	# Ebene 4 (Trefferzonen) fliegt deshalb aus der Maske.
+	current.projectile_mask = 1
+
+
+## Die Waffe hat örtlich gefeuert (Knall, Blitz, Rückstoß sind durch).
+## Jetzt die Wahrheit anfragen: Der Server verschießt die echten Kugeln.
+func _on_weapon_fired(ammo: AmmoData, _rounds_left: int) -> void:
+	if _hooked_weapon == null or ammo == null:
+		return
+	var origin: Vector3 = _hooked_weapon.get_shot_origin()
+	var direction := (_hooked_weapon.get_aim_point() - origin).normalized()
+	Net.request_fire.rpc_id(1, origin, direction, String(ammo.id))

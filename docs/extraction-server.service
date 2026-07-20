@@ -1,0 +1,17 @@
+# systemd-Dienst fuer den dedizierten Server.
+# Auf dem VPS ablegen als:  /etc/systemd/system/extraction-server.service
+# Danach:  sudo systemctl daemon-reload && sudo systemctl enable --now extraction-server
+[Unit]
+Description=Extraction Shooter - dedizierter Server
+After=network.target
+
+[Service]
+Type=simple
+User=extraction
+WorkingDirectory=/opt/extraction
+ExecStart=/opt/extraction/extraction_server.x86_64 --headless -- --server --port 24567
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

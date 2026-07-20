@@ -24,6 +24,11 @@ signal server_disconnected
 
 ## Der eigene Avatar ist da — das Level weiß jetzt, wo der Spieler hingehört.
 signal own_avatar_spawned(spawn_position: Vector3)
+## Die eigene Gesundheit wurde vom Server aktualisiert (nur Anzeige).
+signal local_player_hit
+## Der eigene Spieler ist gefallen bzw. wieder da.
+signal local_player_eliminated(killer_name: String)
+signal local_player_respawned
 
 const DEFAULT_PORT := 24567
 const MAX_PEERS := 8
@@ -31,6 +36,15 @@ const MAX_PEERS := 8
 const SPAWN_COUNT := 4
 
 const AVATAR_SCENE := "res://scenes/net/remote_avatar.tscn"
+
+## Wartezeit zwischen Tod und Respawn an der eigenen Ecke.
+const RESPAWN_SECONDS := 5.0
+## Kadenz-Prüfung mit Luft: Netz-Zittern staucht Pakete zusammen, und wer
+## ehrlich Dauerfeuer schießt, soll nicht alle paar Schuss verschluckt sehen.
+const FIRE_INTERVAL_TOLERANCE := 0.75
+## Wie weit der gemeldete Abschusspunkt vom Avatar entfernt sein darf.
+## Großzügig, weil die gefunkte Position dem echten Spieler hinterherläuft.
+const MAX_ORIGIN_DRIFT := 3.5
 
 enum Mode {OFFLINE, SERVER, CLIENT}
 
@@ -48,6 +62,8 @@ var arena: Node = null
 var avatars: Dictionary = {}
 
 var _console: DevConsole
+## peer_id -> Zeitstempel des letzten angenommenen Schusses (nur Server).
+var _last_shot_ms: Dictionary = {}
 
 
 func _ready() -> void:
@@ -215,6 +231,206 @@ func _despawn_avatar_here(peer_id: int) -> void:
 		avatars.erase(peer_id)
 
 
+# --- Kampf: Der Server entscheidet Treffer --------------------------------
+
+## Ein Client meldet einen Schuss. Der Server prüft, würfelt die Streuung
+## selbst und verschießt echte Projektile gegen die Avatar-Trefferzonen.
+## Der Client hat da längst geknallt und geblitzt — seine Leuchtspur trifft
+## aber nur die Welt. Ob ein SPIELER etwas abbekommt, steht erst hier fest.
+@rpc("any_peer", "reliable")
+func request_fire(origin: Vector3, direction: Vector3, ammo_id: String) -> void:
+	if not is_server() or arena == null:
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if not roster.has(peer_id) or not roster[peer_id].alive:
+		return
+	var avatar: RemoteAvatar = avatars.get(peer_id)
+	if avatar == null:
+		return
+
+	var weapon_data := ItemRegistry.get_item(StringName(avatar.weapon_id)) as WeaponData
+	var ammo := ItemRegistry.get_item(StringName(ammo_id)) as AmmoData
+	if weapon_data == null or ammo == null:
+		return
+	# Munition muss zur Waffe passen — sonst schickt ein präparierter Client
+	# .338-Schaden aus der Pistole.
+	if ammo.caliber != weapon_data.caliber:
+		return
+	# Schneller als die Waffe kann, geht nicht.
+	var now := Time.get_ticks_msec()
+	var min_interval := int(weapon_data.get_shot_interval() * 1000.0 * FIRE_INTERVAL_TOLERANCE)
+	if _last_shot_ms.has(peer_id) and now - int(_last_shot_ms[peer_id]) < min_interval:
+		return
+	_last_shot_ms[peer_id] = now
+	# Der Abschusspunkt muss ungefähr am Avatar liegen.
+	if origin.distance_to(avatar.sync_position + Vector3(0.0, 1.5, 0.0)) > MAX_ORIGIN_DRIFT:
+		return
+	if not direction.is_normalized():
+		return
+
+	NetShot.fire(arena, avatar, weapon_data, ammo, origin, direction,
+		avatar.aiming, _on_server_pellet_hit.bind(peer_id))
+	# Bei allen anderen blitzt und knallt die Waffe des Schützen.
+	_avatar_fired.rpc(peer_id)
+
+
+## Eine Server-Kugel hat etwas getroffen. Der Schaden ist in diesem Moment
+## SCHON PASSIERT — take_hit lief in der Projektilkette gegen die
+## Server-Kopie der Gesundheit. Hier wird nur noch zugeordnet und verkündet.
+func _on_server_pellet_hit(collider: Node, point: Vector3,
+		result: Ballistics.HitResult, direction: Vector3, shooter_peer: int) -> void:
+	var target_peer := _peer_of(collider)
+	if target_peer == 0:
+		return
+	var avatar: RemoteAvatar = avatars.get(target_peer)
+	if avatar == null or avatar.body == null or avatar.body.health == null:
+		return
+
+	var kind := ImpactEffect.Kind.WORLD
+	if result.was_armored:
+		kind = ImpactEffect.Kind.ARMOR_PENETRATED if result.penetrated \
+			else ImpactEffect.Kind.ARMOR_STOPPED
+	elif result.damage_to_target > 0.0:
+		kind = ImpactEffect.Kind.FLESH
+
+	_on_hit.rpc(target_peer, point, -direction, int(kind), avatar.body.health.to_dict())
+
+	if avatar.body.health.is_dead and roster.has(target_peer) and roster[target_peer].alive:
+		_eliminate(target_peer, shooter_peer)
+
+
+## Testtod auf Wunsch: Der Spieler lässt sich selbst eliminieren. Damit kann
+## man Todesbildschirm und Respawn prüfen, ohne getroffen werden zu müssen.
+@rpc("any_peer", "reliable")
+func request_suicide() -> void:
+	if not is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if not roster.has(peer_id) or not roster[peer_id].alive:
+		return
+	var avatar: RemoteAvatar = avatars.get(peer_id)
+	if avatar != null and avatar.body != null and avatar.body.health != null:
+		# Auch der Testtod geht über das Gesundheitssystem, nicht daran vorbei.
+		avatar.body.health.apply_damage(HealthSystem.Part.HEAD, 10000.0)
+	_eliminate(peer_id, peer_id)
+
+
+## Zu welchem Spieler diese Trefferzone gehört — 0 heißt: zu keinem (Welt).
+func _peer_of(node: Node) -> int:
+	var current := node
+	while current != null:
+		if current is RemoteAvatar:
+			return int(String(current.name))
+		current = current.get_parent()
+	return 0
+
+
+func _eliminate(target_peer: int, shooter_peer: int) -> void:
+	roster[target_peer].alive = false
+	if shooter_peer != target_peer and roster.has(shooter_peer):
+		roster[shooter_peer].kills += 1
+	_push_roster()
+	var killer_name := "?"
+	if roster.has(shooter_peer):
+		killer_name = roster[shooter_peer].name
+	_on_eliminated.rpc(target_peer, killer_name)
+	print("[Net] Peer %d eliminiert (von %d)" % [target_peer, shooter_peer])
+	get_tree().create_timer(RESPAWN_SECONDS).timeout.connect(_respawn_peer.bind(target_peer))
+
+
+## Nach der Wartezeit: Gesundheit zurücksetzen und an die eigene Ecke.
+func _respawn_peer(peer_id: int) -> void:
+	# Der Peer kann in den fünf Sekunden gegangen sein.
+	if not is_server() or not roster.has(peer_id) or roster[peer_id].alive:
+		return
+	roster[peer_id].alive = true
+	var spawn_pos := _spawn_point_of(peer_id)
+	var avatar: RemoteAvatar = avatars.get(peer_id)
+	if avatar != null:
+		if avatar.body != null and avatar.body.health != null:
+			avatar.body.health.reset()
+			avatar.body.refresh_colors()
+		# Die Server-Kopie sofort umsetzen — die nächste Pose vom Client
+		# kommt ohnehin von der neuen Ecke.
+		avatar.position = spawn_pos
+		avatar.sync_position = spawn_pos
+	_push_roster()
+	_on_respawn.rpc(peer_id, spawn_pos)
+
+
+# --- Kampf: Was die Clients zu sehen bekommen -----------------------------
+
+## Mündungsfeuer der anderen. Unzuverlässig gefunkt: Geht eins verloren,
+## fehlt ein Blitz — das merkt niemand, und Dauerfeuer flutet so keine
+## zuverlässige Warteschlange.
+@rpc("authority", "unreliable")
+func _avatar_fired(peer_id: int) -> void:
+	if peer_id == local_peer_id():
+		return
+	var avatar: RemoteAvatar = avatars.get(peer_id)
+	if avatar != null and avatar.weapon != null:
+		avatar.weapon.drive_shot()
+
+
+## Ein Treffer, entschieden vom Server. Für alle: Einschlag zeigen und die
+## örtliche Kopie des Getroffenen auf den Serverstand bringen. Für den
+## Getroffenen selbst: Das ist der Moment, in dem seine Anzeige die Wahrheit
+## erfährt — gerechnet hat sie nichts.
+@rpc("authority", "reliable")
+func _on_hit(target_peer: int, point: Vector3, normal: Vector3,
+		kind: int, health_snapshot: Dictionary) -> void:
+	if arena != null:
+		ImpactEffect.spawn(arena, point, normal, kind as ImpactEffect.Kind)
+
+	if target_peer == local_peer_id():
+		var player := _local_player()
+		if player != null and player.health != null:
+			player.health.from_dict(health_snapshot)
+			local_player_hit.emit()
+		return
+
+	var avatar: RemoteAvatar = avatars.get(target_peer)
+	if avatar != null and avatar.body != null and avatar.body.health != null:
+		avatar.body.health.from_dict(health_snapshot)
+		avatar.body.refresh_colors()
+
+
+@rpc("authority", "reliable")
+func _on_eliminated(target_peer: int, killer_name: String) -> void:
+	if target_peer != local_peer_id():
+		return
+	var player := _local_player()
+	if player != null:
+		# Dieselbe Sperre wie bei offenen Fenstern: kein Laufen, kein
+		# Schießen, Maus frei. Der Respawn hebt sie wieder auf.
+		player.set_ui_open(true)
+	local_player_eliminated.emit(killer_name)
+
+
+@rpc("authority", "reliable")
+func _on_respawn(peer_id: int, spawn_pos: Vector3) -> void:
+	if peer_id == local_peer_id():
+		var player := _local_player()
+		if player != null:
+			player.global_position = spawn_pos
+			player.velocity = Vector3.ZERO
+			if player.health != null:
+				player.health.reset()
+			player.set_ui_open(false)
+		local_player_respawned.emit()
+		return
+	var avatar: RemoteAvatar = avatars.get(peer_id)
+	if avatar != null and avatar.body != null and avatar.body.health != null:
+		avatar.body.health.reset()
+		avatar.body.refresh_colors()
+
+
+func _local_player() -> PlayerController:
+	if arena == null:
+		return null
+	return arena.get_node_or_null("Player") as PlayerController
+
+
 # --- Server-Seite ---------------------------------------------------------
 
 ## Ein Peer ist da. Der Server legt seinen Roster-Eintrag an und weist ihm
@@ -319,6 +535,8 @@ func _register_console_commands() -> void:
 		"Dieses Fenster wird Server: host [port]", _cmd_host)
 	_console.register_command("quit",
 		"Spiel beenden", _cmd_quit)
+	_console.register_command("die",
+		"Testtod: sofort eliminieren lassen (nur im Multiplayer)", _cmd_die)
 
 
 ## Zerlegt "ip:port" bzw. "ip" in Adresse und Port.
@@ -383,3 +601,10 @@ func _cmd_host(args: PackedStringArray) -> String:
 func _cmd_quit(_args: PackedStringArray) -> String:
 	get_tree().quit()
 	return ""
+
+
+func _cmd_die(_args: PackedStringArray) -> String:
+	if not is_client():
+		return "Geht nur als verbundener Client"
+	request_suicide.rpc_id(1)
+	return "Anfrage gestellt ..."

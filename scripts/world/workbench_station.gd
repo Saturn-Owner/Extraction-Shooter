@@ -39,6 +39,22 @@ const PLAYER_LAYER := 2
 ## im Code, damit Reparatur und Prüfung nie auseinanderlaufen können.
 const FULL_CONDITION := 100.0
 
+## Der Waffenschrank der Bank: was man sich hier nehmen kann.
+## Bewusst nur die drei Beta-Waffen — nicht das ganze Sortiment der Registry.
+const ARSENAL: Array[StringName] = [
+	&"weapon_rifle_ar15",
+	&"weapon_shotgun_m870",
+	&"weapon_pistol_g17",
+]
+
+## Was "Munition auffüllen" in die Taschen legt — genug für einen Anlauf,
+## nicht genug, um nie wieder herzukommen.
+const AMMO_PACKS := [
+	{id = &"ammo_556x45_m855a1", count = 90},
+	{id = &"ammo_9x19_fmj", count = 51},
+	{id = &"ammo_12x70_buckshot", count = 25},
+]
+
 ## Wie weit man von der Bank weg sein darf. Wird bei JEDER Anfrage geprüft,
 ## nicht nur beim Öffnen — sonst könnte man die Bank öffnen, weglaufen und
 ## aus der Ferne weiterbauen.
@@ -195,8 +211,16 @@ func open() -> void:
 	# Der Spieler wird über die Pause angehalten, nicht über eine Sperre im
 	# Controller. Damit muss weder player_controller.gd noch test_ground.gd
 	# angefasst werden — beides liegt im Arbeitsbereich des Kollegen.
+	#
+	# IM MULTIPLAYER GEHT DAS NICHT: Die Welt läuft auf dem Server weiter,
+	# und eine örtliche Pause friert nur die eigene Sicht ein — die Pakete
+	# stauen sich, und beim Schließen springt alles. Deshalb dort die
+	# UI-Sperre des Controllers, wie bei den Beute-Fenstern.
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	get_tree().paused = true
+	if _is_multiplayer():
+		user.set_ui_open(true)
+	else:
+		get_tree().paused = true
 	_update_hint()
 	opened.emit()
 
@@ -209,13 +233,68 @@ func close() -> void:
 	if _ui != null:
 		_ui.visible = false
 
-	get_tree().paused = false
+	if _is_multiplayer():
+		if user != null:
+			user.set_ui_open(false)
+	else:
+		get_tree().paused = false
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_update_hint()
 	closed.emit()
 
 
+## Läuft gerade ein Multiplayer-Spiel?
+##
+## BEWUSST ÜBER DEN KNOTENPFAD statt über den globalen Namen `Net`: Der
+## globale Name steht erst fest, wenn die Autoloads registriert sind — und
+## Testsuiten laden diese Datei teils davor. Ein Compile-Fehler hier risse
+## das ganze Testgelände mit.
+func _is_multiplayer() -> bool:
+	var net := get_node_or_null("/root/Net")
+	return net != null and bool(net.call("is_multiplayer"))
+
+
 # ------------------------------------------------------- Anfragen der UI
+
+## Gibt eine Waffe aus dem Schrank aus. Sind beide Plätze belegt, ersetzt
+## assign_weapon() die aktive Waffe — die alte wandert ins Raster.
+func request_take_weapon(weapon_id: StringName) -> String:
+	if user == null:
+		return "niemand an der Bank"
+	if not _in_range():
+		return "zu weit von der Werkbank entfernt"
+	if not weapon_id in ARSENAL:
+		return "diese Waffe gibt die Bank nicht aus"
+	var data := ItemRegistry.get_item(weapon_id) as WeaponData
+	if data == null:
+		return "unbekannte Waffe"
+
+	for stack in user.inventory.get_carried_weapons():
+		var carried := stack.get_data()
+		if carried != null and carried.id == weapon_id:
+			return "%s trägst du schon" % data.display_name
+
+	if not user.assign_weapon(ItemStack.create(weapon_id, 1)):
+		return "kein Platz — Raster voll"
+	build_changed.emit(user.inventory.equipped_weapon)
+	return ""
+
+
+## Füllt die Munitionsvorräte auf — kostenlos, das ist eine Arena, kein Raid.
+func request_ammo() -> String:
+	if user == null:
+		return "niemand an der Bank"
+	if not _in_range():
+		return "zu weit von der Werkbank entfernt"
+	var added := 0
+	for pack in AMMO_PACKS:
+		if user.inventory.add(pack.id, pack.count):
+			added += pack.count
+	if added == 0:
+		return "kein Platz im Raster für Munition"
+	user.inventory.notify_changed()
+	return ""
+
 
 ## Baut ein Teil an. Gibt "" zurück, wenn es geklappt hat, sonst den Grund —
 ## der Grund ist für den Spieler bestimmt und steht deshalb auf Deutsch.

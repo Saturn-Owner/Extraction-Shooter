@@ -24,7 +24,7 @@ const CONNECT_RETRY_MS := 2000
 const MAX_CONNECT_ATTEMPTS := 5
 const OVERALL_TIMEOUT_MS := 40000
 
-enum Stage {BOOT, CONNECT, WAIT_ROSTER, WAIT_AVATAR, DONE}
+enum Stage {LOCAL_COMBAT, BOOT, CONNECT, WAIT_ROSTER, WAIT_AVATAR, DONE}
 
 var _net: Node
 var _arena: Node3D
@@ -32,6 +32,9 @@ var _arena: Node3D
 ## des Spawns. Später überschreibt die NetSync-Brücke sync_position laufend
 ## mit der echten Spielerposition, dann ist der Spawn-Wert nicht mehr ablesbar.
 var _spawned_at := Vector3.INF
+## Die Zielfigur der örtlichen Schadenskette und was ihre Treffer melden.
+var _victim: Node3D
+var _combat_hits: Array = []
 var _failed := 0
 var _passed := 0
 var _stage: Stage = Stage.BOOT
@@ -53,7 +56,12 @@ func _initialize() -> void:
 	_run_unit_checks()
 	_started_at = Time.get_ticks_msec()
 	_stage_started_at = _started_at
+	# Der Server bootet nebenher, während örtlich die Schadenskette läuft —
+	# so kostet der Kettentest keine zusätzliche Wartezeit. Aufgebaut wird
+	# die Kette erst im ersten Frame: In _initialize() ist der Baum noch
+	# nicht aktiv, und global_position auf den Projektilen schlüge fehl.
 	_launch_server()
+	_stage = Stage.LOCAL_COMBAT
 	_net.connection_succeeded.connect(func() -> void: _got_success = true)
 	_net.connection_failed.connect(func() -> void: _got_failure = true)
 
@@ -101,6 +109,58 @@ func _run_unit_checks() -> void:
 	_net.roster = {}
 
 
+# --- Örtliche Schadenskette -----------------------------------------------
+#
+# Baut einen fremden Avatar (mit Körper und Trefferzonen, wie er auf dem
+# Server steht) und verschießt echte NetShot-Projektile auf seine Brust.
+# Das prüft die ganze Kette Projektil → Trefferzone → Körperteil →
+# Gesundheit, so wie sie der Server im Ernstfall rechnet — ohne Attrappe.
+
+func _setup_local_combat() -> void:
+	var packed: PackedScene = load("res://scenes/net/remote_avatar.tscn")
+	_victim = packed.instantiate()
+	_victim.display_name = "Opfer"
+	# Fremde Autorität: So baut der Avatar seinen Körper, wie auf dem Server.
+	_victim.set_multiplayer_authority(77)
+	root.add_child(_victim)
+
+	var weapon_data := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var ammo := ItemRegistry.get_item(&"ammo_556x45_m855a1") as AmmoData
+	_check(weapon_data != null and ammo != null, "Waffen- und Munitionsdaten geladen")
+	if weapon_data == null or ammo == null:
+		return
+
+	# Zehn Schuss aus vier Metern auf Brusthöhe. Genug, um zu töten — genau
+	# das soll die Kette ja beweisen.
+	for i in range(10):
+		NetShot.fire(root, null, weapon_data, ammo,
+			Vector3(0.0, 1.3, 4.0), Vector3(0.0, 0.0, -1.0), true,
+			func(collider: Node, _point: Vector3, result: Ballistics.HitResult,
+					_direction: Vector3) -> void:
+				_combat_hits.append({collider = collider, result = result}))
+
+
+func _run_local_combat_checks() -> void:
+	_check(_victim.get_node_or_null("Koerper") != null,
+		"Fremder Avatar baut seinen Körper")
+	_check(_combat_hits.size() >= 10,
+		"Alle Kugeln haben eingeschlagen (%d von 10)" % _combat_hits.size())
+	if _combat_hits.is_empty():
+		return
+
+	var first: Dictionary = _combat_hits[0]
+	_check(first.collider is CharacterHitbox, "Getroffen wurde eine Trefferzone")
+	_check((first.result as Ballistics.HitResult).damage_to_target > 0.0,
+		"Der Treffer richtet Schaden an")
+
+	var body := _victim.get_node_or_null("Koerper") as BlockyCharacter
+	if body != null and body.health != null:
+		# In den Gliedern bleiben Trefferpunkte übrig — tot ist, wessen
+		# lebenswichtiges Teil zerstört ist, nicht wer bei null steht.
+		_check(body.health.is_dead, "Zehn Brusttreffer 5,56 töten die Figur")
+	_victim.queue_free()
+
+
 # --- Echte Leitung --------------------------------------------------------
 
 func _launch_server() -> void:
@@ -116,6 +176,16 @@ func _process(_delta: float) -> bool:
 		return _finish()
 
 	match _stage:
+		Stage.LOCAL_COMBAT:
+			if _victim == null:
+				_setup_local_combat()
+				return false
+			# Fertig, sobald genug Kugeln eingeschlagen sind — oder nach
+			# 5 Sekunden, dann schlagen die Prüfungen eben fehl und sagen warum.
+			if _combat_hits.size() >= 10 \
+					or Time.get_ticks_msec() - _stage_started_at > 5000:
+				_run_local_combat_checks()
+				_next_stage(Stage.BOOT)
 		Stage.BOOT:
 			# Dem Server-Prozess Zeit zum Laden geben, sonst läuft der erste
 			# Verbindungsversuch garantiert ins Leere.

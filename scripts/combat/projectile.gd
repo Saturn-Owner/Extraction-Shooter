@@ -70,6 +70,11 @@ var _streak_age: float = 0.0
 var ammo: AmmoData
 var shooter: Node = null
 
+## Ob Leuchtspur, Funken und Einschusslöcher gebaut werden. Der Server auf
+## dem VPS rechnet dieselben Geschosse, aber niemand sieht sie — Meshes und
+## Partikel wären dort nur Arbeit für den Papierkorb. VOR launch() setzen.
+var visuals_enabled: bool = true
+
 var _velocity: Vector3 = Vector3.ZERO
 var _start_position: Vector3 = Vector3.ZERO
 var _distance_travelled: float = 0.0
@@ -87,7 +92,8 @@ func launch(p_ammo: AmmoData, from: Vector3, direction: Vector3, speed: float,
 	global_position = from
 	_start_position = from
 	_velocity = direction.normalized() * speed
-	_build_streak()
+	if visuals_enabled:
+		_build_streak()
 
 
 ## Der sichtbare Strich. Ein Quader der Laenge eins, damit sich die Streckung
@@ -256,6 +262,8 @@ func _check_segment(from: Vector3, to: Vector3) -> void:
 ##   rot          = ungeschuetzt getroffen
 ##   hell         = Wand oder Boden
 func _spawn_impact(point: Vector3, normal: Vector3, result: Ballistics.HitResult) -> void:
+	if not visuals_enabled:
+		return
 	# Der Einschlag darf nicht an das Geschoss gehaengt werden — das wird
 	# im selben Moment entfernt und nimmt den Effekt sonst mit.
 	var scene: Node = get_parent()

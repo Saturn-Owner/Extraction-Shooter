@@ -138,7 +138,40 @@ func _run() -> void:
 	_test_hand_follows(player, stack)
 	_test_repair(station, player, stack)
 	_test_detach(station, stack)
+	_test_arsenal(station, player)
 	_test_open_and_close(station)
+
+
+## Der Waffenschrank: Waffen ausgeben und Munition auffüllen.
+func _test_arsenal(station: WorkbenchStation, player: PlayerController) -> void:
+	# Nur was im Schrank steht, wird ausgegeben — die Registry kennt mehr.
+	_check(station.request_take_weapon(&"weapon_rifle_akm") != "",
+		"Waffen ausserhalb des Schranks gibt die Bank nicht aus")
+
+	# Die Flinte: je nach Loadout des Testgeländes ist sie schon dabei —
+	# dann muss die Bank das sagen, statt eine zweite auszugeben.
+	var msg := station.request_take_weapon(&"weapon_shotgun_m870")
+	if msg == "":
+		var found := false
+		for carried in player.inventory.get_carried_weapons():
+			var data := carried.get_data()
+			if data != null and data.id == &"weapon_shotgun_m870":
+				found = true
+		_check(found, "die ausgegebene Flinte hängt am Körper")
+		_check(station.request_take_weapon(&"weapon_shotgun_m870") != "",
+			"dieselbe Waffe gibt es kein zweites Mal")
+	else:
+		_check("schon" in msg, "bereits getragene Waffe wird abgelehnt (%s)" % msg)
+
+	# Munition auffüllen muss messbar Munition bringen.
+	var before := player.inventory.count_ammo(&"ammo_12x70_buckshot")
+	var ammo_msg := station.request_ammo()
+	if ammo_msg == "":
+		var after := player.inventory.count_ammo(&"ammo_12x70_buckshot")
+		_check(after > before,
+			"Munition auffüllen bringt Schrotpatronen (%d -> %d)" % [before, after])
+	else:
+		_check(false, "Munition auffüllen scheitert: %s" % ammo_msg)
 
 
 ## Die Oberfläche muss sich beliebig oft neu zeichnen lassen, ohne dass etwas
