@@ -246,11 +246,36 @@ func load_rounds(count: int) -> int:
 	var loaded := mini(count, get_missing_rounds())
 	rounds_in_magazine += loaded
 	_shots_since_release = 0
-	# Bewusst ohne Sound: Der synthetische Nachladeklang klang schlecht.
-	# Sobald echte Aufnahmen vorliegen, hier wieder einhaengen.
 	if loaded > 0:
+		_play_reload()
 		reloaded.emit(rounds_in_magazine)
 	return loaded
+
+
+## Spielt die Nachladegeraeusche als Folge ab: Magazin raus, Magazin rein,
+## durchladen — mit den Pausen dazwischen, die eine echte Bewegung braucht.
+##
+## Bewusst NICHT eine einzige lange Datei: Die Abstaende sollen spaeter zur
+## Nachladedauer der jeweiligen Waffe passen, und eine leere MP5 laedt
+## anders nach als ein Scharfschuetzengewehr.
+##
+## Fehlt eine Datei, passiert nichts. Stille ist besser als ein falscher
+## Klang — der synthetische Versuch klang schlecht und war deshalb lange
+## ganz abgeschaltet.
+func _play_reload() -> void:
+	var steps := WeaponAudio.get_reload_sequence()
+	if steps.is_empty():
+		return
+
+	for step in steps:
+		var stream: AudioStream = step.stream
+		var delay: float = step.delay
+		if delay > 0.0:
+			await get_tree().create_timer(delay).timeout
+		# Waehrend der Pause kann die Waffe weggelegt worden sein.
+		if not is_inside_tree():
+			return
+		_play(stream, randf_range(0.97, 1.03))
 
 
 ## Fuellt das Magazin ohne Munitionsverbrauch.

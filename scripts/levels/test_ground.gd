@@ -16,7 +16,7 @@
 ##   R             Nachladen (verbraucht echte Munition aus dem Inventar)
 ##   B             Feuermodus wechseln
 ##   Q / E         Waffe wechseln (nur was im Inventar liegt)
-##   F / G         Munition wechseln (nur was im Inventar liegt)
+##   5 / 6         Munition wechseln (nur was im Inventar liegt)
 ##   T             Munitionsnachschub (Testhilfe)
 ##   Z             Rucksack mit Ballast füllen (Gewicht spüren)
 ##   0             Zurück zum Start, Ziele und Ausrüstung zurücksetzen
@@ -26,9 +26,8 @@ extends Node3D
 ## Startausrüstung. Bewusst knapp gehalten, damit man merkt, dass Munition
 ## eine begrenzte Ressource ist und nicht selbstverständlich.
 ## Reihenfolge ist wichtig: Grosse Gegenstaende zuerst, sonst zerstueckeln
-## die kleinen das Raster und der Rucksack findet keinen Platz mehr.
+## die kleinen das Raster und die Gewehre finden keinen Platz mehr.
 const LOADOUT := [
-	{id = &"backpack_small", count = 1},
 	{id = &"weapon_rifle_ar15", count = 1},
 	{id = &"weapon_shotgun_m870", count = 1},
 	{id = &"weapon_pistol_g17", count = 1},
@@ -63,6 +62,12 @@ func _give_loadout() -> void:
 	var inventory := _player.inventory
 	if inventory == null:
 		return
+
+	# Der Schiessstand ist kein Raid: Hier geht es darum, jede Waffe mit jedem
+	# Kaliber auszuprobieren, nicht darum, Platz zu verwalten. Die nackten
+	# Taschen (2x8) fassen davon nicht einmal die Haelfte, deshalb bekommt
+	# der Spieler hier ein grosszuegiges Raster.
+	inventory.grid.resize(10, 8)
 
 	for entry in LOADOUT:
 		if not inventory.add(entry.id, entry.count):
@@ -134,9 +139,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_switch_weapon(-1)
 		KEY_E:
 			_switch_weapon(1)
-		KEY_F:
+		# Nicht F/G: F ist inzwischen die Interaktionstaste.
+		KEY_5:
 			_switch_ammo(-1)
-		KEY_G:
+		KEY_6:
 			_switch_ammo(1)
 		KEY_T:
 			# Testhilfe: Nachschub für alle Kaliber.
@@ -146,9 +152,11 @@ func _unhandled_input(event: InputEvent) -> void:
 					inventory.add(entry.id, entry.count)
 			_last_action = "Munition aufgefüllt"
 		KEY_Z:
-			# Ballast, um die Gewichtsbremse zu spüren.
-			if inventory.add(&"plate_class4_front", 1):
-				_last_action = "Platte eingepackt (+3.4 kg)"
+			# Ballast, um die Gewichtsbremse zu spüren. Frueher war das eine
+			# Schutzplatte; solange es nur Waffen und Munition gibt, tut es
+			# ein Schwung Gewehrmunition genauso.
+			if inventory.add(&"ammo_762x51_m80", 40):
+				_last_action = "40 Patronen eingepackt"
 			else:
 				_last_action = "kein Platz mehr"
 		KEY_0:
@@ -201,7 +209,8 @@ func _process(_delta: float) -> void:
 		lines.append("> %s" % _last_action)
 
 	lines.append("")
-	lines.append("Q/E Waffe  F/G Munition  R Laden  B Modus")
+	lines.append("Q/E Waffe  5/6 Munition  R Laden  B Modus")
 	lines.append("T Nachschub  Z Ballast  0 Reset  Esc Maus")
 
 	_label.text = "\n".join(lines)
+

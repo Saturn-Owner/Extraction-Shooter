@@ -14,6 +14,8 @@ var _passed := 0
 
 func _initialize() -> void:
 	ItemRegistry.ensure_loaded()
+	# Platte, Rucksack und Kleidung gibt es im Spiel gerade nicht mehr.
+	TestItems.install()
 	print("=== Ballistik prüfen ===\n")
 	_test_penetration_chance_curve()
 	_test_ammo_against_plates()
@@ -236,6 +238,8 @@ func _test_shotgun_vs_armor() -> void:
 func _print_penetration_matrix() -> void:
 	print("\n--- Durchschlagschance auf 50 m (Prozent)")
 	ItemRegistry.ensure_loaded()
+	# Platte, Rucksack und Kleidung gibt es im Spiel gerade nicht mehr.
+	TestItems.install()
 
 	var rounds: Array = ItemRegistry.get_by_category(ItemData.Category.AMMO)
 	rounds.sort_custom(func(a, b): return (a as AmmoData).penetration_power > (b as AmmoData).penetration_power)

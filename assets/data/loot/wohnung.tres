@@ -1,0 +1,35 @@
+[gd_resource type="Resource" script_class="LootTableData" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/loot_table_data.gd" id="1_uxf3p"]
+
+[resource]
+script = ExtResource("1_uxf3p")
+entries = Array[Dictionary]([{
+"id": "ammo_9x19_fmj",
+"max": 16,
+"min": 4,
+"weight": 40
+}, {
+"id": "ammo_9x19_hp",
+"max": 10,
+"min": 3,
+"weight": 18
+}, {
+"id": "ammo_12x70_buckshot",
+"max": 6,
+"min": 2,
+"weight": 15
+}, {
+"id": "ammo_556x45_hp",
+"max": 14,
+"min": 5,
+"weight": 10
+}, {
+"id": "weapon_pistol_g17",
+"max": 1,
+"min": 1,
+"weight": 4
+}])
+min_rolls = 2
+max_rolls = 5
+empty_weight = 55

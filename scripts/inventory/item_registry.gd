@@ -25,6 +25,22 @@ static func ensure_loaded() -> void:
 		reload()
 
 
+## Traegt eine Vorlage von Hand ein, ohne dass eine Datei existiert.
+##
+## Gedacht fuer Tests, die einen Gegenstand brauchen, den es im Spiel gerade
+## nicht gibt — etwa eine Schutzplatte, solange es nur Waffen und Munition
+## gibt. So bleibt die Pruefung erhalten, ohne dass ein halbfertiger
+## Gegenstand im Spiel auftaucht.
+##
+## Spaeter ist das auch der Weg, auf dem der Server Vorlagen nachreicht.
+static func register(item: ItemData) -> void:
+	ensure_loaded()
+	if item == null or item.id == &"":
+		push_error("[ItemRegistry] Vorlage ohne ID kann nicht eingetragen werden")
+		return
+	_items[item.id] = item
+
+
 ## Liest alle .tres unterhalb von assets/data neu ein.
 static func reload() -> void:
 	_items.clear()
@@ -83,6 +99,15 @@ static func has_item(id: StringName) -> bool:
 static func get_count() -> int:
 	ensure_loaded()
 	return _items.size()
+
+
+## Alle Vorlagen. Fuer Pruefungen, die ueber den gesamten Bestand laufen.
+static func get_all() -> Array[ItemData]:
+	ensure_loaded()
+	var items: Array[ItemData] = []
+	for item in _items.values():
+		items.append(item)
+	return items
 
 
 static func get_all_ids() -> Array[StringName]:

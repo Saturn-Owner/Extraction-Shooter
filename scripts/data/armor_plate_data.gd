@@ -71,6 +71,20 @@ func get_effective_class(current_durability: float) -> float:
 	return float(armor_class) * falloff
 
 
+func get_type_label() -> String:
+	return "Schutzplatte  —  Klasse %d" % armor_class
+
+
+func get_info_lines() -> Array[String]:
+	var lines: Array[String] = []
+	lines.append("Schutzklasse: %d" % armor_class)
+	lines.append("Haltbarkeit:  %.0f" % max_durability)
+	lines.append("Abdeckung:    %s" % Coverage.keys()[coverage])
+	lines.append("Bremst um:    %.0f %%" % movement_penalty_percent)
+	lines.append_array(super())
+	return lines
+
+
 func validate() -> Array[String]:
 	var problems := super()
 	if category != Category.ARMOR_PLATE:

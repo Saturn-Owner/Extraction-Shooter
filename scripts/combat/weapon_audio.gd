@@ -55,9 +55,14 @@ static func get_gunshot(weapon: WeaponData) -> AudioStream:
 
 ## Sucht eine echte Audiodatei für diese Waffe.
 static func _load_file_for(weapon: WeaponData) -> AudioStream:
+	# Kaliber wie "12/70" enthalten einen Schraegstrich. Unbehandelt wuerde
+	# daraus ein Unterordner "12/" mit der Datei "70.wav" — ein Dateiname,
+	# auf den niemand von selbst kommt. Deshalb ersetzen.
+	var caliber_name := String(weapon.caliber).replace("/", "_")
+
 	var candidates := [
 		"%s/%s" % [AUDIO_DIR, weapon.id],
-		"%s/%s" % [AUDIO_DIR, weapon.caliber],
+		"%s/%s" % [AUDIO_DIR, caliber_name],
 		"%s/default" % AUDIO_DIR,
 	]
 	for base in candidates:
@@ -67,6 +72,52 @@ static func _load_file_for(weapon: WeaponData) -> AudioStream:
 				var res := load(path)
 				if res is AudioStream:
 					return res as AudioStream
+	return null
+
+
+## Die Nachladefolge: welche Datei wann kommt.
+##
+## Die Zeiten sind Abstände ZUM VORIGEN Schritt, nicht absolute Zeitpunkte —
+## so lässt sich ein Schritt einfügen oder streichen, ohne alle anderen neu
+## zu rechnen.
+##
+## Reihenfolge und Pausen orientieren sich an einer echten Bewegung:
+## Magazin lösen, herausziehen, neues ansetzen, einrasten, durchladen.
+const RELOAD_STEPS := [
+	{file = "reload_mag_out", delay = 0.00},
+	{file = "reload_mag_in", delay = 0.55},
+	{file = "reload_charge", delay = 0.45},
+]
+
+
+## Liefert die Nachladefolge als [{stream, delay}, ...].
+##
+## Leer, solange die Dateien fehlen — dann bleibt das Nachladen stumm.
+## Das ist Absicht: Der synthetische Ersatz klang schlecht, und ein
+## falscher Klang ist schlimmer als gar keiner.
+static func get_reload_sequence() -> Array:
+	if _cache.has("reload_sequence"):
+		return _cache["reload_sequence"]
+
+	var sequence: Array = []
+	for step in RELOAD_STEPS:
+		var stream := _load_named(step.file)
+		if stream == null:
+			continue
+		sequence.append({stream = stream, delay = step.delay})
+
+	_cache["reload_sequence"] = sequence
+	return sequence
+
+
+## Sucht eine Datei nach Namen, unabhängig von der Endung.
+static func _load_named(base_name: String) -> AudioStream:
+	for ext in [".ogg", ".wav", ".mp3"]:
+		var path := "%s/%s%s" % [AUDIO_DIR, base_name, ext]
+		if ResourceLoader.exists(path):
+			var res := load(path)
+			if res is AudioStream:
+				return res as AudioStream
 	return null
 
 

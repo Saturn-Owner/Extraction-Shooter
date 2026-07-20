@@ -1,0 +1,792 @@
+## Prüft die Kernschleife: looten, extrahieren, sterben.
+##
+##   godot --headless --path . --script res://tests/verify_raid.gd
+##
+## Der wichtigste Test des Projekts. Hier entscheidet sich, ob Beute wirklich
+## sicher ist — und ob Verlust wirklich wehtut. Beides ist die Grundlage des
+## Genres. Ein Fehler hier zerstört entweder die Spannung (kein echter
+## Verlust) oder das Vertrauen (Ausrüstung verschwindet grundlos).
+extends SceneTree
+
+const TIMEOUT_SECONDS := 60.0
+
+var _failed := 0
+var _passed := 0
+var _elapsed := 0.0
+var _done := false
+
+
+func _initialize() -> void:
+	ItemRegistry.ensure_loaded()
+	# Platte, Rucksack und Kleidung gibt es im Spiel gerade nicht mehr.
+	TestItems.install()
+	print("=== Raid-Schleife pruefen ===\n")
+	_run_all()
+
+
+func _process(delta: float) -> bool:
+	if _done:
+		return false
+	_elapsed += delta
+	if _elapsed >= TIMEOUT_SECONDS:
+		print("\n=== ABBRUCH: Test haengt seit %.0f s ===" % TIMEOUT_SECONDS)
+		print("Bisher: %d bestanden, %d fehlgeschlagen" % [_passed, _failed])
+		quit(1)
+	return false
+
+
+func _run_all() -> void:
+	await process_frame
+	_test_loot_tables_are_valid()
+	_test_loot_distribution()
+	_test_search_times_scale()
+	await _test_container_search()
+	await _test_prioritize()
+	await _test_progress_is_kept()
+	await _test_hidden_items_are_untouchable()
+	await _test_drag_between_grids()
+	await _test_starting_kit()
+	await _test_rotate_while_dragging()
+	await _test_extraction_secures_loot()
+	await _test_death_loses_loot()
+	await _test_locked_exit()
+	_finish()
+
+
+func _check(condition: bool, label: String) -> void:
+	if condition:
+		_passed += 1
+		print("  OK     ", label)
+	else:
+		_failed += 1
+		print("  FEHLER ", label)
+
+
+func _section(title: String) -> void:
+	print("\n--- ", title)
+
+
+func _finish() -> void:
+	_done = true
+	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
+	quit(1 if _failed > 0 else 0)
+
+
+func _load_table(name: String) -> LootTableData:
+	return load("res://assets/data/loot/%s.tres" % name) as LootTableData
+
+
+## Ein Tippfehler in einer Item-ID darf nicht erst beim Oeffnen auffallen.
+func _test_loot_tables_are_valid() -> void:
+	_section("Loot-Tabellen")
+
+	for name in ["wohnung", "werkstatt", "militaer"]:
+		var table := _load_table(name)
+		_check(table != null, "Tabelle '%s' laedt" % name)
+		if table == null:
+			continue
+		var problems := table.validate()
+		_check(problems.is_empty(), "'%s' ist fehlerfrei%s" % [
+			name, "" if problems.is_empty() else ": " + ", ".join(problems)])
+
+
+## Die Tabellen muessen sich wirklich unterscheiden, sonst lohnt sich der
+## Weg ins Militaerlager nicht.
+func _test_loot_distribution() -> void:
+	_section("Loot-Verteilung")
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+
+	var rare := [&"ammo_556x45_m995", &"ammo_762x51_m61", &"ammo_545x39_bs"]
+	var counts := {}
+
+	for name in ["wohnung", "werkstatt", "militaer"]:
+		var table := _load_table(name)
+		if table == null:
+			continue
+
+		var total_items := 0
+		var rare_items := 0
+		var empty_rolls := 0
+
+		for i in range(400):
+			var drops := table.roll(rng)
+			if drops.is_empty():
+				empty_rolls += 1
+			for drop in drops:
+				total_items += 1
+				if rare.has(drop.id):
+					rare_items += 1
+
+		counts[name] = {"total": total_items, "rare": rare_items}
+		print("  %-10s %4d Funde in 400 Zuegen, davon %d selten, %d mal komplett leer"
+			% [name, total_items, rare_items, empty_rolls])
+
+		_check(total_items > 0, "'%s' liefert ueberhaupt Loot" % name)
+
+	# Militaer muss mehr hergeben als eine Wohnung — sonst gibt es keinen
+	# Grund, das Risiko einzugehen.
+	if counts.has("wohnung") and counts.has("militaer"):
+		_check(counts["militaer"]["total"] > counts["wohnung"]["total"],
+			"Militaerkisten geben mehr her als Wohnungen (%d vs %d)"
+			% [counts["militaer"]["total"], counts["wohnung"]["total"]])
+		_check(counts["militaer"]["rare"] > counts["wohnung"]["rare"],
+			"seltene Munition kommt fast nur aus dem Militaer (%d vs %d)"
+			% [counts["militaer"]["rare"], counts["wohnung"]["rare"]])
+
+
+## Die Durchsuchzeit muss sich pro Gegenstand unterscheiden — das ist der
+## Kern des Arena-Breakout-Modells.
+func _test_search_times_scale() -> void:
+	_section("Durchsuchzeit pro Gegenstand")
+
+	var ammo := ItemRegistry.get_item(&"ammo_9x19_fmj")
+	var rare_ammo := ItemRegistry.get_item(&"ammo_556x45_m995")
+	var plate := ItemRegistry.get_item(&"plate_class4_front")
+	var rifle := ItemRegistry.get_item(&"weapon_rifle_ar15")
+
+	if ammo == null or rare_ammo == null or plate == null or rifle == null:
+		_check(false, "Vergleichsgegenstaende gefunden")
+		return
+
+	var t_ammo := ammo.get_search_time()
+	var t_rare := rare_ammo.get_search_time()
+	var t_plate := plate.get_search_time()
+	var t_rifle := rifle.get_search_time()
+
+	print("  9mm %.2fs | M995 %.2fs | Platte %.2fs | AR-15 %.2fs"
+		% [t_ammo, t_rare, t_plate, t_rifle])
+
+	_check(t_rare > t_ammo, "seltene Munition dauert laenger als billige (gleiche Groesse)")
+	_check(t_rifle > t_plate, "das Gewehr dauert am laengsten")
+	_check(t_plate > t_rare, "die grosse Platte dauert laenger als eine Patrone")
+	_check(t_ammo >= 0.4, "auch das Kleinste braucht spuerbar Zeit (%.2fs)" % t_ammo)
+	_check(t_rifle <= 7.0, "nichts dauert unertraeglich lang (%.2fs)" % t_rifle)
+
+
+func _test_container_search() -> void:
+	_section("Container schrittweise durchsuchen")
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("militaer")
+	# Stark beschleunigt, damit der Test nicht 20 Sekunden braucht.
+	container.search_time_multiplier = 0.5
+	root.add_child(container)
+	await process_frame
+	container.set_seed(777)
+
+	_check(not container.is_open, "Container startet geschlossen")
+	_check(container.is_empty(), "und ohne Inhalt — erst beim Oeffnen gewuerfelt")
+
+	container.open()
+	_check(container.is_open, "Container ist offen")
+	_check(not container.is_empty(), "Inhalt wurde gewuerfelt (%d Gegenstaende)" % container.contents.get_item_count())
+	_check(container.get_revealed_stacks().is_empty(),
+		"aber noch NICHTS ist sichtbar — Gegenstaende tauchen einzeln auf")
+
+	var total := container.contents.get_item_count()
+	_check(container.get_remaining_count() == total, "alle %d Funde stehen noch aus" % total)
+
+	# Aufdecken abwarten.
+	var waited := 0
+	var previous_revealed := 0
+	var grew_gradually := false
+	while container.is_searching() and waited < 900:
+		await process_frame
+		var now_revealed := container.get_revealed_stacks().size()
+		if now_revealed > previous_revealed and now_revealed < total:
+			grew_gradually = true
+		previous_revealed = now_revealed
+		waited += 1
+
+	_check(container.is_fully_searched, "Durchsuchen wird fertig")
+	_check(container.get_revealed_stacks().size() == total, "am Ende ist alles sichtbar")
+	if total > 1:
+		_check(grew_gradually, "die Gegenstaende sind einzeln aufgetaucht, nicht alle auf einmal")
+
+	container.free()
+
+	# Lesereihenfolge: links nach rechts, dann zeilenweise nach unten.
+	# Vorhersehbarkeit ist hier der Punkt — nur so kann der Spieler
+	# entscheiden, ob er wartet oder gezielt etwas vorzieht.
+	var ordered := LootContainer.new()
+	ordered.loot_table = _load_table("militaer")
+	ordered.search_time_multiplier = 0.4
+	root.add_child(ordered)
+	await process_frame
+	ordered.set_seed(31337)
+
+	var order: Array[Vector2i] = []
+	ordered.item_revealed.connect(func(stack: ItemStack, _rest: int) -> void:
+		order.append(ordered.contents.get_position(stack.instance_id))
+	)
+	ordered.open()
+
+	var guard := 0
+	while ordered.is_searching() and guard < 900:
+		await process_frame
+		guard += 1
+
+	var reading_order := true
+	for i in range(1, order.size()):
+		var vorher := order[i - 1]
+		var jetzt := order[i]
+		if jetzt.y < vorher.y or (jetzt.y == vorher.y and jetzt.x < vorher.x):
+			reading_order = false
+	_check(order.size() > 1, "mehrere Gegenstaende zum Pruefen der Reihenfolge (%d)" % order.size())
+	_check(reading_order, "durchsucht wird in Lesereihenfolge")
+
+	ordered.free()
+
+
+## Ein Klick auf einen noch schwarzen Umriss zieht ihn vor.
+##
+## Der Reiz daran: Man sieht einen grossen Umriss und will wissen, ob sich
+## das Bleiben lohnt, ohne erst drei Patronenschachteln abzuwarten.
+func _test_prioritize() -> void:
+	_section("Gegenstand vorziehen")
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("militaer")
+	container.search_time_multiplier = 0.4
+	root.add_child(container)
+	await process_frame
+	container.set_seed(4242)
+	container.open()
+
+	var stacks := container.contents.get_all_stacks()
+	if stacks.size() < 3:
+		_check(false, "genug Inhalt zum Vorziehen (%d)" % stacks.size())
+		container.free()
+		return
+
+	var first := container.get_current_target()
+	var later: ItemStack = null
+	for stack in stacks:
+		if stack != first and not container.is_revealed(stack.instance_id):
+			later = stack
+	_check(later != null and later != first, "ein spaeterer Gegenstand ist waehlbar")
+
+	_check(not container.prioritize(first.instance_id),
+		"der bereits laufende laesst sich nicht vorziehen")
+
+	_check(container.prioritize(later.instance_id), "spaeterer Gegenstand wird vorgezogen")
+	_check(container.get_current_target() == later, "und ist jetzt an der Reihe")
+
+	# Er muss auch wirklich als erster erscheinen.
+	var revealed_first: ItemStack = null
+	var guard := 0
+	while container.is_searching() and guard < 900:
+		await process_frame
+		guard += 1
+		var seen := container.get_revealed_stacks()
+		if revealed_first == null and not seen.is_empty():
+			revealed_first = seen[0]
+
+	_check(revealed_first == later, "der vorgezogene Gegenstand erscheint zuerst")
+	_check(container.is_fully_searched, "danach laeuft es normal weiter bis zum Ende")
+
+	# Ein bereits gefundener Gegenstand laesst sich nicht nochmal vorziehen.
+	_check(not container.prioritize(later.instance_id),
+		"aufgedeckte Gegenstaende lassen sich nicht vorziehen")
+
+	container.free()
+
+
+## Wer wechselt oder pausiert, darf den Fortschritt nicht verlieren —
+## sonst bestraft das Spiel Neugier und Vorsicht.
+func _test_progress_is_kept() -> void:
+	_section("Fortschritt bleibt erhalten")
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("militaer")
+	root.add_child(container)
+	await process_frame
+	container.set_seed(99)
+	container.open()
+
+	var stacks := container.contents.get_all_stacks()
+	if stacks.size() < 2:
+		_check(false, "genug Inhalt (%d)" % stacks.size())
+		container.free()
+		return
+
+	# Etwas Fortschritt am ersten Gegenstand sammeln.
+	var first := container.get_current_target()
+	var guard := 0
+	while container.get_current_progress() <= 0.0 and guard < 300:
+		await process_frame
+		guard += 1
+	var progress_before := container.get_current_progress()
+	_check(progress_before > 0.0, "am ersten Gegenstand wurde Fortschritt gesammelt")
+
+	# Auf einen anderen wechseln und zurueck.
+	var other: ItemStack = null
+	for stack in stacks:
+		if stack != first and not container.is_revealed(stack.instance_id):
+			other = stack
+			break
+
+	if other == null:
+		_check(false, "ein zweiter Gegenstand ist verfuegbar")
+		container.free()
+		return
+
+	container.prioritize(other.instance_id)
+	_check(container.get_current_progress() < progress_before,
+		"der neue Gegenstand faengt bei seinem eigenen Stand an")
+
+	container.prioritize(first.instance_id)
+	_check(container.get_current_progress() >= progress_before * 0.9,
+		"zurueckgewechselt ist der alte Fortschritt noch da")
+
+	container.free()
+
+
+## Nicht aufgedeckte Gegenstaende duerfen nicht greifbar sein — sonst
+## koennte man die Kiste anklicken und sofort alles leerraeumen.
+func _test_hidden_items_are_untouchable() -> void:
+	_section("Verdeckte Gegenstaende")
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("werkstatt")
+	root.add_child(container)
+	await process_frame
+	container.set_seed(2024)
+	container.open()
+
+	var stacks := container.contents.get_all_stacks()
+	if stacks.is_empty():
+		_check(false, "Container hat Inhalt")
+		container.free()
+		return
+
+	var target := InventoryGrid.new(10, 10)
+	var hidden := stacks[0]
+	_check(not container.is_revealed(hidden.instance_id), "Gegenstand ist noch verdeckt")
+	_check(not container.take_item(hidden.instance_id, target), "verdeckter Gegenstand laesst sich nicht nehmen")
+	_check(target.get_item_count() == 0, "und landet nicht im Inventar")
+
+	_check(container.take_all(target) == container.contents.get_item_count(),
+		"'alles nehmen' nimmt nur Aufgedecktes — also nichts")
+
+	# Nach dem Aufdecken muss es gehen.
+	container.mark_revealed(hidden)
+	_check(container.take_item(hidden.instance_id, target), "aufgedeckt laesst er sich nehmen")
+	_check(target.get_item_count() == 1, "und liegt im Inventar")
+
+	container.free()
+
+
+## Ziehen mit der Maus, so wie das Fenster es ausloest.
+##
+## Geprueft wird der Weg, den ein Mausklick nimmt: gedrueckt auf einem Feld
+## der Kiste, losgelassen auf einem Feld des Inventars. Was dabei NICHT
+## geprueft werden kann, ist ob sich das Ziehen fluessig anfuehlt.
+func _test_drag_between_grids() -> void:
+	_section("Ziehen zwischen den Rastern")
+
+	var packed: PackedScene = load("res://scenes/ui/loot_window.tscn")
+	if packed == null:
+		_check(false, "loot_window.tscn laedt")
+		return
+
+	# Bewusst erst ungetypt: Hat loot_window.gd einen Parserfehler, bleibt der
+	# Knoten ein blankes Control. Ohne diese Pruefung bricht die Zuweisung mit
+	# einem Laufzeitfehler ab und die Suite meldet nur stillschweigend weniger
+	# Pruefungen statt eines Fehlers.
+	var node: Node = packed.instantiate()
+	_check(node is LootWindow, "loot_window.gd laedt fehlerfrei")
+	if not (node is LootWindow):
+		node.free()
+		return
+
+	var window: LootWindow = node
+	root.add_child(window)
+	await process_frame
+
+	_check(window.get_node_or_null("DragGhost") is DragGhost,
+		"Anzeige am Mauszeiger ist vorhanden")
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("werkstatt")
+	root.add_child(container)
+	await process_frame
+	container.set_seed(7)
+
+	var player := _make_player()
+	await process_frame
+
+	window.open_for(container, player.inventory)
+
+	# Alles aufdecken — das Verdecken ist bereits eigens geprueft.
+	for stack in container.contents.get_all_stacks():
+		container.mark_revealed(stack)
+
+	var stacks := container.contents.get_all_stacks()
+	if stacks.is_empty():
+		_check(false, "Container hat Inhalt")
+		window.free()
+		container.free()
+		player.free()
+		return
+
+	var dragged: ItemStack = stacks[0]
+	var id := dragged.instance_id
+	var before := player.inventory.grid.get_item_count()
+
+	var container_view: InventoryGridView = window.get_node("Layout/Columns/Left/ContainerView")
+	var player_view: InventoryGridView = window.get_node("Layout/Columns/Right/PlayerView")
+
+	# Aufnehmen in der Kiste, ablegen im Inventar.
+	#
+	# drop_at() ist genau der Weg, den auch das Loslassen der Maustaste geht.
+	# Frueher hat dieser Test cell_released des Zielrasters ausgeloest — und
+	# damit etwas geprueft, das im Spiel NIE passiert: Godot schickt das
+	# Loslassen immer an das Raster, auf dem gedrueckt wurde. Der Test war
+	# gruen, das Ziehen war kaputt.
+	container_view.item_pressed.emit(dragged, container_view)
+	window.drop_at(player_view, Vector2i(0, 0))
+
+	_check(player.inventory.grid.get_stack(id) != null,
+		"gezogener Gegenstand liegt im Inventar")
+	_check(container.contents.get_stack(id) == null,
+		"und nicht mehr in der Kiste")
+	_check(player.inventory.grid.get_item_count() == before + 1,
+		"nichts verdoppelt, nichts verloren")
+
+	# Zurueck in die Kiste ziehen muss genauso gehen.
+	var back: ItemStack = player.inventory.grid.get_stack(id)
+	player_view.item_pressed.emit(back, player_view)
+	window.drop_at(container_view, Vector2i(0, 0))
+	_check(container.contents.get_stack(id) != null, "und laesst sich zurueckziehen")
+	_check(container.is_revealed(id), "was man selbst hineinlegt, bleibt sichtbar")
+
+	window.free()
+	container.free()
+	player.free()
+
+
+## Die Startausruestung des Raids muss vollstaendig ankommen.
+##
+## Genau hier ging schon einmal still ein Rucksack verloren, weil er nicht
+## mehr ins Raster passte — bemerkt hat es niemand, weil nichts gemeldet
+## wurde. Ein 5x2-Gewehr ist besonders anfaellig dafuer.
+func _test_starting_kit() -> void:
+	_section("Startausruestung im Raid")
+
+	var packed: PackedScene = load("res://scenes/levels/raid_eisstadt.tscn")
+	if packed == null:
+		_check(false, "raid_eisstadt.tscn laedt")
+		return
+
+	var level: Node = packed.instantiate()
+	root.add_child(level)
+	await process_frame
+	await process_frame
+
+	var player := level.get_node_or_null("Player") as PlayerController
+	_check(player != null, "Spieler gefunden")
+	if player == null:
+		level.free()
+		return
+
+	var script: GDScript = level.get_script()
+	var kit: Array = script.get("STARTING_KIT")
+
+	# Waffen haengen am Koerper, alles andere liegt im Raster. Nichts darf
+	# beim Austeilen verschwinden — genau das ist passiert, als die Taschen
+	# auf zwoelf Felder schrumpften und die Pistole keinen Platz mehr fand.
+	var expected_grid := 0
+	var expected_weapons := 0
+	for entry in kit:
+		var data := ItemRegistry.get_item(entry.id)
+		if data != null and data.category == ItemData.Category.WEAPON:
+			expected_weapons += int(entry.count)
+		else:
+			expected_grid += 1
+
+	var actual := player.inventory.grid.get_item_count()
+	_check(actual == expected_grid,
+		"alles Nichtwaffliche liegt im Raster (%d von %d)" % [actual, expected_grid])
+
+	var worn := player.equipment.get_all_items().size()
+	_check(worn == expected_weapons,
+		"und jede Waffe haengt am Koerper (%d von %d)" % [worn, expected_weapons])
+
+	# Man startet UNBEWAFFNET. Die Waffe in der Spielerszene ist auf ein
+	# AR-15 voreingestellt — ohne dass jemand sie ausdruecklich abnimmt,
+	# startet man also bewaffnet, obwohl in der Startausruestung keine Waffe
+	# steht. Genau das prueft die zweite Zeile.
+	_check(player.inventory.equipped_weapon == null, "keine Waffe in der Hand")
+	_check(player.weapon.data == null,
+		"und wirklich leere Haende, nicht nur ein leerer Platz")
+	_check(not player.weapon.try_fire(true, true), "es faellt kein Schuss")
+
+	# Erst eine GEFUNDENE Waffe macht wieder schussbereit — der Weg, den der
+	# Spieler jetzt gehen muss. Die mitgebrachte Munition ist genau dafuer da.
+	player.assign_weapon(ItemStack.create(&"weapon_rifle_ar15", 1))
+	_check(player.weapon.data != null, "eine gefundene Waffe landet in der Hand")
+	_check(player.weapon.rounds_in_magazine > 0,
+		"und wird aus dem mitgebrachten Vorrat geladen (%d)" % player.weapon.rounds_in_magazine)
+	_check(player.weapon.ammo_id == &"ammo_556x45_m855a1",
+		"mit passender Munition (%s)" % player.weapon.ammo_id)
+
+	# Ohne Aufnahme faellt die Waffe auf Synthese zurueck — beides ist
+	# gueltig, aber stumm darf sie nicht sein.
+	_check(WeaponAudio.get_gunshot(player.weapon.data) != null,
+		"die Waffe hat einen Schussklang")
+
+	level.free()
+
+
+## Drehen beim Ziehen.
+##
+## Der heikle Teil ist NICHT das Drehen, sondern das Abbrechen: Der
+## Gegenstand liegt waehrend des Ziehens noch auf seinem alten Platz. Bleibt
+## er nach einem Abbruch gedreht, belegt er Felder, die das Raster gar nicht
+## fuer ihn vorgesehen hat — ab dann stimmt die Belegung nicht mehr.
+func _test_rotate_while_dragging() -> void:
+	_section("Drehen beim Ziehen")
+
+	var packed: PackedScene = load("res://scenes/ui/loot_window.tscn")
+	var node: Node = packed.instantiate()
+	_check(node is LootWindow, "loot_window.gd laedt fehlerfrei")
+	if not (node is LootWindow):
+		node.free()
+		return
+
+	var window: LootWindow = node
+	root.add_child(window)
+	await process_frame
+
+	var container := LootContainer.new()
+	container.loot_table = _load_table("werkstatt")
+	root.add_child(container)
+	await process_frame
+	container.set_seed(11)
+
+	var player := _make_player()
+	await process_frame
+	window.open_for(container, player.inventory)
+
+	# Der Hilfsspieler startet mit leerem Inventar — die Startausruestung
+	# vergibt das Level, nicht die Spielerszene. Also selbst etwas hineinlegen:
+	# ein Gewehr, weil 5x2 den Unterschied beim Drehen deutlich macht.
+	var stack := ItemStack.create(&"weapon_rifle_ar15")
+	_check(player.inventory.grid.add_item(stack), "Gewehr liegt im Inventar")
+
+	var data := stack.get_data()
+	_check(data != null and data.can_rotate, "und laesst sich drehen")
+	if data == null or not data.can_rotate:
+		window.free()
+		container.free()
+		player.free()
+		return
+
+	var player_view: InventoryGridView = window.get_node("Layout/Columns/Right/PlayerView")
+	var container_view: InventoryGridView = window.get_node("Layout/Columns/Left/ContainerView")
+	var size_before := stack.get_size()
+
+	# Anfassen, drehen, ins Leere loslassen -> alles bleibt wie vorher.
+	player_view.item_pressed.emit(stack, player_view)
+	window._rotate_dragged()
+	_check(stack.get_size() == Vector2i(size_before.y, size_before.x),
+		"gedreht sind Breite und Hoehe vertauscht (%s -> %s)" % [size_before, stack.get_size()])
+
+	window.drop_at(null, Vector2i(-1, -1))
+	_check(stack.get_size() == size_before,
+		"abgebrochen liegt er wieder wie vorher (%s)" % stack.get_size())
+	_check(player.inventory.grid.get_stack(stack.instance_id) != null,
+		"und liegt weiterhin im Inventar")
+
+	# Quer passt das Gewehr NICHT in die Kiste: 5x2 gedreht ist 2x5, die
+	# Kiste ist nur 4 Felder hoch. Das ist richtig so — geprueft wird es
+	# deshalb im Inventar, das hoch genug ist.
+	player_view.item_pressed.emit(stack, player_view)
+	window._rotate_dragged()
+	var rotated_size := stack.get_size()
+	window.drop_at(container_view, Vector2i(0, 0))
+	_check(container.contents.get_stack(stack.instance_id) == null,
+		"quer passt es nicht in die flache Kiste")
+	_check(stack.get_size() == size_before,
+		"und liegt danach wieder wie vorher (%s)" % stack.get_size())
+
+	# Im Inventar ist Platz — dort muss die Drehung bleiben.
+	player_view.item_pressed.emit(stack, player_view)
+	window._rotate_dragged()
+	window.drop_at(player_view, Vector2i(1, 1))
+	_check(stack.get_size() == rotated_size,
+		"im Inventar abgelegt behaelt es die neue Lage (%s)" % stack.get_size())
+	_check(player.inventory.grid.get_position(stack.instance_id) == Vector2i(1, 1),
+		"und liegt an der neuen Stelle")
+
+	window.free()
+	container.free()
+	player.free()
+
+
+## Ein Spieler mit grosszuegigem Raster.
+##
+## Die eigenen Taschen sind nur 2x8 gross. Hier geht es aber um Ziehen,
+## Ablegen und Extraction — nicht um Platzmangel. Mit den nackten Taschen
+## wuerden diese Tests am fehlenden Platz scheitern statt an dem, was sie
+## pruefen sollen. Dass zu wenig Platz sauber abgelehnt wird, prueft
+## verify_inventory an eigener Stelle.
+func _make_player() -> PlayerController:
+	var packed: PackedScene = load("res://scenes/player/player.tscn")
+	var player: PlayerController = packed.instantiate()
+
+	# Ueber get_node, nicht ueber player.inventory: Das @onready-Feld ist erst
+	# gesetzt, wenn der Knoten im Baum haengt — und dann hat _ready() das
+	# Raster laengst in Taschengroesse gebaut.
+	var inventory: PlayerInventory = player.get_node("Inventory")
+	inventory.grid_width = 10
+	inventory.grid_height = 8
+
+	root.add_child(player)
+	return player
+
+
+func _make_raid(player: PlayerController) -> RaidManager:
+	var raid := RaidManager.new()
+	root.add_child(raid)
+	raid.setup(player)
+	return raid
+
+
+## Die zentrale Zusage des Genres: Wer rauskommt, behaelt alles.
+func _test_extraction_secures_loot() -> void:
+	_section("Erfolgreiche Extraction")
+
+	var player := _make_player()
+	await process_frame
+	var raid := _make_raid(player)
+
+	player.inventory.add(&"weapon_rifle_ar15", 1)
+	player.inventory.add(&"ammo_556x45_m995", 30)
+	player.inventory.add(&"plate_class4_front", 1)
+	var weapons := player.inventory.get_carried_weapons()
+	player.equip_from_inventory(weapons[0])
+
+	raid.start_raid()
+	var carried := raid.get_items_taken_in()
+	_check(carried > 0, "Spieler startet mit Ausruestung (%d Gegenstaende)" % carried)
+	_check(raid.stash.get_item_count() == 0, "Lager ist zu Beginn leer")
+
+	# Beim Ausruesten wandert Munition ins Magazin. Genau diese Patronen
+	# gingen frueher bei der Extraction verloren.
+	var in_magazine := player.weapon.rounds_in_magazine
+	_check(in_magazine > 0, "Munition steckt im Magazin (%d)" % in_magazine)
+
+	var secured := raid.extract()
+	_check(secured > 0, "Extraction sichert Gegenstaende (%d)" % secured)
+	_check(raid.stash.count_items(&"ammo_556x45_m995", true) == 30,
+		"die Munition liegt vollstaendig im Lager — auch die aus dem Magazin (%d)"
+		% raid.stash.count_items(&"ammo_556x45_m995", true))
+	_check(player.weapon.rounds_in_magazine == 0, "das Magazin ist entladen")
+	_check(raid.stash.count_items(&"weapon_rifle_ar15", true) == 1,
+		"auch die gefuehrte Waffe ist im Lager")
+	_check(player.inventory.grid.get_item_count() == 0, "der Spieler traegt nichts mehr")
+	_check(player.inventory.equipped_weapon == null, "und hat keine Waffe mehr in der Hand")
+	_check(player.equipment.get_all_items().is_empty(),
+		"und nichts mehr am Koerper")
+
+	# Die ZWEITE Waffe steckt im Waffenplatz und nie in der Hand. Sie kam
+	# frueher nicht im Lager an: Der Spieler ueberlebte, seine Sekundaerwaffe
+	# nicht.
+	var second := _make_player()
+	await process_frame
+	var second_raid := _make_raid(second)
+	second.assign_weapon(ItemStack.create(&"weapon_rifle_ar15", 1))
+	second.assign_weapon(ItemStack.create(&"weapon_pistol_g17", 1))
+	second.select_weapon_slot(ItemData.EquipSlot.PRIMARY)
+	second_raid.start_raid()
+	second_raid.extract()
+	_check(second_raid.stash.count_items(&"weapon_pistol_g17", true) == 1,
+		"auch die Sekundaerwaffe kommt im Lager an")
+	second_raid.free()
+	second.free()
+
+	raid.free()
+	player.free()
+
+
+## Die andere Haelfte der Zusage: Wer stirbt, verliert alles Mitgefuehrte —
+## aber niemals das Lager.
+func _test_death_loses_loot() -> void:
+	_section("Tod im Raid")
+
+	var player := _make_player()
+	await process_frame
+	var raid := _make_raid(player)
+
+	# Erst einen erfolgreichen Raid, damit etwas im Lager liegt.
+	player.inventory.add(&"ammo_556x45_m995", 30)
+	raid.start_raid()
+	raid.extract()
+	var stash_before := raid.stash.get_item_count()
+	_check(stash_before > 0, "Lager gefuellt (%d Gegenstaende)" % stash_before)
+
+	# Zweiter Raid, diesmal toedlich.
+	player.inventory.add(&"weapon_rifle_ar15", 1)
+	player.inventory.add(&"ammo_762x51_m61", 20)
+	var weapons := player.inventory.get_carried_weapons()
+	player.equip_from_inventory(weapons[0])
+
+	raid.start_raid()
+	_check(player.inventory.grid.get_item_count() > 0, "Spieler hat Beute dabei")
+
+	# Auch etwas am Koerper, nicht nur im Raster.
+	player.assign_weapon(ItemStack.create(&"weapon_pistol_g17", 1))
+	_check(not player.equipment.get_all_items().is_empty(), "und etwas am Koerper")
+
+	raid.die()
+	_check(player.inventory.grid.get_item_count() == 0, "nach dem Tod ist das Inventar leer")
+	_check(player.inventory.equipped_weapon == null, "die gefuehrte Waffe ist weg")
+
+	# Was am Koerper haengt, ueberlebte den Tod frueher — also ausgerechnet
+	# Waffen und Ruestung. "Tod = alles weg" waere damit eine leere Drohung.
+	_check(player.equipment.get_all_items().is_empty(),
+		"auch der Koerper ist leer")
+	_check(raid.stash.get_item_count() == stash_before,
+		"das LAGER bleibt unangetastet (%d)" % raid.stash.get_item_count())
+	_check(raid.stash.count_items(&"ammo_556x45_m995", true) == 30,
+		"frueher gesicherte Munition ist noch da")
+
+	# Nach dem Tod aus dem Lager neu ausruesten.
+	var moved := raid.equip_from_stash([&"ammo_556x45_m995"])
+	_check(moved == 1, "Ausruesten aus dem Lager funktioniert")
+	_check(player.inventory.count_ammo(&"ammo_556x45_m995") == 30, "die Munition ist wieder am Mann")
+	_check(raid.stash.count_items(&"ammo_556x45_m995", true) == 0, "und nicht mehr im Lager")
+
+	raid.free()
+	player.free()
+
+
+## Ausgaenge mit Ausruestungsbedingung — der Eispickel aus dem Konzept.
+func _test_locked_exit() -> void:
+	_section("Ausgang mit Bedingung")
+
+	var player := _make_player()
+	await process_frame
+
+	var zone := ExtractionZone.new()
+	zone.required_item_id = &"backpack_small"
+	zone.display_name = "Vereiste Klippe"
+	root.add_child(zone)
+
+	_check(not zone.can_use(player), "ohne das noetige Item gesperrt")
+	_check(zone.get_block_reason(player) != "", "Grund wird angezeigt: '%s'" % zone.get_block_reason(player))
+
+	player.inventory.add(&"backpack_small", 1)
+	_check(zone.can_use(player), "mit dem Item nutzbar")
+	_check(zone.get_block_reason(player) == "", "kein Hinderungsgrund mehr")
+
+	# Geschlossener Ausgang bleibt gesperrt, auch mit Item.
+	zone.is_open = false
+	_check(zone.get_block_reason(player) == "geschlossen", "geschlossener Ausgang meldet das")
+
+	zone.free()
+	player.free()

@@ -99,6 +99,13 @@ var stamina: float = 100.0
 var is_crouching: bool = false
 var is_sprinting: bool = false
 
+## Ob gerade ein Fenster offen ist (Loot, Inventar).
+## Solange das gilt, nimmt die Figur KEINE Eingaben entgegen: nicht schiessen,
+## nicht laufen, nicht umschauen. Sonst wuerde ein Klick auf einen Gegenstand
+## gleichzeitig einen Schuss ausloesen — und im Loot-Fenster steht man
+## bewegungsunfaehig vor der Kiste, was genau das Risiko sein soll.
+var ui_open: bool = false
+
 var _pitch: float = 0.0
 var _time_since_sprint: float = 0.0
 var _was_exhausted: bool = false
@@ -115,6 +122,29 @@ var _recoil_yaw: float = 0.0
 @onready var _collision: CollisionShape3D = $CollisionShape3D
 @onready var weapon: Weapon = $CameraPivot/Weapon
 @onready var inventory: PlayerInventory = $Inventory
+@onready var interaction: PlayerInteraction = $CameraPivot/Interaction
+@onready var health: HealthSystem = $Health
+@onready var survival: SurvivalStats = $Survival
+@onready var equipment: Equipment = $Equipment
+
+## Sammelt Sekundenbruchteile, damit Hunger- und Kaelteschaden einmal pro
+## Sekunde wirkt statt in jedem Frame ein Krümelchen.
+var _survival_damage_timer: float = 0.0
+
+## Welcher Waffenplatz gerade in der Hand liegt.
+var active_weapon_slot: ItemData.EquipSlot = ItemData.EquipSlot.PRIMARY
+
+## Was in den Magazinen der NICHT getragenen Waffen steckt,
+## nach `instance_id` der Waffe.
+##
+## Ohne das waere jeder Waffenwechsel ein Munitionsverlust: Die Patronen im
+## Lauf gehoeren zu DIESER Waffe, nicht zur Hand. Genau dieser Fehler hat
+## uns schon einmal bei der Extraction Munition gekostet.
+##
+## Der Schluessel ist bewusst die Waffe und nicht der Platz. Sonst waere das
+## Magazin weg, sobald die Waffe einmal in den Rucksack wandert — und genau
+## das kann man jetzt mit der Maus tun.
+var _magazines: Dictionary = {}
 
 
 func _ready() -> void:
@@ -125,24 +155,129 @@ func _ready() -> void:
 	if inventory != null:
 		inventory.changed.connect(_on_inventory_changed)
 		_on_inventory_changed()
+	if equipment != null:
+		equipment.changed.connect(_on_equipment_changed)
+		_on_equipment_changed()
 
 
 ## Das Gewicht kommt jetzt aus dem Inventar statt von Hand gesetzt zu werden.
 ## Ein voller Rucksack bremst dadurch wirklich.
 func _on_inventory_changed() -> void:
-	if inventory != null:
-		carried_weight_kg = inventory.get_total_weight()
+	_update_carried_weight()
 
 
-## Nimmt eine Waffe aus dem Inventar in die Hand und laedt sie mit der
-## ersten passenden Munition, die der Spieler dabei hat.
-func equip_from_inventory(stack: ItemStack) -> bool:
-	if inventory == null or weapon == null or stack == null:
+## Getragene Kleidung waermt und wiegt — beides muss sofort greifen.
+func _on_equipment_changed() -> void:
+	if survival != null and equipment != null:
+		survival.insulation = equipment.get_total_insulation()
+	_update_carried_weight()
+
+
+## Angelegte Ausruestung zaehlt zum Gewicht: Man traegt sie ja. Sie belegt
+## nur keine Rasterfelder — genau das ist der Anreiz, etwas anzuziehen.
+## Das Raster plus alles am Koerper.
+##
+## Die Waffe in der Hand steckt immer in einem Waffenplatz und ist damit
+## Teil der Ausruestung — sie darf hier nicht ein zweites Mal dazukommen.
+## Deshalb `grid` statt `inventory.get_total_weight()`.
+func _update_carried_weight() -> void:
+	var total := 0.0
+	if inventory != null and inventory.grid != null:
+		total += inventory.grid.get_total_weight()
+	if equipment != null:
+		total += equipment.get_total_weight()
+	carried_weight_kg = total
+
+
+## Legt eine Waffe aus dem Inventar auf einen Waffenplatz.
+##
+## Ohne `slot` wird der erste freie genommen; sind beide belegt, ersetzt sie
+## die Waffe im gerade aktiven Platz — was dort lag, wandert ins Raster.
+func assign_weapon(stack: ItemStack, slot: ItemData.EquipSlot = ItemData.EquipSlot.NONE) -> bool:
+	if equipment == null or inventory == null or stack == null:
 		return false
-	if not inventory.equip_weapon(stack):
+	if not equipment.can_equip(stack, ItemData.EquipSlot.PRIMARY):
 		return false
 
+	var target := slot
+	if target == ItemData.EquipSlot.NONE:
+		target = equipment.get_free_weapon_slot()
+		if target == ItemData.EquipSlot.NONE:
+			target = active_weapon_slot
+
+	# Erst pruefen, ob die verdraengte Waffe ins Raster passt. Sonst
+	# verschwindet sie beim Tauschen stillschweigend.
+	var displaced := equipment.get_item(target)
+	if displaced != null and displaced != stack:
+		if not inventory.grid.can_place_or_merge(displaced, 0, 0) \
+				and inventory.grid.find_free_position(displaced).x < 0:
+			return false
+
+	if inventory.grid.get_stack(stack.instance_id) != null:
+		inventory.grid.remove_item(stack.instance_id)
+
+	equipment.equip(stack, target)
+	if displaced != null and displaced != stack:
+		inventory.grid.add_item(displaced)
+
+	# Der Platz, auf den gerade gelegt wurde, kommt auch in die Hand.
+	select_weapon_slot(target)
+	return true
+
+
+## Wechselt zwischen Primaer- und Sekundaerwaffe (Tasten 1 und 2).
+##
+## Die Munition im Magazin der bisherigen Waffe bleibt dort — sie steckt ja
+## in DIESER Waffe. Beim Wechsel zurueck ist sie wieder da.
+func select_weapon_slot(slot: ItemData.EquipSlot) -> bool:
+	if equipment == null or weapon == null:
+		return false
+	if not Equipment.is_weapon_slot(slot):
+		return false
+
+	var stack := equipment.get_item(slot)
+	if stack == null:
+		return false
+
+	# Was noch im Lauf steckt, gehoert zur alten Waffe. Merken, damit es
+	# beim Zurueckwechseln nicht verschwunden ist.
+	if active_weapon_slot != slot:
+		_remember_magazine()
+
+	active_weapon_slot = slot
+	inventory.equipped_weapon = stack
+	_put_in_hand(stack)
+	return true
+
+
+## Merkt sich, was im Magazin der Waffe steckt, die gerade in der Hand liegt.
+func _remember_magazine() -> void:
+	if weapon == null or equipment == null:
+		return
+	var held := equipment.get_item(active_weapon_slot)
+	if held == null:
+		return
+	_magazines[held.instance_id] = {
+		"rounds": weapon.rounds_in_magazine,
+		"ammo": weapon.ammo_id,
+	}
+
+
+## Baut die Waffe in der Hand auf und laedt sie.
+func _put_in_hand(stack: ItemStack) -> void:
 	var weapon_data := stack.get_data() as WeaponData
+	if weapon_data == null:
+		return
+
+	var saved: Dictionary = _magazines.get(stack.instance_id, {})
+	var saved_rounds := int(saved.get("rounds", 0))
+	var saved_ammo: StringName = saved.get("ammo", &"")
+
+	if saved_rounds > 0 and saved_ammo != &"":
+		weapon.setup(stack.item_id, saved_ammo)
+		weapon.load_rounds(saved_rounds)
+		return
+
 	var compatible := inventory.get_compatible_ammo(weapon_data)
 	var chosen: StringName = compatible[0] if not compatible.is_empty() else &""
 
@@ -151,11 +286,91 @@ func equip_from_inventory(stack: ItemStack) -> bool:
 		# aber sie bleibt leer. Das ist eine gueltige Notlage.
 		weapon.data = weapon_data
 		weapon.rounds_in_magazine = 0
-		return true
+		return
 
 	weapon.setup(stack.item_id, chosen)
 	try_reload()
+
+
+## Nimmt eine Waffe aus dem Inventar in die Hand.
+## Kurzform fuer assign_weapon() auf den ersten freien Platz.
+func equip_from_inventory(stack: ItemStack) -> bool:
+	return assign_weapon(stack)
+
+
+## Packt weg, was in einem Platz steckt: vom Koerper zurueck ins Raster.
+##
+## Mit `x`/`y` landet es auf einem bestimmten Feld — das ist der Fall beim
+## Ziehen mit der Maus. Passt es dort nicht, sucht es sich selbst einen Platz.
+##
+## Passt es NIRGENDS hin, bleibt es angelegt und die Funktion gibt `false`
+## zurueck. Etwas fallen zu lassen, weil kein Platz ist, waere im Raid ein
+## stiller Verlust — und zwar meist der teuerste Gegenstand, den man hat.
+func stow_equipment(slot: ItemData.EquipSlot, x: int = -1, y: int = -1) -> bool:
+	if equipment == null or inventory == null:
+		return false
+
+	var stack := equipment.get_item(slot)
+	if stack == null:
+		return false
+
+	# Das Magazin gehoert zur Waffe und muss mitwandern, bevor die Hand
+	# leer wird.
+	if Equipment.is_weapon_slot(slot) and slot == active_weapon_slot:
+		_remember_magazine()
+
+	var placed := false
+	if x >= 0 and y >= 0 and inventory.grid.can_place(stack, x, y):
+		placed = inventory.grid.place(stack, x, y)
+	if not placed:
+		placed = inventory.grid.add_item(stack)
+	if not placed:
+		return false
+
+	equipment.unequip(slot)
+
+	# Die Waffe, die gerade in der Hand lag, ist jetzt im Rucksack. Statt mit
+	# leeren Haenden dazustehen, greift der Spieler zur zweiten Waffe — hat er
+	# keine, sind die Haende eben leer.
+	if Equipment.is_weapon_slot(slot) and slot == active_weapon_slot:
+		var other := ItemData.EquipSlot.SECONDARY \
+			if slot == ItemData.EquipSlot.PRIMARY else ItemData.EquipSlot.PRIMARY
+		if equipment.get_item(other) != null:
+			select_weapon_slot(other)
+		else:
+			empty_hands()
+
 	return true
+
+
+## Leere Haende. Schiessen ist damit unmoeglich (Weapon.try_fire prueft `data`).
+##
+## Oeffentlich, weil auch das Level das braucht: Die Waffe in der Spielerszene
+## ist voreingestellt, wer unbewaffnet starten soll, muss sie loswerden.
+func empty_hands() -> void:
+	if weapon != null:
+		weapon.data = null
+		weapon.loaded_ammo = null
+		weapon.rounds_in_magazine = 0
+	if inventory != null:
+		inventory.equipped_weapon = null
+
+
+## Entlaedt das Magazin zurueck ins Inventar.
+##
+## Muss vor jeder Extraction passieren, sonst verschwinden die geladenen
+## Patronen — bei M995 waeren das ueber 20.000 Spielwaehrung pro Raid.
+## Solange Magazine keine eigenen Gegenstaende sind, ist das Magazin ein
+## blinder Fleck: Munition darin gehoert niemandem.
+func unload_weapon() -> int:
+	if weapon == null or inventory == null or weapon.rounds_in_magazine <= 0:
+		return 0
+	var rounds := weapon.rounds_in_magazine
+	if not inventory.add(weapon.ammo_id, rounds):
+		# Kein Platz: lieber im Magazin lassen als vernichten.
+		return 0
+	weapon.rounds_in_magazine = 0
+	return rounds
 
 
 ## Nachladen: holt echte Patronen aus dem Inventar.
@@ -188,6 +403,24 @@ func switch_ammo(new_ammo_id: StringName) -> bool:
 	return true
 
 
+## Schaltet die Steuerung ab, solange ein Fenster offen ist.
+##
+## Der Abzug wird dabei bewusst losgelassen: Wer im Dauerfeuer das Inventar
+## oeffnet, soll nicht weiterballern, und beim Schliessen nicht sofort wieder
+## anfangen, nur weil die Maustaste noch gedrueckt war.
+func set_ui_open(open: bool) -> void:
+	if ui_open == open:
+		return
+	ui_open = open
+
+	if open:
+		is_sprinting = false
+		if weapon != null:
+			weapon.release_trigger()
+
+	_capture_mouse(not open)
+
+
 ## Rückstoß hebt die Kamera an. Der Aufschlag ist sofort, die Erholung
 ## langsam — dadurch muss der Spieler bei Dauerfeuer gegenhalten.
 func _on_recoil_kick(vertical: float, horizontal: float) -> void:
@@ -213,7 +446,7 @@ func _update_recoil(delta: float) -> void:
 
 
 func _handle_weapon_input() -> void:
-	if weapon == null:
+	if weapon == null or ui_open:
 		return
 
 	if Input.is_action_just_pressed("fire_mode"):
@@ -226,6 +459,7 @@ func _handle_weapon_input() -> void:
 	# Sprinten und Schiessen schliessen sich aus — die Waffe ist weggeklappt.
 	if is_sprinting:
 		return
+
 
 	weapon.try_fire(
 		Input.is_action_pressed("fire"),
@@ -245,7 +479,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		)
 		_camera_pivot.rotation_degrees.x = _pitch
 
-	if event.is_action_pressed("toggle_mouse"):
+	# Bei offenem Fenster darf die Maus nicht eingefangen werden — sonst
+	# koennte man nichts mehr anklicken.
+	if event.is_action_pressed("toggle_mouse") and not ui_open:
 		_capture_mouse(Input.mouse_mode != Input.MOUSE_MODE_CAPTURED)
 
 
@@ -254,16 +490,39 @@ func _capture_mouse(capture: bool) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_update_survival(delta)
 	_update_crouch(delta)
 	_update_stamina(delta)
 	_update_movement(delta)
 	_update_recoil(delta)
 	_handle_weapon_input()
+
 	move_and_slide()
 
 
+## Hunger, Durst und Kaelte fortschreiben — und ihren Schaden anwenden.
+##
+## Der Schaden wirkt einmal pro Sekunde statt in jedem Frame. Bei 60 Bildern
+## waeren es sonst 60 winzige Ereignisse pro Sekunde, und jede Anzeige, die
+## am Schadenssignal haengt, wuerde flackern.
+func _update_survival(delta: float) -> void:
+	if survival == null or health == null or health.is_dead:
+		return
+
+	survival.metabolism_multiplier = health.get_metabolism_multiplier()
+	survival.tick(delta)
+
+	_survival_damage_timer += delta
+	if _survival_damage_timer < 1.0:
+		return
+	_survival_damage_timer -= 1.0
+
+	for entry in survival.get_damage_this_second():
+		health.apply_damage(entry.part, entry.amount)
+
+
 func _update_crouch(delta: float) -> void:
-	is_crouching = Input.is_action_pressed("crouch") and is_on_floor()
+	is_crouching = not ui_open and Input.is_action_pressed("crouch") and is_on_floor()
 	var target_height := crouch_eye_height if is_crouching else stand_eye_height
 	# Weich statt sprunghaft — sonst wirkt das Ducken wie ein Teleport.
 	_camera_pivot.position.y = move_toward(_camera_pivot.position.y, target_height, 6.0 * delta)
@@ -328,23 +587,40 @@ func can_sprint(input_dir: Vector2) -> bool:
 	return input_dir.y < -0.1
 
 
+## Wie stark Verletzungen und Kaelte das Tempo druecken.
+##
+## Multiplikativ verrechnet, nicht addiert: Zwei Strafen von je 35 % ergeben
+## 42 % Resttempo, nicht 30 %. So kann der Spieler nie auf null fallen und
+## voellig handlungsunfaehig werden — er wird langsam, aber bleibt spielbar.
+func get_condition_factor() -> float:
+	var factor := 1.0
+	if health != null:
+		factor *= 1.0 - health.get_movement_penalty()
+	if survival != null:
+		factor *= 1.0 - survival.get_cold_movement_penalty()
+	return maxf(0.15, factor)
+
+
 func get_current_max_speed() -> float:
 	var base := walk_speed
 	if is_crouching:
 		base = crouch_speed
 	elif is_sprinting:
 		base = sprint_speed
-	return base * get_weight_factor()
+	return base * get_weight_factor() * get_condition_factor()
 
 
 func _update_movement(delta: float) -> void:
 	if not is_on_floor():
 		velocity += get_gravity() * delta
 
-	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	is_sprinting = Input.is_action_pressed("sprint") and can_sprint(input_dir)
+	# Bei offenem Fenster bleibt die Eingabe leer — die Figur bremst dadurch
+	# von selbst aus, statt abrupt stehenzubleiben.
+	var input_dir := Vector2.ZERO if ui_open \
+		else Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	is_sprinting = not ui_open and Input.is_action_pressed("sprint") and can_sprint(input_dir)
 
-	if Input.is_action_just_pressed("jump") and is_on_floor() and stamina > 10.0:
+	if not ui_open and Input.is_action_just_pressed("jump") and is_on_floor() and stamina > 10.0:
 		velocity.y = jump_velocity
 		stamina = maxf(0.0, stamina - 8.0)
 

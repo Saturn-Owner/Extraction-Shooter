@@ -20,15 +20,22 @@ extends Node
 signal changed()
 signal weapon_equipped(stack: ItemStack)
 
-## Grösse des am Körper getragenen Rasters (Weste plus Taschen).
+## Grösse des Rasters, das man OHNE Ausrüstung hat — die eigenen Taschen.
 ##
-## Bewusst grosszügig für die Testphase. Später soll die Grösse von der
-## getragenen Weste abhängen, und der Rucksack bekommt einen eigenen
-## Ausrüstungsplatz statt Rasterfelder zu belegen — so macht es Tarkov auch.
-## Solange das nicht steht, muss hier genug Platz sein, damit keine
-## Ausrüstung stillschweigend verloren geht.
-@export var grid_width: int = 10
-@export var grid_height: int = 8
+## 12 Felder sind wenig, und das ist der Punkt: Ohne Weste und Rucksack soll
+## man kaum etwas mittragen können. Wer mehr will, muss Ausrüstung finden und
+## anziehen. Das ist die Entscheidung, die ein Extraction-Shooter braucht —
+## bei 80 Feldern von Anfang an gäbe es sie nicht.
+##
+## Später soll die Grösse von der getragenen Weste abhängen und der Rucksack
+## sein eigenes Innenraster mitbringen; dann wird das hier der nackte
+## Grundstock, auf den beides addiert wird.
+##
+## ACHTUNG: Ein Sturmgewehr (5x2) belegt zehn dieser zwölf Felder. Es passt
+## also hinein, aber danach ist praktisch nichts mehr übrig. Wer eine zweite
+## Waffe mitnehmen will, braucht die Waffenplätze, nicht die Taschen.
+@export var grid_width: int = 6
+@export var grid_height: int = 2
 
 var grid: InventoryGrid
 

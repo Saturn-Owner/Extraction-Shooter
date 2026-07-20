@@ -32,6 +32,18 @@ var _stacks: Dictionary[int, ItemStack] = {}
 ## instance_id -> Vector2i (linke obere Ecke)
 var _positions: Dictionary[int, Vector2i] = {}
 
+## instance_id -> belegte Fläche, SO WIE SIE GESCHRIEBEN WURDE.
+##
+## Nicht aus dem Gegenstand ableiten: Wird er von aussen gedreht, während er
+## hier liegt, meldet get_size() bereits die neue Fläche — freigegeben werden
+## müssen aber die alten Felder. Genau daran ist das Drehen beim Ziehen
+## zerbrochen: Ein 5x2-Gewehr wurde als 2x5 freigeräumt und lief aus dem
+## Raster heraus.
+##
+## Ein Raster, das exakt freigibt, was es belegt hat, ist gegen solche
+## Eingriffe von aussen unempfindlich.
+var _footprints: Dictionary[int, Vector2i] = {}
+
 
 func _init(p_width: int = 10, p_height: int = 6) -> void:
 	resize(p_width, p_height)
@@ -47,6 +59,7 @@ func resize(p_width: int, p_height: int) -> void:
 	_cells.fill(EMPTY)
 	_stacks.clear()
 	_positions.clear()
+	_footprints.clear()
 
 
 func _index(x: int, y: int) -> int:
@@ -90,18 +103,32 @@ func can_place(stack: ItemStack, x: int, y: int, ignore_id: int = 0) -> bool:
 func place(stack: ItemStack, x: int, y: int) -> bool:
 	if not can_place(stack, x, y):
 		return false
-	_write_cells(stack, x, y, stack.instance_id)
 	_stacks[stack.instance_id] = stack
 	_positions[stack.instance_id] = Vector2i(x, y)
+	_occupy(stack, x, y)
 	changed.emit()
 	return true
 
 
-func _write_cells(stack: ItemStack, x: int, y: int, value: int) -> void:
+## Belegt die Felder und merkt sich die dabei verwendete Fläche.
+func _occupy(stack: ItemStack, x: int, y: int) -> void:
 	var size := stack.get_size()
 	for oy in range(size.y):
 		for ox in range(size.x):
-			_cells[_index(x + ox, y + oy)] = value
+			_cells[_index(x + ox, y + oy)] = stack.instance_id
+	_footprints[stack.instance_id] = size
+
+
+## Gibt genau die Felder frei, die für diesen Gegenstand belegt wurden.
+func _release(instance_id: int) -> void:
+	if not _positions.has(instance_id):
+		return
+	var pos: Vector2i = _positions[instance_id]
+	var size: Vector2i = _footprints.get(instance_id, Vector2i.ONE)
+	for oy in range(size.y):
+		for ox in range(size.x):
+			if is_inside(pos.x + ox, pos.y + oy):
+				_cells[_index(pos.x + ox, pos.y + oy)] = EMPTY
 
 
 ## Sucht den ersten freien Platz von links oben nach rechts unten.
@@ -147,6 +174,41 @@ func add_item(stack: ItemStack) -> bool:
 	return place(stack, pos.x, pos.y)
 
 
+## Ob hier abgelegt werden kann — entweder weil Platz ist, oder weil dort ein
+## Stapel liegt, auf den es draufpasst. Fuer die Vorschau unter dem Mauszeiger:
+## sie muss gruen zeigen, wo das Ablegen auch wirklich klappt.
+func can_place_or_merge(stack: ItemStack, x: int, y: int, ignore_id: int = 0) -> bool:
+	if stack == null:
+		return false
+	if can_place(stack, x, y, ignore_id):
+		return true
+	var target := get_stack_at(x, y)
+	return target != null and target.instance_id != ignore_id and target.can_merge_with(stack)
+
+
+## Legt an eine BESTIMMTE Stelle ab und stapelt dabei auf, was dort schon liegt.
+##
+## Unterschied zu add_item(): das hier ist die Maus. Der Spieler zeigt genau
+## auf ein Feld und erwartet, dass 20 Patronen auf die 14 dort draufwandern —
+## statt einer Fehlermeldung, weil das Feld belegt ist.
+##
+## Gibt zurueck, was NICHT untergebracht wurde (null = alles untergebracht).
+## Der Rest bleibt ein gueltiger Stapel und darf nicht verworfen werden.
+func place_or_merge(stack: ItemStack, x: int, y: int) -> ItemStack:
+	if stack == null:
+		return null
+
+	var target := get_stack_at(x, y)
+	if target != null and target.can_merge_with(stack):
+		target.merge_from(stack)
+		changed.emit()
+		return null if stack.quantity <= 0 else stack
+
+	if place(stack, x, y):
+		return null
+	return stack
+
+
 # ---------------------------------------------------------------------------
 # Entfernen und Verschieben
 # ---------------------------------------------------------------------------
@@ -156,10 +218,10 @@ func remove_item(instance_id: int) -> ItemStack:
 	if not _stacks.has(instance_id):
 		return null
 	var stack: ItemStack = _stacks[instance_id]
-	var pos: Vector2i = _positions[instance_id]
-	_write_cells(stack, pos.x, pos.y, EMPTY)
+	_release(instance_id)
 	_stacks.erase(instance_id)
 	_positions.erase(instance_id)
+	_footprints.erase(instance_id)
 	changed.emit()
 	return stack
 
@@ -172,10 +234,9 @@ func move_item(instance_id: int, x: int, y: int) -> bool:
 	if not can_place(stack, x, y, instance_id):
 		return false
 
-	var old_pos: Vector2i = _positions[instance_id]
-	_write_cells(stack, old_pos.x, old_pos.y, EMPTY)
-	_write_cells(stack, x, y, instance_id)
+	_release(instance_id)
 	_positions[instance_id] = Vector2i(x, y)
+	_occupy(stack, x, y)
 	changed.emit()
 	return true
 
@@ -191,17 +252,17 @@ func rotate_item(instance_id: int) -> bool:
 
 	var pos: Vector2i = _positions[instance_id]
 	# Erst die Felder freigeben, sonst blockiert sich das Item selbst.
-	_write_cells(stack, pos.x, pos.y, EMPTY)
+	_release(instance_id)
 	stack.rotated = not stack.rotated
 
 	if can_place(stack, pos.x, pos.y):
-		_write_cells(stack, pos.x, pos.y, instance_id)
+		_occupy(stack, pos.x, pos.y)
 		changed.emit()
 		return true
 
 	# Passt nicht — alles exakt zurückdrehen.
 	stack.rotated = not stack.rotated
-	_write_cells(stack, pos.x, pos.y, instance_id)
+	_occupy(stack, pos.x, pos.y)
 	return false
 
 
