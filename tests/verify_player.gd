@@ -20,9 +20,126 @@ func _initialize() -> void:
 	_test_sprint_rules()
 	_test_ui_lock()
 	_test_windows()
+	await _test_visible_body()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
+
+
+## Der sichtbare Koerper des Spielers.
+##
+## ---------------------------------------------------------------------------
+## DIESELBE FIGUR WIE IM TESTGELAENDE
+##
+## Kein zweiter Koerper fuer den Spieler — genau dafuer kennt
+## `CharacterAnimation` nur `stance`, `is_sprinting`, `is_aiming` und `speed`.
+## Frueher fuellte ein Dummy-Skript diese Felder, jetzt tun es die Tasten.
+##
+## Der wichtigste Punkt steht weiter unten: Der Koerper teilt sich das
+## `HealthSystem` des Spielers. Damit ist der Spieler zum ersten Mal NACH
+## KOERPERTEILEN treffbar — vorher hatte er nur eine Kollisionskapsel ohne
+## `take_hit`, Geschosse blieben also folgenlos.
+func _test_visible_body() -> void:
+	_section("Sichtbarer Koerper")
+
+	var floor_body := StaticBody3D.new()
+	floor_body.collision_layer = 1
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(40.0, 1.0, 40.0)
+	shape.shape = box
+	shape.position = Vector3(0.0, -0.5, 0.0)
+	floor_body.add_child(shape)
+	root.add_child(floor_body)
+
+	var scene := load("res://scenes/player/player.tscn") as PackedScene
+	var player := scene.instantiate() as PlayerController
+	root.add_child(player)
+	# Erst nach einem Bild ist der Knoten wirklich im Baum — vorher wirft
+	# global_position einen Fehler und die Zuweisung verpufft.
+	await process_frame
+	player.global_position = Vector3(0.0, 0.05, 0.0)
+	for i in range(30):
+		await process_frame
+
+	_check(player.body != null, "der Spieler hat einen Koerper")
+	if player.body == null:
+		return
+
+	_check(player.body.health == player.health,
+		"und teilt sich dessen Gesundheitssystem, statt ein eigenes zu haben")
+
+	var boxes := 0
+	for node in PlayerController._all_children(player.body):
+		if node is CharacterHitbox:
+			boxes += 1
+	_check(boxes >= 7, "er bringt Trefferzonen mit (%d)" % boxes)
+
+	# --- Der eigene Koerper darf die eigene Sicht nicht verstellen ---
+	#
+	# Der Kopf sitzt genau dort, wo die Kamera steht. Ohne das Ausblenden
+	# schaut man von innen gegen den eigenen Schaedel.
+	var own_bit := 1 << (PlayerController.OWN_BODY_LAYER - 1)
+	var meshes := 0
+	var on_own_layer := 0
+	for node in PlayerController._all_children(player.body):
+		if node is MeshInstance3D:
+			meshes += 1
+			if (node as MeshInstance3D).layers == own_bit:
+				on_own_layer += 1
+	_check(meshes > 0 and meshes == on_own_layer,
+		"alle %d Koerperteile liegen auf der eigenen Sichtebene" % meshes)
+
+	var camera := player.get_node_or_null("CameraPivot/Camera3D") as Camera3D
+	_check(camera != null and (camera.cull_mask & own_bit) == 0,
+		"und die eigene Kamera blendet sie aus")
+
+	# --- Ein fremder Schuss trifft ein KOERPERTEIL ---
+	var ammo := ItemRegistry.get_item(&"ammo_556x45_m855a1") as AmmoData
+	var chest := player.body.hitbox_of(HealthSystem.Part.CHEST)
+	var target := chest.global_position
+	var from := target + Vector3(0.0, 0.0, -6.0)
+	var before := player.health.get_total_hp()
+
+	var shot := Projectile.new()
+	root.add_child(shot)
+	shot.launch(ammo, from, (target - from).normalized(), 900.0, null, 1 | 4)
+	for i in range(60):
+		await process_frame
+
+	_check(player.health.get_total_hp() < before,
+		"ein fremder Schuss verletzt ihn (%.0f auf %.0f)"
+			% [before, player.health.get_total_hp()])
+	_check(player.health.get_hp(HealthSystem.Part.CHEST)
+			< HealthSystem.get_max_hp(HealthSystem.Part.CHEST),
+		"und zwar an der Brust, nicht irgendwo")
+
+	# --- Der Geschoss-Ausschluss kennt die Trefferzonen ---
+	#
+	# GEPRUEFT WIRD DIE LISTE, NICHT DER SELBSTSCHADEN.
+	#
+	# Die Muendung sitzt 84 cm VOR dem Koerper, weil die Waffe im Kameraraum
+	# haengt. Ein Selbstschuss laesst sich damit gar nicht herbeifuehren, in
+	# keinem Blickwinkel — ein Test darauf waere immer gruen und wuerde nichts
+	# beweisen.
+	#
+	# Sobald ein Schuss naeher am Leib entsteht — Waffe in der Hand des
+	# Koerpers, dritte Person, ein Gegner mit Modell —, entscheidet genau
+	# diese Liste. Deshalb wird sie selbst geprueft.
+	var probe := Projectile.new()
+	probe.shooter = player
+	root.add_child(probe)
+	var excluded: Array[RID] = probe._shooter_bodies()
+	_check(excluded.size() >= boxes + 1,
+		"der Ausschluss deckt Kapsel UND alle Trefferzonen (%d Koerper)"
+			% excluded.size())
+	_check(excluded.has(chest.get_rid()),
+		"die Brustzone des Schuetzen steht darin")
+	probe.queue_free()
+
+	player.queue_free()
+	floor_body.queue_free()
+	await process_frame
 
 
 func _check(condition: bool, label: String) -> void:

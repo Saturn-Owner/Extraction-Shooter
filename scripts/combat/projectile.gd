@@ -180,14 +180,50 @@ func _physics_process(delta: float) -> void:
 	# spaeter ein sichtbares Geschossmodell dazu, gehoert es wieder her.
 
 
+## Alle Koerper, die zum Schuetzen gehoeren — er selbst UND seine Trefferzonen.
+##
+## ---------------------------------------------------------------------------
+## WARUM NICHT NUR DER SCHUETZE
+##
+## Hier stand `query.exclude = [shooter.get_rid()]`, also genau EIN Koerper.
+## Solange der Spieler nur eine Kollisionskapsel ohne sichtbaren Leib hatte,
+## genuegte das.
+##
+## Mit einem Koerper genuegt es nicht mehr: Die Trefferzonen sind eigene
+## `CharacterHitbox`-Knoten und damit eigene Koerper. Der Lauf sitzt zwischen
+## den Haenden, also VOR der Brust — jeder Schuss haette zuerst den eigenen
+## Arm oder die eigene Brust getroffen. Das Spiel waere unspielbar gewesen,
+## und zwar sofort beim ersten Schuss.
+##
+## Die Warnung dazu stand seit dem Bau der Figur in blocky_character.gd. Hier
+## wird sie eingeloest.
+func _shooter_bodies() -> Array[RID]:
+	var bodies: Array[RID] = []
+	if shooter == null:
+		return bodies
+	if shooter is CollisionObject3D:
+		bodies.append((shooter as CollisionObject3D).get_rid())
+	for node in _descendants(shooter):
+		if node is CollisionObject3D:
+			bodies.append((node as CollisionObject3D).get_rid())
+	return bodies
+
+
+static func _descendants(node: Node) -> Array[Node]:
+	var found: Array[Node] = []
+	for child in node.get_children():
+		found.append(child)
+		found.append_array(_descendants(child))
+	return found
+
+
 ## Prueft die gesamte Flugstrecke dieses Frames, nicht nur den Endpunkt.
 func _check_segment(from: Vector3, to: Vector3) -> void:
 	var space := get_world_3d().direct_space_state
 	var query := PhysicsRayQueryParameters3D.create(from, to)
 	query.collision_mask = _collision_mask
 	query.collide_with_areas = false
-	if shooter is CollisionObject3D:
-		query.exclude = [(shooter as CollisionObject3D).get_rid()]
+	query.exclude = _shooter_bodies()
 
 	var hit := space.intersect_ray(query)
 	if hit.is_empty():

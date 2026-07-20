@@ -202,6 +202,8 @@ func _ready() -> void:
 		if weapon_view != null:
 			weapon_view.attach_weapon(weapon)
 			weapon.set_visual_muzzle(weapon_view.get_muzzle_point())
+	_build_body()
+
 	# Schritte und Atmen. Ebenfalls im Code erzeugt, aus demselben Grund wie
 	# der Muendungsknall: kein Eingriff in player.tscn.
 	sounds = PlayerSounds.new()
@@ -322,6 +324,95 @@ func select_weapon_slot(slot: ItemData.EquipSlot) -> bool:
 	inventory.equipped_weapon = stack
 	_put_in_hand(stack)
 	return true
+
+
+## ---------------------------------------------------------------------------
+## DER SICHTBARE KOERPER
+##
+## Dieselbe `BlockyCharacter`, die im Testgelaende steht. Nicht eine zweite
+## Fassung fuer den Spieler — genau darum wurde sie so gebaut: Die Animation
+## kennt nur `stance`, `is_sprinting`, `is_aiming` und `speed`, und wer diese
+## Felder fuellt, ist ihr egal. Bisher tat es ein Dummy-Skript, jetzt tun es
+## die Tasten.
+##
+## Er bekommt das Gesundheitssystem des Spielers mitgegeben, statt sich ein
+## eigenes anzulegen. Damit wird der Spieler zum ersten Mal NACH KOERPERTEILEN
+## treffbar: Ein Beintreffer ist etwas anderes als ein Kopftreffer, und genau
+## dafuer gibt es HealthSystem.
+##
+## In player.tscn steht davon nichts — Szenen lassen sich bei Konflikten nicht
+## mergen, und an dieser arbeitet der Kollege. Dieselbe Ueberlegung wie beim
+## Muendungsknall und den Schrittgeraeuschen.
+var body: BlockyCharacter
+var _body_animation: CharacterAnimation
+
+## Sichtebene des eigenen Koerpers.
+##
+## Die eigene Kamera blendet sie aus. Ohne das schaut man von innen gegen den
+## eigenen Schaedel — der Kopf sitzt genau dort, wo die Kamera steht.
+##
+## Andere Kameras sehen die Ebene weiterhin, der Koerper ist also nicht
+## unsichtbar, sondern nur fuer seinen eigenen Traeger. Sollen spaeter die
+## eigenen Beine sichtbar werden, bekommen Kopf und Brust eine eigene Ebene
+## und die Beine bleiben auf der Standardebene.
+const OWN_BODY_LAYER := 2
+
+
+func _build_body() -> void:
+	body = BlockyCharacter.new()
+	body.name = "Koerper"
+	# VOR dem Einhaengen setzen: BlockyCharacter legt sich in _ready() sonst
+	# ein eigenes System an, und dann haette der Spieler zwei Gesundheiten,
+	# von denen die sichtbare niemanden interessiert.
+	body.health = health
+	# Ebene 4 wie bei allen Trefferzonen — NICHT Ebene 2, wo die
+	# Kollisionskapsel liegt. Die umschliesst den ganzen Leib und wuerde jedes
+	# Geschoss abfangen, bevor es eine Trefferzone erreicht. Siehe
+	# Weapon.projectile_mask.
+	body.hit_layer = 4
+	add_child(body)
+
+	_body_animation = CharacterAnimation.new()
+	_body_animation.name = "Bewegung"
+	add_child(_body_animation)
+	# Erst nach dem Einhaengen: attach() liest die Ruhelage der Gelenke, und
+	# die gibt es erst, nachdem build() gelaufen ist.
+	_body_animation.attach(body)
+
+	_hide_own_body_from_camera()
+
+
+## Nimmt den eigenen Koerper aus dem Blickfeld der eigenen Kamera.
+func _hide_own_body_from_camera() -> void:
+	for node in _all_children(body):
+		if node is VisualInstance3D:
+			(node as VisualInstance3D).layers = 1 << (OWN_BODY_LAYER - 1)
+	if _camera != null:
+		_camera.cull_mask &= ~(1 << (OWN_BODY_LAYER - 1))
+
+
+static func _all_children(node: Node) -> Array[Node]:
+	var found: Array[Node] = []
+	for child in node.get_children():
+		found.append(child)
+		found.append_array(_all_children(child))
+	return found
+
+
+## Reicht die Haltung an den sichtbaren Koerper weiter.
+##
+## Die vier Werte, die die Animation braucht — mehr ist die Schnittstelle
+## nicht. `velocity` liefert das Tempo, ohne die Senkrechte: Ein Sprung ist
+## kein Laufen, und ohne diese Zeile ruderte die Figur im Fallen mit den
+## Beinen.
+func _update_body(_delta: float) -> void:
+	if _body_animation == null:
+		return
+	_body_animation.speed = Vector2(velocity.x, velocity.z).length()
+	_body_animation.stance = (CharacterAnimation.Stance.CROUCH if is_crouching
+		else CharacterAnimation.Stance.STAND)
+	_body_animation.is_sprinting = is_sprinting
+	_body_animation.is_aiming = is_aiming
 
 
 ## Merkt sich, was im Magazin der Waffe steckt, die gerade in der Hand liegt.
@@ -765,6 +856,9 @@ func _physics_process(delta: float) -> void:
 	_update_aiming(delta)
 	_handle_weapon_input()
 	_update_weapon_view(delta)
+	# Nach _update_aiming und _update_crouch: Der Koerper stellt dar, was
+	# diese Zeilen entschieden haben.
+	_update_body(delta)
 
 	move_and_slide()
 

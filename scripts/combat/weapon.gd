@@ -42,8 +42,25 @@ const WEAR_JAM_MULTIPLIER := 20.0
 @export var weapon_id: StringName = &"weapon_rifle_ar15"
 @export var ammo_id: StringName = &"ammo_556x45_m855a1"
 
-## Auf welchen Ebenen Geschosse einschlagen (1 = Welt, 2 = Spieler, 4 = Gegner).
-@export_flags_3d_physics var projectile_mask: int = 1 | 2 | 4
+## Auf welchen Ebenen Geschosse einschlagen (1 = Welt, 4 = Koerper).
+##
+## ---------------------------------------------------------------------------
+## EBENE 2 IST BEWUSST NICHT DABEI
+##
+## Dort liegt die Kollisionskapsel des Spielers. Sie ist fuers Laufen da — die
+## Werkbank findet den Spieler ueber sie — und umschliesst den ganzen Leib mit
+## 35 cm Radius.
+##
+## Solange der Spieler keinen sichtbaren Koerper hatte, war das egal: Die
+## Kapsel hat kein `take_hit`, ein Treffer blieb also folgenlos. Mit Koerper
+## waere sie schaedlich, denn ein Geschoss von aussen trifft IMMER zuerst die
+## Kapsel und nie die Trefferzone dahinter. Kopf, Brust und Beine waeren
+## damit unerreichbar, und `HealthSystem` bekaeme nie einen Koerperteil zu
+## sehen.
+##
+## Getroffen wird deshalb auf Ebene 4 — dort liegen die Trefferzonen von
+## Zielfiguren, Gegnern und jetzt auch des Spielers.
+@export_flags_3d_physics var projectile_mask: int = 1 | 4
 
 ## Die unveränderte Vorlage aus der Registry. NIEMALS hineinschreiben —
 ## sie wird von allen Exemplaren dieser Waffe geteilt.
