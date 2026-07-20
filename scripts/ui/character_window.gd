@@ -12,10 +12,10 @@
 ## und Rucksack gehören zusammen — wer im Raid nachsieht, was er dabeihat,
 ## will meist auch wissen, wie es ihm geht.
 ##
-## Beide Reiter zeigen DIESELBE Figur, nur unterschiedlich eingefärbt:
-## unter "Ausrüstung" neutral grau, unter "Gesundheit" nach Zustand von Grün
-## bis Rot. Eine Zeichenroutine, zwei Bedeutungen — und der Spieler sieht
-## sofort, dass es derselbe Körper ist.
+## Beide Reiter zeigen DIESELBE Figur, gleich eingefärbt: nach Zustand von
+## Grün bis Rot. Der Gesundheitsreiter zeigt zusätzlich die Trefferpunkte in
+## jedem Körperteil, den Auswahlrahmen und den Zustandstext darunter —
+## derselbe Körper, einmal auf einen Blick und einmal mit Einzelheiten.
 ##
 ## Die Figur ist selbst gezeichnet, kein 3D-Modell: Sieben Flächen genügen,
 ## um Kopf, Rumpf, Arme und Beine zu unterscheiden. Ein richtiges Modell
@@ -30,7 +30,6 @@ const COLOR_HEALTHY := Color(0.42, 0.66, 0.40)
 const COLOR_HURT := Color(0.80, 0.70, 0.30)
 const COLOR_CRITICAL := Color(0.78, 0.30, 0.24)
 const COLOR_DESTROYED := Color(0.10, 0.10, 0.11)
-const COLOR_NEUTRAL := Color(0.20, 0.215, 0.235)
 const COLOR_OUTLINE := Color(0.33, 0.36, 0.40)
 const COLOR_SELECTED := Color(0.85, 0.86, 0.88)
 
@@ -366,14 +365,16 @@ func _draw_figure() -> void:
 		var rect := _rect_for(part)
 		var ratio := player.health.get_ratio(part)
 
-		# Unter "Ausruestung" neutral, unter "Gesundheit" nach Zustand.
-		# Ein zerstoertes Glied bleibt aber IMMER schwarz — das ist zu
-		# wichtig, um es hinter einem Reiter zu verstecken.
-		var fill := COLOR_NEUTRAL
-		if show_health or ratio <= 0.0:
-			fill = _color_for(ratio)
-		_figure.draw_rect(rect, fill)
+		# In BEIDEN Reitern nach Zustand eingefaerbt.
+		#
+		# Unter "Ausruestung" war die Figur frueher neutral grau, um nicht vom
+		# Anziehen abzulenken. Das kostete aber genau die Information, nach der
+		# man greift, bevor man wieder rausgeht: wie es einem geht.
+		_figure.draw_rect(rect, _color_for(ratio))
 
+		# Zahlen und Auswahlrahmen bleiben dem Gesundheitsreiter vorbehalten —
+		# das ist der Unterschied zwischen "wie geht es mir" auf einen Blick
+		# und den Einzelheiten.
 		var selected: bool = show_health and part == _selected
 		_figure.draw_rect(rect, COLOR_SELECTED if selected else COLOR_OUTLINE,
 			false, 2.0 if selected else 1.0)
