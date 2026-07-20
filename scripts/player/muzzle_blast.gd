@@ -42,8 +42,15 @@ var config: MuzzleBlastData
 
 var _weapon: Weapon
 var _camera: Camera3D
+
+## Der Waffenknoten. Wackelt mit, damit die Waffe nicht im Bild schwimmt.
+var _weapon_node: Node3D
 var _time_since_shot: float = 999.0
 var _shake_time: float = 0.0
+
+## Ruhelage des Waffenknotens. Gemerkt, weil das Wackeln absolut setzt und
+## die Waffe sonst in den Ursprung springen wuerde.
+var _weapon_home: Vector3 = Vector3.ZERO
 
 ## Frequenz der Rauschquellen.
 ##
@@ -84,6 +91,11 @@ func _ready() -> void:
 ## die Innereien dieses Effekts wissen.
 func attach(weapon: Weapon, camera: Camera3D = null) -> void:
 	_camera = camera
+	# Die Waffe haengt neben der Kamera, nicht unter ihr. Ohne sie
+	# mitzudrehen bleibt sie stehen, waehrend die Sicht kippt — sie schwimmt
+	# dann gegenlaeufig durchs Bild, und das sieht kaputt aus statt
+	# erschuettert. Kopf und Haende gehoeren zusammen.
+	_weapon_node = weapon
 	if _weapon == weapon:
 		return
 	if _weapon != null and _weapon.fired.is_connected(_on_fired):
@@ -91,6 +103,7 @@ func attach(weapon: Weapon, camera: Camera3D = null) -> void:
 
 	_weapon = weapon
 	if _weapon != null:
+		_weapon_home = _weapon.position
 		_weapon.fired.connect(_on_fired)
 
 
@@ -209,16 +222,24 @@ func apply_shake() -> void:
 		return
 
 	var t := _shake_time * config.shake_speed
-	_camera.rotation_degrees = Vector3(
+	var angles := Vector3(
 		_wobble(_noise_pitch, t) * config.shake_pitch_deg * shake,
 		_wobble(_noise_yaw, t) * config.shake_yaw_deg * shake,
 		_wobble(_noise_roll, t) * config.shake_roll_deg * shake
 	)
-	_camera.position = Vector3(
+	var offset := Vector3(
 		_wobble(_noise_yaw, t + 100.0) * config.shake_offset_m * shake,
 		_wobble(_noise_pitch, t + 100.0) * config.shake_offset_m * shake,
 		0.0
 	)
+
+	_camera.rotation_degrees = angles
+	_camera.position = offset
+
+	# Dieselbe Bewegung auf die Waffe, sonst schwimmt sie gegenlaeufig im Bild.
+	if _weapon_node != null:
+		_weapon_node.rotation_degrees = angles
+		_weapon_node.position = _weapon_home + offset
 
 
 ## Ein Rauschwert von -1 bis 1, ausgeglichen und begrenzt.

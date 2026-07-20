@@ -363,4 +363,23 @@ func _test_in_level() -> void:
 		"dasselbe fürs Nicken (%.3f von %.3f Grad)"
 			% [worst_pitch, blast.config.shake_pitch_deg])
 
+	# --- Die Waffe muss MITwackeln, nicht dagegen ---
+	#
+	# Sie hängt neben der Kamera, nicht unter ihr. Bewegt sich nur die Kamera,
+	# bleibt die Waffe stehen und schwimmt gegenläufig durchs Bild — das sieht
+	# kaputt aus statt erschüttert, und zwar bei JEDER Stärke.
+	var weapon_node := player.get_node_or_null("CameraPivot/Weapon") as Node3D
+	_check(weapon_node != null, "Waffenknoten gefunden")
+	if weapon_node != null:
+		blast.shake = 1.0
+		blast._process(1.0 / 60.0)
+		_check(weapon_node.rotation_degrees.is_equal_approx(camera.rotation_degrees),
+			"Waffe und Sicht kippen gemeinsam (%v / %v)"
+				% [weapon_node.rotation_degrees, camera.rotation_degrees])
+
+		blast.reset()
+		blast._process(1.0 / 60.0)
+		_check(weapon_node.rotation_degrees.is_zero_approx(),
+			"und stehen ohne Belastung beide gerade (%v)" % weapon_node.rotation_degrees)
+
 	player.queue_free()

@@ -66,7 +66,7 @@ extends Resource
 
 ## Wackeln um die Blickachse. DARF GROSS SEIN: Rollen dreht das Bild, aber
 ## nicht die Blickrichtung — es kostet keine Präzision.
-@export_range(0.0, 6.0) var shake_roll_deg: float = 3.5
+@export_range(0.0, 6.0) var shake_roll_deg: float = 1.2
 
 ## Wackeln nach oben/unten und zur Seite.
 ##
@@ -75,12 +75,12 @@ extends Resource
 ## verschieben also wirklich den Treffpunkt. 0,35 Grad sind rund 60 cm auf
 ## 100 m — spürbar, aber nicht zufällig. Wer hier 5 Grad einträgt, macht
 ## Dauerfeuer unbrauchbar, ohne dass jemand den Zusammenhang sieht.
-@export_range(0.0, 1.0) var shake_pitch_deg: float = 0.35
-@export_range(0.0, 1.0) var shake_yaw_deg: float = 0.35
+@export_range(0.0, 1.0) var shake_pitch_deg: float = 0.18
+@export_range(0.0, 1.0) var shake_yaw_deg: float = 0.18
 
 ## Seitliches Versetzen der Kamera in Metern. Verschiebt nur den Ursprung des
 ## Zielstrahls, nicht seine Richtung — praktisch kostenlos.
-@export_range(0.0, 0.1) var shake_offset_m: float = 0.015
+@export_range(0.0, 0.1) var shake_offset_m: float = 0.008
 
 ## Wie schnell gezittert wird.
 @export_range(1.0, 40.0) var shake_speed: float = 14.0
