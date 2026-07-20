@@ -298,6 +298,10 @@ static func container(node_name: String, pos: Vector3, mat: Material,
 	view.mesh = mesh
 	view.set_surface_override_material(0, mat)
 	view.set_surface_override_material(1, container_frame_material())
+	# Die Mesh ist mit der UNTERKANTE auf Null gebaut (Boden bei y = 0), der
+	# Koerper sitzt aber auf halber Hoehe — also die Mesh um dieselbe halbe
+	# Hoehe absenken, sonst schwebt sie ueber der Kollision.
+	view.position = Vector3(0.0, -CONTAINER_SIZE.y * 0.5, 0.0)
 	body.add_child(view)
 
 	var shape := BoxShape3D.new()

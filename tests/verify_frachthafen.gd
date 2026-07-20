@@ -181,6 +181,23 @@ func _test_container_model() -> void:
 
 	_check(WorldParts.container_frame_material() != null, "es gibt ein Rahmenmaterial")
 
+	# Der Container darf NICHT schweben: Die sichtbare Mesh muss mit dem Boden
+	# der Kollision auf gleicher Hoehe aufsetzen. Genau das war einmal kaputt —
+	# die Mesh stand 1,3 m ueber der Kollision, man lief in unsichtbare
+	# Container und sah sie darueber schweben.
+	var built := WorldParts.container("Probe", Vector3.ZERO, mats.values()[0]) as StaticBody3D
+	if built != null:
+		var view := built.get_node_or_null("Mesh") as MeshInstance3D
+		var collider := built.get_node_or_null("Kollision") as CollisionShape3D
+		if view != null and collider != null:
+			var mesh_bottom := (built.transform * view.transform * view.mesh.get_aabb()).position.y
+			var box_shape := collider.shape as BoxShape3D
+			var box_bottom := built.position.y + collider.position.y - box_shape.size.y * 0.5
+			_check(absf(mesh_bottom - box_bottom) < 0.05,
+				"die Mesh sitzt auf der Kollision auf, schwebt nicht (Mesh %.2f, Box %.2f)" % [
+					mesh_bottom, box_bottom])
+		built.free()
+
 
 ## Der Fehler der alten Karte: Dort liegt ein Ausgang zehn Meter vom Spawn.
 ## Man kann einen Raid in zwoelf Sekunden beenden, ohne eine Kiste anzufassen —
