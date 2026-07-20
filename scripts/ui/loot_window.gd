@@ -28,6 +28,10 @@ const FIND_SOUNDS_ENABLED := false
 var container: LootContainer = null
 var player_inventory: PlayerInventory = null
 
+## Nur fuer das Anlegen aus dem Kontextmenue. Alles andere laeuft ueber das
+## Inventar — dieses Fenster soll den Spieler nicht mehr wissen als noetig.
+var player: PlayerController = null
+
 var _drag_stack: ItemStack = null
 var _drag_source: InventoryGridView = null
 
@@ -48,8 +52,9 @@ var _drag_ctrl: bool = false
 ## liegen wie vorher, sonst passt er nicht mehr auf seinen eigenen Platz.
 var _drag_original_rotated: bool = false
 
-## Worauf sich das offene Kontextmenue bezieht.
+## Worauf sich das offene Kontextmenue bezieht, und aus welchem Raster.
 var _menu_stack: ItemStack = null
+var _menu_source: InventoryGridView = null
 
 ## Was nach dem Loslassen noch auf die Mengenabfrage wartet.
 var _split_stack: ItemStack = null
@@ -91,9 +96,13 @@ func _ready() -> void:
 
 
 ## Öffnet das Fenster für eine Kiste.
-func open_for(p_container: LootContainer, p_inventory: PlayerInventory) -> void:
+## `p_player` wird fuer das Anlegen aus dem Kontextmenue gebraucht. Es darf
+## fehlen — dann bietet das Menue "Ausruesten" schlicht nicht an.
+func open_for(p_container: LootContainer, p_inventory: PlayerInventory,
+		p_player: PlayerController = null) -> void:
 	container = p_container
 	player_inventory = p_inventory
+	player = p_player
 
 	container.open()
 	if not container.item_revealed.is_connected(_on_item_revealed):
@@ -516,26 +525,57 @@ func _views() -> Array[InventoryGridView]:
 
 
 ## Rechtsklick auf einen Gegenstand — in der Kiste wie in den Taschen.
-func _on_item_right_clicked(stack: ItemStack, _view: InventoryGridView,
+func _on_item_right_clicked(stack: ItemStack, view: InventoryGridView,
 		at_position: Vector2) -> void:
-	if stack == null:
+	if stack == null or player_inventory == null:
 		return
-	var entries := ContextMenu.entries_for(stack)
+	var entries := ContextMenu.entries_for(stack, player_inventory.equipment)
 	if entries.is_empty():
 		return
 
 	_cancel_drag()
 	_tooltip.clear()
 	_menu_stack = stack
+	_menu_source = view
 	_context_menu.open(entries, at_position)
 
 
 func _on_menu_chosen(id: StringName) -> void:
 	var stack := _menu_stack
+	var source := _menu_source
 	_menu_stack = null
-	if stack == null or id != &"oeffnen":
+	_menu_source = null
+	if stack == null:
 		return
-	_container_window.open_for(stack, get_global_mouse_position())
+
+	match id:
+		&"oeffnen":
+			_container_window.open_for(stack, get_global_mouse_position())
+		&"ausruesten":
+			_equip(stack, source)
+
+
+## Legt einen Gegenstand direkt an — auch aus der Kiste heraus.
+##
+## Aus der Kiste wird er dafuer erst entnommen. Klappt das Anlegen nicht,
+## geht er unveraendert zurueck: Der Weg an den Koerper darf kein Weg sein,
+## auf dem etwas verlorengeht.
+func _equip(stack: ItemStack, source: InventoryGridView) -> void:
+	if player == null:
+		return
+
+	if source == _container_view and container != null:
+		var spot := container.contents.get_position(stack.instance_id)
+		var taken := container.take_out(stack.instance_id)
+		if taken == null:
+			return
+		if not player.equip_item(taken):
+			container.put_item(taken, spot.x, spot.y)
+		_notify_changed()
+		return
+
+	player.equip_item(stack, source.grid if source != null else null)
+	_notify_changed()
 
 
 ## Nimmt alles Aufgedeckte mit, was passt.

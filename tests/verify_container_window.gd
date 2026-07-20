@@ -62,9 +62,38 @@ func _test_entries() -> void:
 
 	var pack := ItemStack.create(BACKPACK, 1)
 	var entries := ContextMenu.entries_for(pack)
-	_check(entries.size() == 1, "der Rucksack bietet genau einen Eintrag (%d)" % entries.size())
+	_check(entries.size() == 1, "ohne Ausruestung bietet der Rucksack nur eines (%d)" % entries.size())
 	if entries.size() == 1:
-		_check(entries[0].get("id") == &"oeffnen", "und der heisst 'oeffnen'")
+		_check(entries[0].get("id") == &"oeffnen", "und das ist 'oeffnen'")
+
+	# Mit Ausruestung kommt "Ausruesten" dazu — UNTER "Oeffnen", so wie Lucas
+	# es beschrieben hat.
+	var equipment := Equipment.new()
+	var both := ContextMenu.entries_for(pack, equipment)
+	_check(both.size() == 2, "nicht angelegt gibt es zwei Eintraege (%d)" % both.size())
+	if both.size() == 2:
+		_check(both[0].get("id") == &"oeffnen" and both[1].get("id") == &"ausruesten",
+			"'Ausruesten' steht unter 'Oeffnen'")
+
+	# Angelegt verschwindet der Eintrag wieder — dort steckt er ja schon.
+	equipment.equip(pack, ItemData.EquipSlot.BACKPACK)
+	var worn := ContextMenu.entries_for(pack, equipment)
+	_check(worn.size() == 1 and worn[0].get("id") == &"oeffnen",
+		"angelegt bleibt nur 'Oeffnen' (%d Eintraege)" % worn.size())
+
+	# Ein ZWEITER Rucksack derselben Sorte laesst sich weiterhin anlegen.
+	# Es zaehlt das Exemplar, nicht die Vorlage — sonst waere nach dem ersten
+	# Rucksack kein zweiter mehr anziehbar.
+	var second := ItemStack.create(BACKPACK, 1)
+	var second_entries := ContextMenu.entries_for(second, equipment)
+	_check(second_entries.size() == 2,
+		"ein zweiter Rucksack bietet trotzdem 'Ausruesten' (%d)" % second_entries.size())
+
+	# Munition bleibt ohne Menue, auch mit Ausruestung.
+	_check(ContextMenu.entries_for(ammo, equipment).is_empty(),
+		"eine Patrone bietet auch mit Ausruestung nichts an")
+
+	equipment.free()
 
 
 func _test_window() -> void:

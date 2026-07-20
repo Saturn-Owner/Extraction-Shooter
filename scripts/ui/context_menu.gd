@@ -28,12 +28,24 @@ const OFFSET := Vector2(6.0, 6.0)
 ##
 ## An einer Stelle, weil beide Wirtfenster dieselbe Antwort brauchen — und
 ## damit sich im Test nachrechnen laesst, dass eine Patrone kein Menue bekommt.
-static func entries_for(stack: ItemStack) -> Array[Dictionary]:
+## `equipment` darf fehlen — dann gibt es kein "Ausruesten", weil niemand
+## weiss, ob der Gegenstand schon am Koerper haengt.
+static func entries_for(stack: ItemStack, equipment: Equipment = null) -> Array[Dictionary]:
 	var entries: Array[Dictionary] = []
 	if stack == null:
 		return entries
+
 	if stack.container != null:
 		entries.append({id = &"oeffnen", label = "Oeffnen"})
+
+	# Nur, was noch NICHT am Koerper haengt und ueberhaupt irgendwohin gehoert.
+	# Ein Rechtsklick auf den Ausruestungsplatz zeigt den Eintrag damit von
+	# selbst nicht — dort steckt es ja schon.
+	if equipment != null \
+			and equipment.get_slot_of(stack) == ItemData.EquipSlot.NONE \
+			and equipment.find_slot_for(stack) != ItemData.EquipSlot.NONE:
+		entries.append({id = &"ausruesten", label = "Ausruesten"})
+
 	return entries
 
 

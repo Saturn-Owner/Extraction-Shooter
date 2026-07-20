@@ -22,7 +22,11 @@ var _passed := 0
 func _initialize() -> void:
 	ItemRegistry.ensure_loaded()
 	print("=== Rucksack pruefen ===\n")
+	_run_all()
 
+
+## Getrennt von _initialize(), weil der letzte Test auf einen Frame wartet.
+func _run_all() -> void:
 	_test_item()
 	_test_loot_table()
 	_test_fits_in_pockets()
@@ -31,6 +35,7 @@ func _initialize() -> void:
 	_test_weapon_from_backpack()
 	_test_not_into_itself()
 	_test_weight_counts()
+	await _test_equip_item()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -214,6 +219,60 @@ func _test_weight_counts() -> void:
 	var full := pack.get_total_weight()
 
 	_check(full > empty, "voll wiegt er mehr als leer (%.2f statt %.2f kg)" % [full, empty])
+
+
+## Anlegen ueber das Kontextmenue — der Weg, den `equip_item()` geht.
+##
+## Der heikle Teil ist der TAUSCH: Wer einen zweiten Rucksack anzieht, darf den
+## ersten nicht verlieren, und er darf erst recht nicht im neuen landen.
+func _test_equip_item() -> void:
+	_section("Anlegen aus dem Menue")
+
+	var packed: PackedScene = load("res://scenes/player/player.tscn")
+	var player: PlayerController = packed.instantiate()
+	root.add_child(player)
+	await process_frame
+
+	var pack := ItemStack.create(BACKPACK, 1)
+	if not player.inventory.grid.add_item(pack):
+		_check(false, "Rucksack passt in die Taschen")
+		player.free()
+		return
+
+	_check(player.equip_item(pack), "der Rucksack laesst sich anlegen")
+	_check(player.equipment.get_item(ItemData.EquipSlot.BACKPACK) == pack,
+		"er haengt am Koerper")
+	_check(player.inventory.grid.get_stack(pack.instance_id) == null,
+		"und liegt nicht mehr in den Taschen")
+
+	# Etwas hineinlegen, damit ein Verlust auffaellt.
+	pack.container.add_item(ItemStack.create(&"ammo_9x19_fmj", 20))
+
+	# Zweiter Rucksack: Der erste muss unversehrt in die Taschen wandern.
+	var second := ItemStack.create(BACKPACK, 1)
+	player.inventory.grid.add_item(second)
+	_check(player.equip_item(second), "ein zweiter laesst sich anlegen")
+	_check(player.equipment.get_item(ItemData.EquipSlot.BACKPACK) == second,
+		"jetzt haengt der zweite am Koerper")
+	_check(player.inventory.grid.get_stack(pack.instance_id) != null,
+		"der erste liegt in den Taschen statt zu verschwinden")
+
+	# DIE eigentliche Falle: Der verdraengte Rucksack darf nicht im neuen
+	# gelandet sein. Dort waere er zwar auffindbar, aber der Spieler traegt
+	# dann einen Rucksack im Rucksack — und beim Ablegen ist alles weg.
+	_check(second.container.get_stack(pack.instance_id) == null,
+		"und NICHT im neuen Rucksack")
+	_check(pack.container.count_items(&"ammo_9x19_fmj", true) == 20,
+		"sein Inhalt ist unversehrt")
+
+	# Munition gehoert nirgendwohin an den Koerper.
+	var ammo := ItemStack.create(&"ammo_9x19_fmj", 10)
+	player.inventory.grid.add_item(ammo)
+	_check(not player.equip_item(ammo), "Munition laesst sich nicht anlegen")
+	_check(player.inventory.grid.get_stack(ammo.instance_id) != null,
+		"und bleibt dabei liegen, wo sie war")
+
+	player.free()
 
 
 # ---------------------------------------------------------------------------

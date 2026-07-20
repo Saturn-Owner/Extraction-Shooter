@@ -47,10 +47,30 @@ aber nichts, was mehr Platz schafft.
 - **Nicht auf einem unaufgedeckten Umriss.** Ein Menü mit "Oeffnen" würde
   verraten, dass dort ein Behälter liegt, und die Frage "warte ich das ab?"
   wäre entwertet.
+- Zweiter Eintrag darunter: **"Ausruesten"**, aber nur, solange der Gegenstand
+  **nicht** schon am Körper hängt. Damit geht ein gefundener Rucksack in zwei
+  Klicks an den Mann, statt über ins-Raster-ziehen → Tab → auf den Platz
+  ziehen. Gilt für **jedes** Ausrüstungsteil, nicht nur für Rucksäcke — eine
+  Sonderregel wäre willkürlich gewesen.
+- Aus der Kiste heraus funktioniert das auch: Der Gegenstand wird entnommen,
+  ohne je durch ein Raster zu wandern. Scheitert das Anlegen, geht er
+  unverändert auf seinen Platz in der Kiste zurück.
 - Zwei neue, bewusst allgemein gehaltene Bausteine: `ContextMenu` (Einträge
-  kommen von aussen — "Ablegen", "Anlegen", "Aufteilen" sind absehbar) und
+  kommen von aussen — "Ablegen" und "Aufteilen" sind absehbar) und
   `ContainerWindow`. Beide gab es im Projekt vorher nicht: **kein `PopupMenu`,
   kein `Window`, kein verschiebbares Panel und kein einziger Rechtsklick.**
+
+### Die Falle beim Tauschen
+
+Wer einen zweiten Rucksack anzieht, verdrängt den ersten. Der muss irgendwohin —
+und die naheliegende Reihenfolge (neuen anlegen, dann den alten wegräumen)
+hätte den alten **in den neuen gelegt**, samt allem, was darin lag. Ein
+Rucksack im Rucksack, unbemerkt, bis man ihn ablegt und alles weg ist.
+
+`equip_item()` nimmt deshalb erst ab, sucht dann Platz, und legt erst zuletzt
+an. Geht etwas schief, wird alles zurückgedreht. Der Test legt einen gefüllten
+Rucksack an, tauscht ihn gegen einen zweiten und prüft danach, dass der erste
+in den Taschen liegt, **nicht** im neuen, und seine 20 Patronen noch hat.
 - Das Fenster lässt sich **nicht aus dem Bild schieben** — es bleibt immer ein
   Streifen Titelleiste greifbar. Sonst bekäme man es nie wieder zu fassen und
   auch nicht mehr zu.
@@ -78,9 +98,9 @@ etwas weg ist:
 
 ### Verifikation
 
-Zwei neue Suiten: `tests/verify_backpack.gd` (**25 Prüfungen**) und
-`tests/verify_container_window.gd` (**29 Prüfungen**). Alle 15 Suiten grün,
-zusammen 1.128 Prüfungen.
+Zwei neue Suiten: `tests/verify_backpack.gd` (**35 Prüfungen**) und
+`tests/verify_container_window.gd` (**34 Prüfungen**). Alle 15 Suiten grün,
+zusammen 1.143 Prüfungen.
 
 **Von einem Menschen zu prüfen:** ob sich das Fenster gut anfassen und
 verschieben lässt, ob das Menü an der richtigen Stelle aufgeht, ob 24 Felder

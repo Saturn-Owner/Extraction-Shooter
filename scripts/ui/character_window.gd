@@ -82,8 +82,10 @@ var _drag_target_slot: ItemData.EquipSlot = ItemData.EquipSlot.NONE
 ## Ob beim Anfassen Strg gedrueckt war — dann wird nach der Menge gefragt.
 var _drag_ctrl: bool = false
 
-## Worauf sich das offene Kontextmenue bezieht.
+## Worauf sich das offene Kontextmenue bezieht — und aus welchem Raster der
+## Gegenstand kommt (null, wenn er an einem Ausruestungsplatz haengt).
 var _menu_stack: ItemStack = null
+var _menu_source: InventoryGrid = null
 
 var _split_stack: ItemStack = null
 var _split_target: InventoryGridView = null
@@ -291,23 +293,26 @@ func _on_slot_gui_input(event: InputEvent, slot: ItemData.EquipSlot) -> void:
 		return
 	if player == null or player.equipment == null:
 		return
-	_open_menu_for(player.equipment.get_item(slot), button.global_position)
+	# Aus einem Ausruestungsplatz kommt kein Quellraster — er haengt am Koerper.
+	_open_menu_for(player.equipment.get_item(slot), null, button.global_position)
 
 
 ## Rechtsklick auf einen Gegenstand im Raster.
-func _on_item_right_clicked(stack: ItemStack, _view: InventoryGridView,
+func _on_item_right_clicked(stack: ItemStack, view: InventoryGridView,
 		at_position: Vector2) -> void:
-	_open_menu_for(stack, at_position)
+	_open_menu_for(stack, view.grid, at_position)
 
 
 ## Oeffnet das Kontextmenue — oder gar nichts, wenn es fuer diesen Gegenstand
 ## nichts anzubieten gibt.
-func _open_menu_for(stack: ItemStack, at_position: Vector2) -> void:
-	if stack == null:
+func _open_menu_for(stack: ItemStack, source: InventoryGrid,
+		at_position: Vector2) -> void:
+	if stack == null or player == null:
 		return
-	var entries := ContextMenu.entries_for(stack)
+	var entries := ContextMenu.entries_for(stack, player.equipment)
 	if entries.is_empty():
 		return
+	_menu_source = source
 
 	# Ein Menue mitten im Ziehen waere ein Gegenstand, der am Zeiger klebt,
 	# waehrend man etwas anderes anklickt.
@@ -319,10 +324,18 @@ func _open_menu_for(stack: ItemStack, at_position: Vector2) -> void:
 
 func _on_menu_chosen(id: StringName) -> void:
 	var stack := _menu_stack
+	var source := _menu_source
 	_menu_stack = null
-	if stack == null or id != &"oeffnen":
+	_menu_source = null
+	if stack == null:
 		return
-	_container_window.open_for(stack, get_global_mouse_position())
+
+	match id:
+		&"oeffnen":
+			_container_window.open_for(stack, get_global_mouse_position())
+		&"ausruesten":
+			player.equip_item(stack, source)
+			_refresh()
 
 
 ## Klick auf einen belegten Platz legt ab — zurueck ins Inventar.

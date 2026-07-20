@@ -375,6 +375,63 @@ func equip_from_inventory(stack: ItemStack) -> bool:
 	return assign_weapon(stack)
 
 
+## Legt einen Gegenstand an, egal aus welchem Raster er kommt.
+##
+## `from` sagt, wo er gerade liegt. Ohne Angabe wird er in den eigenen Rastern
+## gesucht; kommt er von woanders her (etwa aus einer Kiste), muss der Aufrufer
+## ihn vorher dort entnommen haben.
+##
+## Erst pruefen, dann verschieben — wie `assign_weapon()` und
+## `stow_equipment()`. Scheitert es, bleibt alles unveraendert; ein halb
+## erledigtes Anlegen wuerde Ausruestung verschwinden lassen.
+func equip_item(stack: ItemStack, from: InventoryGrid = null) -> bool:
+	if equipment == null or inventory == null or stack == null:
+		return false
+
+	var slot := equipment.find_slot_for(stack)
+	if slot == ItemData.EquipSlot.NONE:
+		return false
+
+	# Waffen koennen das schon vollstaendig: Verdraengung, Magazin, Handwechsel.
+	if Equipment.is_weapon_slot(slot):
+		return assign_weapon(stack, slot)
+
+	var displaced := equipment.get_item(slot)
+	if displaced == stack:
+		return true
+
+	# ZUERST herausnehmen, dann Platz fuer den Verdraengten suchen.
+	#
+	# Andersherum belegt der Gegenstand seine Felder noch, waehrend fuer den
+	# Verdraengten Platz gesucht wird — bei zwoelf Feldern scheitert das
+	# regelmaessig, obwohl der Tausch aufgegangen waere.
+	var source := from
+	if source == null:
+		for grid_of in inventory.get_all_grids():
+			if grid_of.get_stack(stack.instance_id) != null:
+				source = grid_of
+				break
+	if source != null:
+		source.remove_item(stack.instance_id)
+
+	if displaced != null:
+		# Abnehmen, BEVOR ein Platz gesucht wird. Sonst zaehlt das Innenraster
+		# des alten Rucksacks noch als Ziel, und er wanderte in sich selbst —
+		# samt allem, was darin liegt.
+		equipment.unequip(slot)
+		if not inventory.stow(displaced):
+			# Kein Platz: alles zurueck auf Anfang. Lieber nicht anlegen, als
+			# dem Spieler stillschweigend Ausruestung zu loeschen.
+			equipment.equip(displaced, slot)
+			if source != null:
+				source.add_item(stack)
+			return false
+
+	equipment.equip(stack, slot)
+	inventory.notify_changed()
+	return true
+
+
 ## Ob `needle` dasselbe Raster ist wie `haystack` oder irgendwo darin steckt.
 ##
 ## Gebraucht, um zu verhindern, dass ein Behaelter in sich selbst wandert.
