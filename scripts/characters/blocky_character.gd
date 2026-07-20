@@ -180,6 +180,7 @@ func build() -> void:
 	var mount := Node3D.new()
 	mount.name = "Waffenpunkt"
 	mount.position = WEAPON_MOUNT
+	mount.rotation_degrees = WEAPON_MOUNT_ROTATION
 	add_child(mount)
 
 	for part: HealthSystem.Part in VERTICAL:
@@ -350,7 +351,23 @@ func hand_of(part: HealthSystem.Part) -> Node3D:
 ##
 ## Zum Nachladen reicht auch das nicht — dafür holt `CharacterWeapon` die
 ## Waffe kurz an den Körper heran, so wie ein Mensch es auch tut.
-const WEAPON_MOUNT := Vector3(0.16, 1.30, -0.14)
+const WEAPON_MOUNT := Vector3(0.18, 1.30, -0.14)
+
+## Wie die Waffe im Anschlag steht.
+##
+## ---------------------------------------------------------------------------
+## ANGEWINKELT, NICHT ACHSPARALLEL
+##
+## Eine Waffe, die genau nach vorn zeigt und dabei rechts am Körper sitzt,
+## steht schräg zur Ziellinie — der Schütze zielte an ihr vorbei. In
+## Wirklichkeit liegt der Schaft an der rechten Schulter und die Mündung
+## wandert zur Mitte, die Waffe steht also im Winkel zum Körper.
+##
+## Das löst nebenbei zwei Probleme auf einmal: Der Schaft schwenkt nach
+## rechts aus der Brust heraus, und die Mündung — und mit ihr der
+## Stützgriff — kommt zur Mitte, also näher an die linke Hand. Erst dadurch
+## darf die Waffe überhaupt so weit rechts sitzen.
+const WEAPON_MOUNT_ROTATION := Vector3(0.0, 12.0, 0.0)
 
 
 ## Der Knoten, an den eine Waffe gehängt wird.
