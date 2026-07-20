@@ -81,16 +81,29 @@ const VOICES := 3
 ## geht sie zurück in den Anschlag.
 const RELOAD_SHIFT := Vector3(-0.16, -0.02, 0.10)
 
-## Wie die Waffe dabei gedreht wird, in Grad.
+## Wie die Waffe dabei gedreht wird — DIESELBE HALTUNG WIE BEIM SPIELER.
 ##
-## KRÄFTIG, NICHT ANDEUTUNGSWEISE. Bei 16 Grad Kippen war der Wechsel kaum
-## vom Anschlag zu unterscheiden — man sah eine Hand wandern, aber die Waffe
-## stand fast still, und das liest sich nicht als Handgriff.
+## ---------------------------------------------------------------------------
+## DIE WERTE STEHEN NICHT HIER, SONDERN AM WAFFENMODELL
 ##
-## 35 Grad Kippen drehen den Schacht sichtbar zur greifenden Hand, die
-## zusätzliche Drehung um die Hochachse holt die Waffe quer vor den Körper.
-## Genau so nimmt man ein Gewehr zum Wechseln herum.
-const RELOAD_ROTATION := Vector3(0.0, 14.0, -35.0)
+## `WeaponViewmodel` führt bereits `hip_rotation_degrees` und
+## `reload_rotation_degrees` — die Haltung, die der Spieler im Kameraraum
+## sieht, wenn er nachlädt. Der Unterschied der beiden ist die Drehung, die
+## das Nachladen ausmacht: Nase hoch, zur Seite gekippt, etwas eingedreht.
+##
+## Sie hier abzuschreiben hiesse, dass Spieler und Figur beim nächsten
+## Abstimmen auseinanderlaufen. Zwei Fassungen derselben Bewegung, von denen
+## eine irgendwann vergessen wird — genau das, was das Projekt bei den
+## Waffenmodellen ausschliesst.
+##
+## Eigene Werte gibt es deshalb nur für die VERSCHIEBUNG: Die ist beim
+## Spieler winzig, weil die Waffe ohnehin dicht vor der Kamera hängt. Die
+## Figur muss sie dagegen wirklich an sich heranziehen, sonst kommt der
+## linke Arm nicht an den Schacht.
+func _reload_rotation() -> Vector3:
+	if viewmodel == null:
+		return Vector3.ZERO
+	return viewmodel.reload_rotation_degrees - viewmodel.hip_rotation_degrees
 
 ## In diesem Abschnitt wird herangezogen bzw. wieder ausgerichtet.
 const BRING_IN_END := 0.12
@@ -182,7 +195,7 @@ func _update_hold_pose() -> void:
 			amount = 1.0 - smoothstep(PUSH_OUT_START, 1.0, progress)
 
 	position = _home_position + RELOAD_SHIFT * amount
-	rotation_degrees = RELOAD_ROTATION * amount
+	rotation_degrees = _reload_rotation() * amount
 
 
 ## Lädt endlos nach, mit Pause dazwischen.
