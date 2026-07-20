@@ -80,7 +80,8 @@ $suites = @(
     "verify_weapon_handling",
     "verify_attachments",
     "verify_workbench",
-    "verify_blast"
+    "verify_blast",
+    "verify_player_audio"
 )
 
 $failed = @()
