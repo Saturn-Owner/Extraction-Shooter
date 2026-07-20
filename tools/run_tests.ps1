@@ -76,8 +76,7 @@ $suites = @(
     "verify_feedback",
     "verify_loadout",
     "verify_raid",
-    "verify_health",
-    "verify_injuries"
+    "verify_health"
 )
 
 $failed = @()

@@ -100,37 +100,6 @@ theme_override_constants/separation = 8
 [node name="Rechts" type="VBoxContainer" parent="Layout/Inhalt/Mitte"]
 theme_override_constants/separation = 10
 
-[node name="Medizin" type="VBoxContainer" parent="Layout/Inhalt/Mitte"]
-custom_minimum_size = Vector2(320, 0)
-theme_override_constants/separation = 6
-
-[node name="Titel" type="Label" parent="Layout/Inhalt/Mitte/Medizin"]
-text = "Behandlung"
-theme_override_colors/font_color = Color(0.6, 0.63, 0.67, 1)
-theme_override_font_sizes/font_size = 11
-
-[node name="Liste" type="VBoxContainer" parent="Layout/Inhalt/Mitte/Medizin"]
-size_flags_vertical = 3
-theme_override_constants/separation = 4
-
-[node name="Fortschritt" type="ProgressBar" parent="Layout/Inhalt/Mitte/Medizin"]
-custom_minimum_size = Vector2(0, 22)
-max_value = 1.0
-step = 0.001
-show_percentage = false
-
-[node name="Laeuft" type="Label" parent="Layout/Inhalt/Mitte/Medizin"]
-theme_override_colors/font_color = Color(0.82, 0.72, 0.5, 1)
-theme_override_font_sizes/font_size = 11
-
-[node name="Abbrechen" type="Button" parent="Layout/Inhalt/Mitte/Medizin"]
-text = "Abbrechen"
-
-[node name="Testknopf" type="Button" parent="Layout/Inhalt/Mitte/Medizin"]
-custom_minimum_size = Vector2(0, 30)
-text = "Testverletzung zufuegen"
-tooltip_text = "Nur zum Ausprobieren: verpasst dir irgendwo eine Wunde."
-
 [node name="Inventar" type="VBoxContainer" parent="Layout/Inhalt/Mitte"]
 theme_override_constants/separation = 6
 

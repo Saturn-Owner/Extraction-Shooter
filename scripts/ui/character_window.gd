@@ -99,12 +99,6 @@ var _slot_buttons: Dictionary = {}
 @onready var _inventory_title: Label = $Layout/Inhalt/Mitte/Inventar/Titel
 @onready var _stats: HBoxContainer = $Layout/Inhalt/Werte
 @onready var _effects: Label = $Layout/Inhalt/Auswirkung
-@onready var _medical_column: VBoxContainer = $Layout/Inhalt/Mitte/Medizin
-@onready var _medical_list: VBoxContainer = $Layout/Inhalt/Mitte/Medizin/Liste
-@onready var _progress: ProgressBar = $Layout/Inhalt/Mitte/Medizin/Fortschritt
-@onready var _progress_label: Label = $Layout/Inhalt/Mitte/Medizin/Laeuft
-@onready var _cancel_button: Button = $Layout/Inhalt/Mitte/Medizin/Abbrechen
-@onready var _test_button: Button = $Layout/Inhalt/Mitte/Medizin/Testknopf
 @onready var _ghost: DragGhost = $DragGhost
 @onready var _split_prompt: SplitPrompt = $SplitPrompt
 @onready var _tooltip: ItemTooltip = $ItemTooltip
@@ -124,9 +118,6 @@ func _ready() -> void:
 	_inventory_view.item_hovered.connect(_on_item_hovered)
 	_split_prompt.confirmed.connect(_on_split_confirmed)
 	_split_prompt.cancelled.connect(_on_split_cancelled)
-
-	_cancel_button.pressed.connect(_on_cancel_treatment)
-	_test_button.pressed.connect(_on_test_injury)
 
 	_build_slots()
 	_switch_tab(Tab.AUSRUESTUNG)
@@ -191,7 +182,6 @@ func _switch_tab(tab: Tab) -> void:
 	_weapons_row.visible = tab == Tab.AUSRUESTUNG
 	_inventory_column.visible = tab == Tab.AUSRUESTUNG
 	_effects.visible = tab == Tab.GESUNDHEIT
-	_medical_column.visible = tab == Tab.GESUNDHEIT
 
 	_figure_hint.text = "Klicken zeigt Einzelheiten" if tab == Tab.GESUNDHEIT else ""
 	_figure.queue_redraw()
@@ -493,7 +483,6 @@ func _ensure_stats_built() -> void:
 	if _stats.get_child_count() > 0:
 		return
 	_stats.add_child(_make_stat("hp", "Trefferpunkte"))
-	_stats.add_child(_make_stat("blut", "Blut"))
 	_stats.add_child(_make_stat("energie", "Energie"))
 	_stats.add_child(_make_stat("wasser", "Wasser"))
 	_stats.add_child(_make_stat("waerme", "Koerperwaerme"))
@@ -538,7 +527,6 @@ func _refresh() -> void:
 
 	if _tab == Tab.GESUNDHEIT:
 		_effects.text = _describe_condition()
-		_refresh_medical()
 
 
 func _refresh_stats() -> void:
@@ -547,11 +535,6 @@ func _refresh_stats() -> void:
 		var max_hp := HealthSystem.get_total_max_hp()
 		_set_stat("hp", "%d / %d" % [roundi(hp), roundi(max_hp)],
 			_value_color(hp / maxf(1.0, max_hp)))
-
-		# Blut steht direkt neben den Trefferpunkten, weil es die zweite,
-		# schnellere Uhr ist: Man kann mit vollen Trefferpunkten verbluten.
-		var blood := player.health.get_blood_ratio()
-		_set_stat("blut", "%d %%" % roundi(blood * 100.0), _value_color(blood))
 
 	if player.survival != null:
 		var s := player.survival
@@ -574,127 +557,6 @@ func _refresh_detail() -> void:
 	pass
 
 
-# ---------------------------------------------------------------------------
-# Behandlung
-# ---------------------------------------------------------------------------
-
-## Woran die Liste erkennt, dass sie sich geaendert hat.
-##
-## Ohne das wuerden die Knoepfe in JEDEM Frame neu gebaut — man koennte
-## keinen davon treffen, weil er im Moment des Klicks schon wieder ein
-## anderer waere.
-var _medical_signature := ""
-
-
-func _refresh_medical() -> void:
-	if player == null:
-		return
-
-	var treating := player.is_treating()
-	_progress.visible = treating
-	_progress_label.visible = treating
-	_cancel_button.visible = treating
-	_medical_list.visible = not treating
-
-	if treating:
-		_progress.value = player.get_treatment_progress()
-		_progress_label.text = player.get_treatment_label()
-		return
-
-	var items := player.get_medical_items()
-
-	# Die Beschriftung haengt am gewaehlten Koerperteil: Derselbe Verband
-	# heisst am blutenden Arm etwas anderes als am heilen Bein.
-	var signature := "%d|" % int(_selected)
-	for stack in items:
-		signature += "%d:%d," % [stack.instance_id, stack.quantity]
-	if signature == _medical_signature:
-		return
-	_medical_signature = signature
-
-	for child in _medical_list.get_children():
-		child.queue_free()
-
-	if items.is_empty():
-		var empty := Label.new()
-		empty.text = "Nichts dabei."
-		empty.add_theme_font_size_override("font_size", 11)
-		empty.add_theme_color_override("font_color", Color(0.45, 0.47, 0.50))
-		_medical_list.add_child(empty)
-		return
-
-	for stack in items:
-		_medical_list.add_child(_make_medical_button(stack))
-
-
-func _make_medical_button(stack: ItemStack) -> Button:
-	var med := stack.get_data() as MedicalData
-	var button := Button.new()
-	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	button.add_theme_font_size_override("font_size", 12)
-
-	var count := "" if stack.quantity <= 1 else "  x%d" % stack.quantity
-	button.text = "%s%s" % [med.display_name, count]
-
-	# Was nichts bringt, laesst sich gar nicht erst druecken. Ein Verband,
-	# der sich an einem heilen Arm verbraucht, waere im Raid ein teurer
-	# Fehlklick.
-	var usable := player.can_treat_with(med, _selected)
-	button.disabled = not usable
-
-	var seconds := med.use_seconds
-	button.tooltip_text = "%s\n%s\n\n%s\nZiel: %s" % [
-		med.display_name,
-		med.get_kind_name(),
-		"laeuft, bis der Koerper voll ist" if med.kind == MedicalData.Kind.BLOOD
-			else "dauert %.0f Sekunden" % seconds,
-		HealthSystem.get_part_name(_selected),
-	]
-
-	button.pressed.connect(_on_medical_pressed.bind(stack))
-	return button
-
-
-func _on_medical_pressed(stack: ItemStack) -> void:
-	if player == null:
-		return
-	player.start_treatment(stack, _selected)
-	_medical_signature = ""
-	_refresh()
-
-
-func _on_cancel_treatment() -> void:
-	if player != null:
-		player.cancel_treatment()
-	_medical_signature = ""
-
-
-## Testknopf: verpasst dem Spieler irgendwo eine Verletzung.
-##
-## Das ist bewusst grob — es geht nicht um eine faire Simulation, sondern
-## darum, dass man einmal FUEHLT, wie sich ein gebrochenes Bein oder eine
-## Arterie anfuehlt, ohne dafuer erst Gegner zu brauchen.
-func _on_test_injury() -> void:
-	if player == null or player.injuries == null:
-		return
-
-	var kinds := InjuryRegistry.get_all()
-	if kinds.is_empty():
-		return
-
-	var injury: InjuryData = kinds[randi() % kinds.size()]
-	var parts := HealthSystem.Part.values()
-	var part: HealthSystem.Part = parts[randi() % parts.size()]
-
-	player.injuries.add_data(injury, part)
-
-	# Eine Wunde ohne Schaden waere nur eine Anzeige. Ein bisschen was kostet
-	# jeder Treffer.
-	player.health.apply_damage(part, randf_range(8.0, 22.0))
-	_medical_signature = ""
-	_refresh()
-
-
 ## Sagt in Worten, was die Werte gerade anrichten. Ein Balken allein erklaert
 ## nicht, warum man ploetzlich langsamer laeuft.
 func _describe_condition() -> String:
@@ -705,18 +567,8 @@ func _describe_condition() -> String:
 		notes.append("%s:  %d / %d" % [
 			name,
 			roundi(player.health.get_hp(_selected)),
-			roundi(player.health.get_effective_max_hp(_selected)),
+			roundi(HealthSystem.get_max_hp(_selected)),
 		])
-
-		# Ein geflicktes Koerperteil sieht sonst einfach nur "voll" aus,
-		# obwohl sein Maximum geschrumpft ist.
-		var scale := player.health.get_max_hp_scale(_selected)
-		if scale < 1.0:
-			notes.append("Operiert:  Maximum dauerhaft auf %d %%" % roundi(scale * 100.0))
-
-		if player.injuries != null:
-			for injury in player.injuries.get_injuries(_selected):
-				notes.append("%s — %s" % [injury.get_kind_name(), injury.description])
 		if HealthSystem.is_vital(_selected):
 			notes.append("Lebenswichtig — faellt es aus, ist der Raid vorbei.")
 		elif player.health.is_destroyed(_selected):
@@ -731,14 +583,6 @@ func _describe_condition() -> String:
 			notes.append("Armverletzung:  %d %% unruhiger" % roundi(arms * 100.0))
 		if player.health.is_destroyed(HealthSystem.Part.STOMACH):
 			notes.append("Bauchverletzung:  Hunger und Durst steigen schneller")
-
-	if player.health != null and player.health.get_blood_penalty() > 0.0:
-		notes.append("Blutverlust:  %d %% langsamer" % roundi(
-			player.health.get_blood_penalty() * 100.0))
-
-	if player.injuries != null and player.injuries.is_pain_relieved():
-		notes.append("Schmerzmittel:  noch %d Sekunden" % roundi(
-			player.injuries.pain_relief_remaining))
 
 	if player.survival != null:
 		var cold := player.survival.get_cold_movement_penalty()

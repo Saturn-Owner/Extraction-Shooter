@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/player_controller.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/combat/weapon.gd" id="2_weapon"]
@@ -7,7 +7,6 @@
 [ext_resource type="Script" path="res://scripts/player/health_system.gd" id="5_health"]
 [ext_resource type="Script" path="res://scripts/player/survival_stats.gd" id="6_survival"]
 [ext_resource type="Script" path="res://scripts/player/equipment.gd" id="7_equipment"]
-[ext_resource type="Script" path="res://scripts/player/injury_system.gd" id="8_injuries"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.35
@@ -33,9 +32,6 @@ script = ExtResource("6_survival")
 
 [node name="Equipment" type="Node" parent="."]
 script = ExtResource("7_equipment")
-
-[node name="Injuries" type="Node" parent="."]
-script = ExtResource("8_injuries")
 
 [node name="CameraPivot" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 0)

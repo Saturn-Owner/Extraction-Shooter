@@ -36,15 +36,6 @@ const STARTING_KIT := [
 	{id = &"weapon_pistol_g17", count = 1},
 	{id = &"ammo_556x45_m855a1", count = 60},
 	{id = &"ammo_9x19_fmj", count = 34},
-	# Medizin ist bewusst vollstaendig dabei, solange es keine Gegner gibt:
-	# Ohne sie waere der Testknopf im Gesundheitsfenster eine Sackgasse.
-	# Sobald man Verbaende im Raid findet, gehoert das hier gekuerzt.
-	{id = &"med_surgical_kit", count = 1},
-	{id = &"med_blood_bag", count = 1},
-	{id = &"med_splint", count = 1},
-	{id = &"med_bandage", count = 3},
-	{id = &"med_tourniquet", count = 2},
-	{id = &"med_painkillers", count = 2},
 ]
 
 var _spawn: Vector3
@@ -112,11 +103,7 @@ func _any_window_open() -> bool:
 func _on_player_died(part: HealthSystem.Part) -> void:
 	if _raid.state != RaidManager.State.LAEUFT:
 		return
-	var cause := _player.health.death_cause
-	if cause == "verblutet":
-		_show_message("VERBLUTET — niemand hat die Blutung gestillt", 30.0)
-	else:
-		_show_message("Toedlich getroffen: %s" % HealthSystem.get_part_name(part), 30.0)
+	_show_message("Toedlich getroffen: %s" % HealthSystem.get_part_name(part), 30.0)
 	_raid.die()
 
 

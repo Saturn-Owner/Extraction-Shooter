@@ -353,18 +353,6 @@ func _test_scene_wiring() -> void:
 		_check(character.is_open(), "das Fenster oeffnet sich")
 		_check(character.get_node("Layout/Inhalt/Werte").get_child_count() > 0,
 			"die Werteleiste ist gefuellt")
-
-		# Der Reiter Gesundheit baut die Behandlungsliste auf. Ohne diesen
-		# Test faellt ein Tippfehler dort erst auf, wenn jemand im Raid
-		# blutend davorsteht.
-		character._switch_tab(CharacterWindow.Tab.GESUNDHEIT)
-		await process_frame
-		var before: int = player.injuries.get_count()
-		character._on_test_injury()
-		_check(player.injuries.get_count() == before + 1,
-			"der Testknopf verpasst eine Verletzung")
-		_check(character.get_node("Layout/Inhalt/Mitte/Medizin/Liste").get_child_count() > 0,
-			"die Behandlungsliste ist gefuellt")
 		character.close()
 		_check(not character.is_open(), "und laesst sich schliessen")
 

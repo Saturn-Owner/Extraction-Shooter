@@ -71,37 +71,10 @@ const PART_NAMES := {
 	Part.RIGHT_LEG: "Rechtes Bein",
 }
 
-## Blutvolumen in Prozent. Blutungen ziehen es herunter, der Blutbeutel
-## fuellt es auf. Bei null ist man tot — unabhaengig davon, wie voll die
-## Trefferpunkte noch sind.
-##
-## Das ist der Grund, warum ein Verband wichtiger ist als ein Erste-Hilfe-
-## Kasten: Trefferpunkte stehen still, Blut laeuft weiter.
-const MAX_BLOOD := 100.0
-
-## Ab hier wird einem schwarz vor Augen — langsamer, zittriger.
-const BLOOD_WEAK := 60.0
-const BLOOD_CRITICAL := 30.0
-
-## Was eine Operation kostet: Das Koerperteil kommt zurueck, haelt aber
-## dauerhaft weniger aus. Wer sich dasselbe Bein dreimal flicken laesst,
-## hat am Ende ein Bein, das kaum noch etwas abkann.
-const SURGERY_MAX_HP_LOSS := 0.25
-const SURGERY_MAX_HP_FLOOR := 0.40
-
 var is_dead: bool = false
-
-## Woran gestorben wurde — fuer die Meldung am Raid-Ende.
-var death_cause: String = ""
-
-var blood: float = MAX_BLOOD
 
 ## Part -> aktuelle Trefferpunkte.
 var _hp: Dictionary = {}
-
-## Part -> Anteil des urspruenglichen Maximums, der noch uebrig ist.
-## 1.0 = unversehrt, 0.4 = dreimal operiert.
-var _max_scale: Dictionary = {}
 
 
 ## Beim Erzeugen, nicht erst beim Betreten des Baums.
@@ -115,18 +88,10 @@ func _init() -> void:
 
 
 ## Alles auf Anfang — für einen neuen Raid.
-##
-## Die Narben verschwinden dabei ebenfalls. Ob eine Operation ueber den Raid
-## hinaus nachwirkt, entscheidet spaeter das Lager — hier waere es nur eine
-## stille Strafe fuer einen Tod, den man ohnehin schon bezahlt hat.
 func reset() -> void:
 	is_dead = false
-	death_cause = ""
-	blood = MAX_BLOOD
 	_hp.clear()
-	_max_scale.clear()
 	for part in MAX_HP:
-		_max_scale[part] = 1.0
 		_hp[part] = float(MAX_HP[part])
 
 
@@ -138,19 +103,8 @@ static func get_part_name(part: Part) -> String:
 	return PART_NAMES.get(part, "Unbekannt")
 
 
-## Das Maximum eines unversehrten Koerpers. Fuer Vergleiche und Anzeige.
 static func get_max_hp(part: Part) -> float:
 	return float(MAX_HP.get(part, 1.0))
-
-
-## Das Maximum DIESES Koerpers — nach allem, was schon geflickt wurde.
-func get_effective_max_hp(part: Part) -> float:
-	return get_max_hp(part) * float(_max_scale.get(part, 1.0))
-
-
-## Wie viel vom urspruenglichen Maximum uebrig ist (1.0 = unversehrt).
-func get_max_hp_scale(part: Part) -> float:
-	return float(_max_scale.get(part, 1.0))
 
 
 func get_hp(part: Part) -> float:
@@ -158,7 +112,7 @@ func get_hp(part: Part) -> float:
 
 
 func get_ratio(part: Part) -> float:
-	var maximum := get_effective_max_hp(part)
+	var maximum := get_max_hp(part)
 	return 0.0 if maximum <= 0.0 else clampf(get_hp(part) / maximum, 0.0, 1.0)
 
 
@@ -206,7 +160,6 @@ func apply_damage(part: Part, amount: float) -> float:
 		part_destroyed.emit(part)
 		if is_vital(part):
 			is_dead = true
-			death_cause = get_part_name(part)
 			died.emit(part)
 
 	# Was ueber die Trefferpunkte hinausging, geht VERLOREN.
@@ -224,64 +177,12 @@ func heal(part: Part, amount: float) -> float:
 	if amount <= 0.0:
 		return 0.0
 	var before := get_hp(part)
-	var after := minf(get_effective_max_hp(part), before + amount)
+	var after := minf(get_max_hp(part), before + amount)
 	_hp[part] = after
 	var healed := after - before
 	if healed > 0.0:
 		part_healed.emit(part, healed)
 	return healed
-
-
-## Blutverlust. Bei null ist Schluss — auch mit vollen Trefferpunkten.
-func lose_blood(amount: float) -> void:
-	if is_dead or amount <= 0.0:
-		return
-	blood = maxf(0.0, blood - amount)
-	if blood <= 0.0:
-		is_dead = true
-		death_cause = "verblutet"
-		died.emit(Part.CHEST)
-
-
-func restore_blood(amount: float) -> float:
-	if amount <= 0.0:
-		return 0.0
-	var before := blood
-	blood = minf(MAX_BLOOD, blood + amount)
-	return blood - before
-
-
-func get_blood_ratio() -> float:
-	return clampf(blood / MAX_BLOOD, 0.0, 1.0)
-
-
-## Wie stark Blutverlust schwaecht. Erst ab BLOOD_WEAK spuerbar — man soll
-## eine Blutung ueberleben koennen, wenn man sie schnell versorgt.
-func get_blood_penalty() -> float:
-	if blood >= BLOOD_WEAK:
-		return 0.0
-	var span := maxf(1.0, BLOOD_WEAK)
-	return clampf((BLOOD_WEAK - blood) / span, 0.0, 1.0) * 0.45
-
-
-## Operation am ausgefallenen Koerperteil: Es kommt zurueck, haelt aber
-## dauerhaft weniger aus.
-##
-## Gibt zurueck, ob operiert wurde. An einem Koerperteil, das noch
-## Trefferpunkte hat, gibt es nichts zu operieren — dafuer sind Verband und
-## Erste Hilfe da, und das Kit ist zu wertvoll, um es dafuer zu verbrauchen.
-func apply_surgery(part: Part) -> bool:
-	if is_dead or not is_destroyed(part):
-		return false
-
-	var scale: float = float(_max_scale.get(part, 1.0))
-	_max_scale[part] = maxf(SURGERY_MAX_HP_FLOOR, scale - SURGERY_MAX_HP_LOSS)
-
-	# Das Koerperteil kommt mit dem NEUEN Maximum zurueck, nicht halb tot:
-	# Wer 20 Sekunden im Feuer operiert, soll danach laufen koennen.
-	_hp[part] = get_effective_max_hp(part)
-	part_healed.emit(part, _hp[part])
-	return true
 
 
 ## Wie stark ein zerschossenes Bein das Tempo druekt.
@@ -319,26 +220,16 @@ func get_metabolism_multiplier() -> float:
 
 func to_dict() -> Dictionary:
 	var parts := {}
-	var scales := {}
 	for part in _hp:
 		parts[str(part)] = _hp[part]
-		scales[str(part)] = _max_scale.get(part, 1.0)
-	return {"dead": is_dead, "blood": blood, "parts": parts, "scales": scales}
+	return {"dead": is_dead, "parts": parts}
 
 
 func from_dict(data: Dictionary) -> void:
 	reset()
 	is_dead = bool(data.get("dead", false))
-	blood = clampf(float(data.get("blood", MAX_BLOOD)), 0.0, MAX_BLOOD)
-
-	var scales: Dictionary = data.get("scales", {})
-	for key in scales:
-		var scaled := int(key)
-		if MAX_HP.has(scaled):
-			_max_scale[scaled] = clampf(float(scales[key]), SURGERY_MAX_HP_FLOOR, 1.0)
-
 	var parts: Dictionary = data.get("parts", {})
 	for key in parts:
 		var part := int(key)
 		if MAX_HP.has(part):
-			_hp[part] = clampf(float(parts[key]), 0.0, get_effective_max_hp(part))
+			_hp[part] = clampf(float(parts[key]), 0.0, get_max_hp(part))
