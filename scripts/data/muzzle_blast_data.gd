@@ -47,6 +47,19 @@ extends Resource
 ## sonst erholt sich die Waffe mitten in der eigenen Salve.
 @export_range(0.0, 1.0) var hold_seconds: float = 0.15
 
+## Wieviel Rauch ein gedämpfter Schuss erzeugt.
+##
+## EIGENER WERT, WEIL DER RAUCH EINE EIGENE URSACHE HAT: Er kommt nicht vom
+## Knall, sondern vom Schalldämpfer, der die Pulvergase abfängt statt sie frei
+## ausblasen zu lassen. Ohne Dämpfer qualmt es gar nicht.
+@export_range(0.01, 1.0) var smoke_rise_per_shot: float = 0.13
+
+## Wie lange es dauert, bis kein Rauch mehr NACHKOMMT.
+##
+## Nicht zu verwechseln mit `smoke_fall` — das ist, wie lange die vorhandenen
+## Schwaden noch stehen.
+@export_range(0.5, 30.0) var smoke_recovery_seconds: float = 3.0
+
 @export_group("Abklingzeiten je Effekt")
 
 ## Die vier Effekte teilen sich EINE Quelle, haben aber verschiedenes Gedächtnis.

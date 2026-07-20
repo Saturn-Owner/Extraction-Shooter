@@ -23,6 +23,7 @@ func _initialize() -> void:
 	_test_single_shot_does_nothing()
 	_test_burst_crosses_threshold()
 	_test_suppressor_protects()
+	_test_only_the_suppressor_smokes()
 	_test_semi_auto_stays_clean()
 	_test_everything_returns_to_rest()
 	_test_envelopes_have_different_memory()
@@ -212,6 +213,8 @@ func _test_everything_returns_to_rest() -> void:
 	_check(is_zero_approx(blast.flash), "Blendung ist exakt null (%.6f)" % blast.flash)
 	_check(is_zero_approx(blast.smoke), "Rauch ist exakt null (%.6f)" % blast.smoke)
 	_check(is_zero_approx(blast.shake), "Wackeln ist exakt null (%.6f)" % blast.shake)
+	_check(is_zero_approx(blast.smoke_strain),
+		"auch die Rauchquelle ist exakt null (%.6f)" % blast.smoke_strain)
 	_check(is_zero_approx(blast.tinnitus), "Pfeifen ist exakt null (%.6f)" % blast.tinnitus)
 
 
@@ -234,10 +237,16 @@ func _test_envelopes_have_different_memory() -> void:
 		"die Blendung ist da noch da (%.3f)" % blast.flash)
 
 	_advance(blast, 1.2)
-	_check(blast.tinnitus > blast.smoke,
-		"das Pfeifen hält länger als der Rauch (%.3f > %.3f)" % [blast.tinnitus, blast.smoke])
-	_check(blast.smoke > blast.flash,
-		"der Rauch hält länger als die Blendung (%.3f > %.3f)" % [blast.smoke, blast.flash])
+	_check(blast.tinnitus > blast.flash,
+		"das Pfeifen hält länger als die Blendung (%.3f > %.3f)" % [blast.tinnitus, blast.flash])
+
+	# Der Rauch hängt an einer eigenen Quelle und braucht deshalb eine eigene
+	# Waffe zum Vergleich — eine gedämpfte.
+	var smoky := _make()
+	_fire_burst(smoky, _weapon(&"weapon_rifle_ar15", &"ar15_muzzle_suppressor"), 30)
+	_advance(smoky, 2.0)
+	_check(smoky.smoke > blast.flash,
+		"der Rauch hält länger als die Blendung (%.3f > %.3f)" % [smoky.smoke, blast.flash])
 
 	# Und nach fünf Sekunden pfeift es als einziges noch.
 	_advance(blast, 3.0)
@@ -436,3 +445,50 @@ func _test_in_level() -> void:
 			"und zwar dicht (%.2f)" % blast.smoke_cloud.amount_ratio)
 
 	player.queue_free()
+
+
+## RAUCH KOMMT NUR MIT SCHALLDÄMPFER — und das ist die Umkehrung von allem
+## anderen hier.
+##
+## Blendung, Wackeln und Pfeifen kommen vom KNALL, der Dämpfer schützt davor.
+## Rauch entsteht dagegen, WEIL ein Dämpfer dran ist: Er fängt die Pulvergase
+## ab und lässt sie langsam und gekühlt austreten, statt sie in einem Schlag
+## frei auszublasen.
+##
+## Damit hat der Dämpfer zwei Seiten, und genau das soll dieser Test
+## festhalten. Fällt er weg, verschwindet der Nachteil des Dämpfers still, und
+## er wäre wieder eine Entscheidung ohne Preis.
+func _test_only_the_suppressor_smokes() -> void:
+	_section("Nur der Dämpfer qualmt")
+
+	var loud := _weapon(&"weapon_rifle_ar15")
+	var quiet := _weapon(&"weapon_rifle_ar15", &"ar15_muzzle_suppressor")
+
+	_check(not MuzzleBlast.is_suppressed(loud), "die nackte AR-15 gilt als ungedämpft")
+	_check(MuzzleBlast.is_suppressed(quiet), "mit Dämpfer gilt sie als gedämpft")
+
+	# Ungedämpft: viel Belastung, KEIN Rauch.
+	var bare := _make()
+	_fire_burst(bare, loud, 30)
+	_check(bare.intensity() > 0.9, "ungedämpft blendet und wackelt es (%.2f)" % bare.intensity())
+	_check(is_zero_approx(bare.smoke_intensity()),
+		"aber es qualmt EXAKT nicht (%.6f)" % bare.smoke_intensity())
+
+	# Gedämpft: kein Knall, dafür Rauch.
+	var suppressed := _make()
+	_fire_burst(suppressed, quiet, 30)
+	_check(is_zero_approx(suppressed.intensity()),
+		"gedämpft blendet und wackelt nichts (%.6f)" % suppressed.intensity())
+	_check(suppressed.smoke_intensity() > 0.9,
+		"dafür qualmt es kräftig (%.2f)" % suppressed.smoke_intensity())
+
+	# Ein einzelner gedämpfter Schuss darf noch nicht vernebeln.
+	var single := _make()
+	single.add(quiet)
+	_check(is_zero_approx(single.smoke_intensity()),
+		"ein Einzelschuss qualmt nicht (%.6f)" % single.smoke_intensity())
+
+	# Und der Rauch verzieht sich wieder.
+	_advance(suppressed, 12.0)
+	_check(is_zero_approx(suppressed.smoke_strain) and is_zero_approx(suppressed.smoke),
+		"nach zwölf Sekunden ist die Luft wieder klar")

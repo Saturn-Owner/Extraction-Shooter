@@ -4,6 +4,17 @@
 ## hinschaut — und man sieht das Ziel nicht mehr.
 ##
 ## ---------------------------------------------------------------------------
+## NUR MIT SCHALLDÄMPFER
+##
+## Das ist kein Balancing-Einfall, sondern wie es funktioniert: Ein Dämpfer
+## fängt die Pulvergase ab und lässt sie langsam und gekühlt austreten, statt
+## sie in einem Schlag frei auszublasen. Genau deshalb qualmt eine gedämpfte
+## Waffe sichtbar, während bei einer ungedämpften fast nichts übrig bleibt.
+##
+## Damit hat der Dämpfer zwei Seiten: Er nimmt Knall, Blendung und Rückstoss —
+## und handelt sich dafür eine Wolke vor dem eigenen Lauf ein.
+##
+## ---------------------------------------------------------------------------
 ## DER DAMPF BLEIBT IN DER WELT STEHEN
 ##
 ## `local_coords = false`: Ausgestossene Schwaden hängen dort, wo sie entstanden
@@ -29,7 +40,7 @@ extends GPUParticles3D
 const LIFETIME := 2.6
 
 ## Obergrenze. Dauerfeuer darf die Bildrate nicht auffressen.
-const MAX_PARTICLES := 48
+const MAX_PARTICLES := 64
 
 const COLOR := Color(0.72, 0.71, 0.68)
 
@@ -58,27 +69,29 @@ func _make_process_material() -> ParticleProcessMaterial:
 
 	# Nach vorn aus dem Lauf, wie das Mündungsfeuer.
 	material.direction = Vector3(0.0, 0.0, -1.0)
-	material.spread = 22.0
-	material.initial_velocity_min = 0.9
-	material.initial_velocity_max = 2.0
+	material.spread = 48.0
+	material.initial_velocity_min = 1.6
+	material.initial_velocity_max = 3.4
 
 	# Pulverdampf ist warm und steigt. Sehr langsam, sonst sieht es aus wie
 	# Rauchzeichen statt wie eine stehende Wolke.
 	# Sehr langsam nach oben. Zieht der Dampf schnell ab, haengt er nie dort,
 	# wo man hinschaut — und genau das soll er.
 	material.gravity = Vector3(0.0, 0.16, 0.0)
-	material.damping_min = 1.4
-	material.damping_max = 2.2
+	# Kräftig bremsen: Der Dampf schiesst heraus und bleibt dann stehen,
+	# statt als Strahl davonzufliegen.
+	material.damping_min = 2.2
+	material.damping_max = 3.4
 
 	# KLEIN ANFANGEN, GROSS WERDEN. Die Mündung sitzt 55 cm vor der Kamera —
 	# eine Schwade, die dort schon 20 cm gross ist, füllt ein Viertel des
 	# Bildes und steht einem sofort im Auge statt vor dem Lauf.
-	material.scale_min = 0.35
-	material.scale_max = 0.7
+	material.scale_min = 0.5
+	material.scale_max = 1.1
 	var growth := Curve.new()
-	growth.add_point(Vector2(0.0, 0.25))
-	growth.add_point(Vector2(0.35, 1.0))
-	growth.add_point(Vector2(1.0, 1.6))
+	growth.add_point(Vector2(0.0, 0.18))
+	growth.add_point(Vector2(0.25, 1.0))
+	growth.add_point(Vector2(1.0, 2.6))
 	var growth_texture := CurveTexture.new()
 	growth_texture.curve = growth
 	material.scale_curve = growth_texture
@@ -105,7 +118,7 @@ func _make_process_material() -> ParticleProcessMaterial:
 
 func _make_mesh() -> Mesh:
 	var mesh := QuadMesh.new()
-	mesh.size = Vector2(0.46, 0.46)
+	mesh.size = Vector2(0.62, 0.62)
 
 	var material := StandardMaterial3D.new()
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -124,6 +137,9 @@ func _make_mesh() -> Mesh:
 
 
 ## Setzt den Emitter an die Mündung und regelt die Dichte.
+##
+## `density` kommt aus `MuzzleBlast.smoke` und ist nur dann über null, wenn
+## ein Schalldämpfer dranhängt — siehe Klassenkopf.
 ##
 ## `amount_ratio` skaliert die aktive Partikelzahl, ohne das System neu
 ## aufzubauen — anders als `amount` zu ändern, was alle laufenden Schwaden

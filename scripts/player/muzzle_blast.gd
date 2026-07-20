@@ -29,8 +29,22 @@ extends Node
 
 const DEFAULT_CONFIG := "res://assets/data/effects/muzzle_blast_default.tres"
 
-## Die aktuelle Belastung, 0 bis 1. Einzige Quelle für alle Effekte.
+## Die aktuelle Belastung, 0 bis 1. Quelle für Blendung, Wackeln und Pfeifen.
 var strain: float = 0.0
+
+## Der Rauch hat eine EIGENE Quelle, und zwar mit umgekehrtem Vorzeichen.
+##
+## Blendung, Wackeln und Tinnitus kommen vom KNALL — je lauter, desto
+## schlimmer, und der Schalldämpfer schützt davor. Rauch entsteht dagegen,
+## WEIL ein Dämpfer dran ist: Er fängt die Pulvergase ab und kühlt sie, statt
+## sie frei ausblasen zu lassen. Deshalb qualmt eine gedämpfte Waffe sichtbar,
+## eine ungedämpfte kaum.
+##
+## Das ist bewusst keine gemeinsame Quelle mehr. Beides an `strain` zu hängen
+## hiesse, zwei gegenläufige Vorgänge in eine Zahl zu pressen — dann müsste
+## irgendwo ein Sonderfall stehen, und Sonderfälle in einer Kurve findet
+## später niemand wieder.
+var smoke_strain: float = 0.0
 
 ## Hüllkurven je Effekt. Steigen sofort mit, fallen verschieden schnell.
 var flash: float = 0.0
@@ -142,6 +156,11 @@ func add(weapon_data: WeaponData) -> void:
 		return
 
 	strain = minf(1.0, strain + rise_for(weapon_data))
+
+	# Gedämpft qualmt es, ungedämpft nicht.
+	if is_suppressed(weapon_data):
+		smoke_strain = minf(1.0, smoke_strain + config.smoke_rise_per_shot)
+
 	_time_since_shot = 0.0
 
 	# Die Hüllkurven werden HIER angestossen, nicht jeden Frame nachgezogen.
@@ -153,9 +172,16 @@ func add(weapon_data: WeaponData) -> void:
 	# ihn danach in ihrem eigenen Tempo.
 	var hit := intensity()
 	flash = maxf(flash, hit)
-	smoke = maxf(smoke, hit)
 	shake = maxf(shake, hit)
 	tinnitus = maxf(tinnitus, hit)
+	smoke = maxf(smoke, smoke_intensity())
+
+
+## Ob an dieser Waffe ein Schalldämpfer hängt.
+static func is_suppressed(weapon_data: WeaponData) -> bool:
+	if weapon_data == null:
+		return false
+	return weapon_data.loudness_multiplier < WeaponAudio.SUPPRESSED_BELOW
 
 
 ## Wieviel Belastung ein Schuss dieser Waffe hinzufügt.
@@ -180,6 +206,13 @@ func intensity() -> float:
 	return smoothstep(config.threshold, 1.0, strain)
 
 
+## Wieviel Rauch gerade entsteht, 0 bis 1. Eigene Quelle, siehe oben.
+func smoke_intensity() -> float:
+	if config == null:
+		return 0.0
+	return smoothstep(config.threshold, 1.0, smoke_strain)
+
+
 func _process(delta: float) -> void:
 	if config == null:
 		return
@@ -190,6 +223,7 @@ func _process(delta: float) -> void:
 	# eigenen Salve ab.
 	if _time_since_shot > config.hold_seconds:
 		strain = maxf(0.0, strain - delta / config.recovery_seconds)
+		smoke_strain = maxf(0.0, smoke_strain - delta / config.smoke_recovery_seconds)
 
 	# Jede Hüllkurve vergisst in ihrem eigenen Tempo. Angestossen werden sie
 	# ausschliesslich in add().
@@ -289,6 +323,7 @@ static func _decay(current: float, fall_time: float, delta: float) -> float:
 ## Alles zurücksetzen — etwa beim Betreten eines neuen Levels.
 func reset() -> void:
 	strain = 0.0
+	smoke_strain = 0.0
 	flash = 0.0
 	smoke = 0.0
 	shake = 0.0
