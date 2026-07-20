@@ -495,11 +495,25 @@ func _test_starting_kit() -> void:
 	var script: GDScript = level.get_script()
 	var kit: Array = script.get("STARTING_KIT")
 
-	# Eine Waffe liegt in der Hand, also einen Eintrag weniger im Raster.
-	var expected: int = kit.size() - 1
+	# Waffen haengen am Koerper, alles andere liegt im Raster. Nichts darf
+	# beim Austeilen verschwinden — genau das ist passiert, als die Taschen
+	# auf zwoelf Felder schrumpften und die Pistole keinen Platz mehr fand.
+	var expected_grid := 0
+	var expected_weapons := 0
+	for entry in kit:
+		var data := ItemRegistry.get_item(entry.id)
+		if data != null and data.category == ItemData.Category.WEAPON:
+			expected_weapons += int(entry.count)
+		else:
+			expected_grid += 1
+
 	var actual := player.inventory.grid.get_item_count()
-	_check(actual == expected,
-		"komplette Startausruestung passt ins Raster (%d von %d)" % [actual, expected])
+	_check(actual == expected_grid,
+		"alles Nichtwaffliche liegt im Raster (%d von %d)" % [actual, expected_grid])
+
+	var worn := player.equipment.get_all_items().size()
+	_check(worn == expected_weapons,
+		"und jede Waffe haengt am Koerper (%d von %d)" % [worn, expected_weapons])
 
 	# Gezielt das Gewehr, nicht irgendeine Waffe.
 	var equipped := player.inventory.equipped_weapon
@@ -670,6 +684,24 @@ func _test_extraction_secures_loot() -> void:
 		"auch die gefuehrte Waffe ist im Lager")
 	_check(player.inventory.grid.get_item_count() == 0, "der Spieler traegt nichts mehr")
 	_check(player.inventory.equipped_weapon == null, "und hat keine Waffe mehr in der Hand")
+	_check(player.equipment.get_all_items().is_empty(),
+		"und nichts mehr am Koerper")
+
+	# Die ZWEITE Waffe steckt im Waffenplatz und nie in der Hand. Sie kam
+	# frueher nicht im Lager an: Der Spieler ueberlebte, seine Sekundaerwaffe
+	# nicht.
+	var second := _make_player()
+	await process_frame
+	var second_raid := _make_raid(second)
+	second.assign_weapon(ItemStack.create(&"weapon_rifle_ar15", 1))
+	second.assign_weapon(ItemStack.create(&"weapon_pistol_g17", 1))
+	second.select_weapon_slot(ItemData.EquipSlot.PRIMARY)
+	second_raid.start_raid()
+	second_raid.extract()
+	_check(second_raid.stash.count_items(&"weapon_pistol_g17", true) == 1,
+		"auch die Sekundaerwaffe kommt im Lager an")
+	second_raid.free()
+	second.free()
 
 	raid.free()
 	player.free()
@@ -700,9 +732,18 @@ func _test_death_loses_loot() -> void:
 	raid.start_raid()
 	_check(player.inventory.grid.get_item_count() > 0, "Spieler hat Beute dabei")
 
+	# Auch etwas am Koerper, nicht nur im Raster.
+	player.assign_weapon(ItemStack.create(&"weapon_pistol_g17", 1))
+	_check(not player.equipment.get_all_items().is_empty(), "und etwas am Koerper")
+
 	raid.die()
 	_check(player.inventory.grid.get_item_count() == 0, "nach dem Tod ist das Inventar leer")
 	_check(player.inventory.equipped_weapon == null, "die gefuehrte Waffe ist weg")
+
+	# Was am Koerper haengt, ueberlebte den Tod frueher — also ausgerechnet
+	# Waffen und Ruestung. "Tod = alles weg" waere damit eine leere Drohung.
+	_check(player.equipment.get_all_items().is_empty(),
+		"auch der Koerper ist leer")
 	_check(raid.stash.get_item_count() == stash_before,
 		"das LAGER bleibt unangetastet (%d)" % raid.stash.get_item_count())
 	_check(raid.stash.count_items(&"ammo_556x45_m995", true) == 30,

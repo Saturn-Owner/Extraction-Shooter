@@ -75,8 +75,10 @@ func _count_carried() -> int:
 	if _player == null or _player.inventory == null:
 		return 0
 	var count := _player.inventory.grid.get_item_count()
-	if _player.inventory.equipped_weapon != null:
-		count += 1
+	# Was am Koerper haengt, wird mitgenommen und zaehlt mit — sonst meldet
+	# die Statistik, man sei mit leeren Haenden losgezogen.
+	if _player.equipment != null:
+		count += _player.equipment.get_all_items().size()
 	return count
 
 
@@ -107,6 +109,13 @@ func die() -> void:
 			_player.inventory.grid_height
 		)
 		_player.inventory.equipped_weapon = null
+
+		# Auch alles am Koerper. Ohne das ueberleben genau die Sachen den Tod,
+		# die man am Koerper traegt — also Waffen und Ruestung, das Wertvollste.
+		# "Tod = alles weg" waere dann eine leere Drohung.
+		if _player.equipment != null:
+			_player.equipment.clear()
+
 		_player.inventory.changed.emit()
 
 	raid_ended.emit(false, 0)
@@ -130,11 +139,27 @@ func _move_carried_to_stash() -> int:
 	# stiller Verlust, den niemand bemerkt.
 	_player.unload_weapon()
 
-	# Die Waffe in der Hand zuerst — sie ist meist das Wertvollste.
-	if inventory.equipped_weapon != null:
-		if stash.add_item(inventory.equipped_weapon):
-			inventory.equipped_weapon = null
+	# Alles am Koerper zuerst — Waffen und Ruestung sind meist das Wertvollste.
+	#
+	# Frueher stand hier nur die Waffe IN DER HAND. Die zweite Waffe steckte
+	# im Waffenplatz und kam nie im Lager an: Sie ueberlebte den Raid nicht,
+	# obwohl der Spieler heil rauskam. Genau der Verlust, den diese Funktion
+	# verhindern soll.
+	if _player.equipment != null:
+		# Platz fuer Platz statt clear(): Was nicht ins Lager passt, MUSS am
+		# Koerper bleiben. Ein pauschales Leeren wuerde genau die Gegenstaende
+		# vernichten, die gerade nicht untergekommen sind.
+		for slot in Equipment.SLOT_ORDER:
+			var worn := _player.equipment.get_item(slot)
+			if worn == null:
+				continue
+			if not stash.add_item(worn):
+				push_warning("[RaidManager] Lager voll — %s bleibt am Koerper" % worn.item_id)
+				continue
+			_player.equipment.unequip(slot)
 			secured += 1
+
+	inventory.equipped_weapon = null
 
 	for item in inventory.grid.get_all_stacks():
 		if stash.add_item(item):

@@ -57,6 +57,13 @@ func _test_weapon_slots() -> void:
 
 	var packed: PackedScene = load("res://scenes/player/player.tscn")
 	var player: PlayerController = packed.instantiate()
+
+	# Grosses Raster: Hier geht es um die Waffenplaetze, nicht um Platzmangel.
+	# In den nackten Taschen (6x2) liegen schon zwei Waffen nicht nebeneinander.
+	var inventory: PlayerInventory = player.get_node("Inventory")
+	inventory.grid_width = 10
+	inventory.grid_height = 8
+
 	root.add_child(player)
 	await process_frame
 

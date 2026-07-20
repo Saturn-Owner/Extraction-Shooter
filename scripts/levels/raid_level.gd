@@ -63,25 +63,31 @@ func _ready() -> void:
 
 func _give_starting_kit() -> void:
 	for entry in STARTING_KIT:
+		var data := ItemRegistry.get_item(entry.id)
+
+		# Waffen kommen direkt an den Koerper, nicht ueber das Raster.
+		#
+		# Frueher liefen sie durch das Inventar und wanderten von dort auf den
+		# Waffenplatz. Seit die Taschen nur noch zwoelf Felder haben, ging die
+		# Pistole dabei still verloren: Das Gewehr belegte zehn davon, und fuer
+		# die Pistole war beim Austeilen kein Platz mehr — obwohl das Gewehr
+		# eine Zeile spaeter ohnehin an den Koerper gewandert waere.
+		if data != null and data.category == ItemData.Category.WEAPON:
+			for i in entry.count:
+				if not _player.assign_weapon(ItemStack.create(entry.id, 1)):
+					push_error("[Raid] Kein Waffenplatz frei fuer %s" % entry.id)
+			continue
+
 		if not _player.inventory.add(entry.id, entry.count):
-			# Nicht stillschweigend schlucken: Ein fehlendes Gewehr faellt
-			# sonst erst auf, wenn jemand im Raid danach sucht.
+			# Nicht stillschweigend schlucken: Fehlende Munition faellt sonst
+			# erst auf, wenn jemand im Raid nachladen will.
 			push_error("[Raid] Startausruestung passt nicht ins Inventar: %s" % entry.id)
 
-	# Gezielt das Gewehr in die Hand nehmen, nicht "irgendeine" Waffe.
-	# get_carried_weapons() garantiert keine Reihenfolge — sobald sich die
-	# Ausruestung aendert, haette man sonst zufaellig die Pistole.
-	var weapons := _player.inventory.get_carried_weapons()
-	var chosen: ItemStack = null
-	for stack in weapons:
-		if stack.item_id == &"weapon_rifle_ar15":
-			chosen = stack
-			break
-	if chosen == null and not weapons.is_empty():
-		chosen = weapons[0]
-
-	if chosen != null:
-		_player.equip_from_inventory(chosen)
+	# Gezielt das Gewehr in die Hand, nicht die zuletzt angelegte Waffe.
+	# assign_weapon() nimmt jede neue Waffe in die Hand — sonst stuende man
+	# mit der Pistole da, nur weil sie in der Liste weiter unten steht.
+	if not _player.select_weapon_slot(ItemData.EquipSlot.PRIMARY):
+		_player.select_weapon_slot(ItemData.EquipSlot.SECONDARY)
 
 
 func _on_window_opened() -> void:

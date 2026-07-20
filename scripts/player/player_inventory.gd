@@ -22,7 +22,7 @@ signal weapon_equipped(stack: ItemStack)
 
 ## Grösse des Rasters, das man OHNE Ausrüstung hat — die eigenen Taschen.
 ##
-## 16 Felder sind wenig, und das ist der Punkt: Ohne Weste und Rucksack soll
+## 12 Felder sind wenig, und das ist der Punkt: Ohne Weste und Rucksack soll
 ## man kaum etwas mittragen können. Wer mehr will, muss Ausrüstung finden und
 ## anziehen. Das ist die Entscheidung, die ein Extraction-Shooter braucht —
 ## bei 80 Feldern von Anfang an gäbe es sie nicht.
@@ -31,11 +31,11 @@ signal weapon_equipped(stack: ItemStack)
 ## sein eigenes Innenraster mitbringen; dann wird das hier der nackte
 ## Grundstock, auf den beides addiert wird.
 ##
-## ACHTUNG: Ein Sturmgewehr (5x2) passt nur noch QUER hinein und füllt dann
-## fünf der acht Reihen. Das ist Absicht, aber es heisst auch: Wer zwei
-## Gewehre einpacken will, braucht die Waffenplätze.
-@export var grid_width: int = 2
-@export var grid_height: int = 8
+## ACHTUNG: Ein Sturmgewehr (5x2) belegt zehn dieser zwölf Felder. Es passt
+## also hinein, aber danach ist praktisch nichts mehr übrig. Wer eine zweite
+## Waffe mitnehmen will, braucht die Waffenplätze, nicht die Taschen.
+@export var grid_width: int = 6
+@export var grid_height: int = 2
 
 var grid: InventoryGrid
 

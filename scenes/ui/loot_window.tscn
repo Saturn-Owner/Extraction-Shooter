@@ -84,7 +84,7 @@ text = "Ziehen zum Verschieben  |  R dreht beim Ziehen  |  Doppelklick schickt h
 theme_override_colors/font_color = Color(0.62, 0.66, 0.7, 1)
 
 [node name="PlayerView" type="Control" parent="Layout/Columns/Right"]
-custom_minimum_size = Vector2(140, 460)
+custom_minimum_size = Vector2(350, 130)
 mouse_filter = 1
 script = ExtResource("2_grid_view")
 
