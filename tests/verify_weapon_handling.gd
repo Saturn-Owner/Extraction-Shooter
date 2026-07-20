@@ -27,6 +27,9 @@ func _initialize() -> void:
 	_test_jamming()
 	_test_jam_chance_grows_with_wear()
 	_test_jam_never_loses_ammo()
+	_test_jam_survives_weapon_switch()
+	_test_chamber_only_reload()
+	await _test_viewmodel_arms()
 	_test_aiming_reduces_spread()
 	_test_generated_meshes_are_closed()
 	_test_every_weapon_builds()
@@ -305,6 +308,246 @@ func _count_jams(weapon: Weapon, samples: int) -> int:
 
 
 ## Zielen muss messbar praeziser sein, nicht nur optisch anders.
+## Eine Ladehemmung darf den Waffenwechsel ueberleben.
+##
+## ---------------------------------------------------------------------------
+## SONST IST WEGSTECKEN DER BILLIGSTE AUSWEG
+##
+## `is_jammed` stand nicht im Magazingedaechtnis des Spielers. Taste 2, Taste 1
+## — und die Waffe war sauber, waehrend das richtige Beheben `jam_clear_time`
+## kostet. Gemeldet wurde nicht der Exploit, sondern seine Folge: das
+## seltsame Nachladen danach, siehe _test_chamber_only_reload().
+func _test_jam_survives_weapon_switch() -> void:
+	_section("Hemmung ueberlebt den Waffenwechsel")
+
+	var weapon := _make_weapon()
+	weapon.rounds_in_magazine = 30
+	weapon.round_chambered = false
+	weapon.is_jammed = true
+
+	# Genau das tut player_controller beim Wechsel.
+	var remembered := {
+		"rounds": weapon.rounds_in_magazine,
+		"chambered": weapon.round_chambered,
+		"jammed": weapon.is_jammed,
+	}
+	weapon.restore_magazine(int(remembered["rounds"]),
+		bool(remembered["chambered"]), bool(remembered["jammed"]))
+
+	_check(weapon.is_jammed, "nach dem Zurueckwechseln klemmt sie weiterhin")
+	_check(not weapon.request_reload(),
+		"und laesst sich nicht einfach nachladen")
+
+	# Ohne den gemerkten Wert muss der Standard weiter sauber sein: Wer
+	# restore_magazine ohne dritten Wert ruft, bekommt keine Hemmung
+	# geschenkt.
+	weapon.restore_magazine(30, true)
+	_check(not weapon.is_jammed, "ohne Angabe bleibt sie hemmungsfrei")
+
+
+## Volles Magazin, leere Kammer: Es wird nur durchgeladen.
+##
+## ---------------------------------------------------------------------------
+## DIE ANIMATION DARF NICHTS ZEIGEN, WAS NICHT PASSIERT
+##
+## Gemeldet beim Spielen: "wechselt manchmal gar nicht das Magazin, sondern
+## zieht nur den Stift nach hinten, und dann hat man wieder Munition."
+##
+## Genau so war es. Nach einer Hemmung ist das Magazin voll und der Lauf leer.
+## Nachladen liess dann den vollen Magazinwechsel abspielen, fuellte nichts
+## nach (`get_missing_rounds()` ist null) und schob am Ende eine Patrone aus
+## dem Magazin in die Kammer — 30 wurden zu 29.
+func _test_chamber_only_reload() -> void:
+	_section("Durchladen statt Magazinwechsel")
+
+	var weapon := _make_weapon()
+	var size: int = weapon.data.magazine_size
+
+	var reported := [false]
+	weapon.reload_started.connect(
+		func(_d: float, _empty: bool, only: bool) -> void: reported[0] = only)
+
+	# --- Volles Magazin, leerer Lauf ---
+	weapon.rounds_in_magazine = size
+	weapon.round_chambered = false
+	_check(weapon.request_reload(), "nachladen ist moeglich")
+	_check(weapon._reload_chamber_only, "es gilt als blosses Durchladen")
+	_check(reported[0], "und wird so gemeldet, damit die Animation es weiss")
+
+	while weapon.is_reloading():
+		weapon._advance_reload(1.0 / 60.0)
+	_check(weapon.round_chambered, "danach steckt eine Patrone im Lauf")
+	_check(weapon.get_total_rounds() == size,
+		"und es ist keine verschwunden (%d von %d)"
+			% [weapon.get_total_rounds(), size])
+
+	# --- Ein echter Wechsel bleibt ein echter Wechsel ---
+	weapon.rounds_in_magazine = 3
+	weapon.round_chambered = false
+	weapon.request_reload()
+	_check(not weapon._reload_chamber_only,
+		"ein halbleeres Magazin wird weiterhin gewechselt")
+	_check(not reported[0], "und auch so gemeldet")
+
+
+## Die Haende, die der Spieler an seiner Waffe sieht.
+##
+## ---------------------------------------------------------------------------
+## DIE LAENGE ERGIBT SICH AUS DER WAFFE
+##
+## Erster Versuch waren 0,15 und 0,17 m — "Kameragroesse" hatte ich als
+## kuerzer verstanden. Der Vorderschaft liegt aber 0,59 m von der linken
+## Schulter entfernt; der Arm reichte nicht einmal in die Naehe und blieb auf
+## halbem Weg stehen. Im Bild sah man nur eine dunkle Ecke unten.
+##
+## Geprueft wird deshalb die REICHWEITE gegen den tatsaechlichen Bedarf, nicht
+## eine Zahl gegen sich selbst.
+func _test_viewmodel_arms() -> void:
+	_section("Haende am Kameramodell")
+
+	var reach: float = ViewmodelArms.UPPER_LENGTH + ViewmodelArms.LOWER_LENGTH
+
+	# --- HAENDE GIBT ES NUR, WO DIE GRIFFPUNKTE GEMESSEN SIND ---
+	#
+	# Eine Waffe ohne gemessene Punkte bekaeme Haende, die sichtbar daneben
+	# fassen - schlimmer als gar keine. Jede Waffe entscheidet das selbst
+	# ueber `shows_hands`, nicht eine Liste im Kameracode.
+	#
+	# Geprueft wird die BEDINGUNG, nicht die Auswahl: Wer den Schalter setzt,
+	# muss auch Griffpunkte liefern. Damit darf die naechste Waffe jederzeit
+	# dazukommen, ohne dass dieser Test angefasst wird.
+	var with_hands: Array[String] = []
+	for entry in ItemRegistry.get_by_category(ItemData.Category.WEAPON):
+		var wd := entry as WeaponData
+		var vm := wd.create_viewmodel()
+		vm.weapon_data = wd
+		root.add_child(vm)
+		await process_frame
+		if vm.shows_hands:
+			with_hands.append(String(wd.id))
+			_check(vm.grip_point != null and vm.support_point != null,
+				"%s zeigt Haende und nennt dafuer Griff und Vorderschaft"
+					% wd.id)
+		vm.queue_free()
+		await process_frame
+
+	_check(with_hands.size() >= 1,
+		"mindestens eine Waffe hat Haende (%s)" % ", ".join(with_hands))
+	_check(with_hands.size() == 1 and with_hands[0] == "weapon_rifle_ar15",
+		"und zwar vorerst nur die AR-15 (%s)" % ", ".join(with_hands))
+
+	# Wie weit muessen die Haende wirklich? Aus den Griffpunkten der AR-15 in
+	# ihrer Ruhelage, nicht geschaetzt.
+	var data := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var model := data.create_viewmodel()
+	model.weapon_data = data
+	root.add_child(model)
+	# Erst nach einem Bild laeuft _ready() und damit _collect_parts() — vorher
+	# sind grip_point und support_point noch null. Dieselbe Falle wie bei den
+	# Figuren im Testgelaende.
+	await process_frame
+	model.position = model.hip_position
+	model.rotation_degrees = model.hip_rotation_degrees
+
+	_check(model.grip_point != null and model.support_point != null,
+		"das Waffenmodell nennt Griff und Vorderschaft")
+	if model.grip_point == null or model.support_point == null:
+		model.queue_free()
+		return
+
+	var to_grip := ViewmodelArms.RIGHT_SHOULDER.distance_to(
+		model.grip_point.position + model.position)
+	var to_fore := ViewmodelArms.LEFT_SHOULDER.distance_to(
+		model.support_point.position + model.position)
+
+	_check(reach > to_grip,
+		"der rechte Arm reicht an den Griff (%.3f von %.3f m)" % [to_grip, reach])
+	_check(reach > to_fore,
+		"der linke an den Vorderschaft (%.3f von %.3f m)" % [to_fore, reach])
+
+	# Nicht beliebig lang: Ein Arm, der immer gestreckt ist, sieht steif aus.
+	_check(reach < to_fore + 0.20,
+		"und nicht unnoetig weit darueber (%.3f gegen %.3f m)" % [reach, to_fore])
+
+	# Duenner als ein Weltglied — das war der eigentliche Punkt an
+	# "Kameragroesse".
+	_check(ViewmodelArms.UPPER_THICK < 0.10,
+		"die Glieder sind schlank genug fuer 30 cm vor dem Auge (%.3f m)"
+			% ViewmodelArms.UPPER_THICK)
+
+	# --- DIE FARBE KOMMT VOM KOERPER ---
+	#
+	# Es ist derselbe Mensch: Was man am eigenen Arm sieht, muss zu dem
+	# passen, was andere von aussen sehen. Hier stand erst ein selbst
+	# gewaehltes Olivgruen, und beim Umschalten auf F5 wechselte die Figur
+	# sichtbar die Kleidung.
+	var sleeve := ViewmodelArms._skin_material()
+	_check(sleeve.albedo_color.is_equal_approx(BlockyCharacter.COLOR_HEALTHY),
+		"der Aermel hat die Farbe des Koerpers")
+
+	# --- DER NACHLADEWEG IST VOLLSTAENDIG ---
+	#
+	# Der erste Anlauf hatte den Ablauf grob nachgebaut und fuer den
+	# Abschnitt "neues Magazin holen" gar nichts gesetzt — die Hand blieb
+	# stehen, und das Nachladen sah abgebrochen aus.
+	#
+	# Geprueft wird die BAHN, nicht der Code: An den sechs Stationen muss die
+	# Hand wirklich woanders sein.
+	var handguard := Vector3(0.13, -0.15, -0.46)
+	var magwell := Vector3(-0.10, -0.23, -0.43)
+	var pulled := magwell + Vector3(0.0, -0.08, 0.0)
+	var pouch := Vector3(-0.22, -0.46, -0.10)
+	var handle := Vector3(0.06, -0.15, -0.29)
+
+	# GEZIELT GEPRUEFT, NICHT "sechs verschiedene Orte".
+	#
+	# Genau das hatte ich bei den Figuren schon einmal falsch: Greifen (0,20)
+	# und Einschieben (0,80) passieren BEIDE am Magazinschacht — sie muessen
+	# zusammenfallen. Ein Test auf sechs verschiedene Stellen ist deshalb
+	# falsch und wurde hier prompt ein zweites Mal geschrieben.
+	# An den WEGMARKEN gemessen, nicht an gegriffenen Zahlen dazwischen.
+	# Erster Versuch pruefte bei 0,20 und 0,92 — dort ist die Hand schon
+	# wieder unterwegs, und beide Pruefungen waren rot, obwohl der Ablauf
+	# stimmte.
+	var during_grip := (CharacterAnimation.RELOAD_REACH
+		+ CharacterAnimation.RELOAD_GRIP) * 0.5
+	var at_grip := CharacterAnimation.reload_hand_path(during_grip, handguard,
+		magwell, pulled, pouch, handle)
+	var at_seat := CharacterAnimation.reload_hand_path(
+		CharacterAnimation.RELOAD_SEAT, handguard, magwell, pulled, pouch, handle)
+	var at_charge := CharacterAnimation.reload_hand_path(
+		CharacterAnimation.RELOAD_CHARGE, handguard, magwell, pulled, pouch, handle)
+
+	_check(at_grip.distance_to(magwell) < 0.01,
+		"waehrend des Greifens liegt die Hand am Schacht (%.3f m)"
+			% at_grip.distance_to(magwell))
+	_check(at_seat.distance_to(magwell) < 0.01,
+		"beim Einschieben wieder dort — dieselbe Stelle, mit Absicht")
+	_check(at_charge.distance_to(handle) < 0.01,
+		"und zum Schluss am Ladehebel (%.3f m)"
+			% at_charge.distance_to(handle))
+	_check(at_grip.distance_to(handguard) > 0.15,
+		"keine davon mehr am Vorderschaft")
+
+	# Am Schluss zurueck an den Schaft — sonst bliebe die Hand am Ladehebel
+	# haengen und die naechste Bewegung faenge falsch an.
+	var ending := CharacterAnimation.reload_hand_path(1.0, handguard, magwell,
+		pulled, pouch, handle)
+	_check(ending.distance_to(handguard) < 0.01,
+		"und am Ende liegt die Hand wieder am Vorderschaft (%.3f m)"
+			% ending.distance_to(handguard))
+
+	# Die Tasche liegt unter dem Bildrand: Man sieht die Hand hinuntergehen,
+	# nicht die Tasche selbst.
+	var fetching := CharacterAnimation.reload_hand_path(0.45, handguard,
+		magwell, pulled, pouch, handle)
+	_check(fetching.y < magwell.y - 0.10,
+		"beim Holen greift sie deutlich nach unten (%.3f gegen %.3f m)"
+			% [fetching.y, magwell.y])
+
+	model.queue_free()
+
+
 func _test_aiming_reduces_spread() -> void:
 	_section("Zielen verringert die Streuung")
 

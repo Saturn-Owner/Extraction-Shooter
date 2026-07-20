@@ -60,6 +60,26 @@ var mounted: Dictionary = {}
 
 @export_group("Haltung")
 
+## Ob der Spieler seine eigenen Hände an dieser Waffe sieht.
+##
+## ---------------------------------------------------------------------------
+## JEDE WAFFE ENTSCHEIDET DAS SELBST
+##
+## `ViewmodelArms` greift `grip_point` und `support_point` — die muss es
+## geben, und sie müssen an dieser Waffe auch stimmen. Bei der AR-15 sind sie
+## am Modell gemessen; bei den übrigen gibt es sie noch nicht.
+##
+## Hände an eine Waffe zu setzen, deren Griffpunkte nicht stimmen, sieht
+## schlimmer aus als gar keine: Sie fassen dann sichtbar daneben. Deshalb
+## steht der Schalter hier und nicht als Liste im Kameracode — dieselbe
+## Überlegung wie bei Grundsatzentscheidung 5, wo jede Waffe ihr eigenes
+## Modell und ihre eigene Mechanik mitbringt.
+##
+## Wer eine Waffe mit Händen ausstatten will, misst ihre Griffpunkte und
+## setzt das hier auf `true`. `verify_weapon_handling` prüft danach, ob die
+## Arme wirklich hinreichen.
+var shows_hands: bool = false
+
 ## Ruhelage in der Hand.
 var hip_position := Vector3(0.115, -0.125, -0.22)
 var hip_rotation_degrees := Vector3(0.0, -3.5, 0.0)
@@ -96,6 +116,27 @@ var trigger: Node3D
 var selector: Node3D
 var charging_handle: Node3D
 var muzzle_point: Node3D
+
+## Wo die Hände anfassen. Nur fuer Figuren, die man von aussen sieht — im
+## Kameraraum sieht man ohnehin keine Haende.
+##
+## JEDE WAFFE SAGT SELBST, WO SIE ANGEFASST WIRD. Ein Sturmgewehr hat einen
+## Pistolengriff und einen Vorderschaft, eine Flinte eine Pumpe, eine Pistole
+## nur eine Griffstelle. Zentrale Werte in der Figur wuerden bedeuten, dass
+## jede Waffe gleich gehalten wird — genau das, was CLAUDE.md fuer die
+## Modelle ausschliesst.
+##
+## Fehlt einer der Punkte, faellt die Figur auf eine feste Haltung zurueck.
+var grip_point: Node3D
+var support_point: Node3D
+
+## Wo die Hand beim Nachladen hingreift: an den Magazinschacht.
+##
+## NICHT AN DAS MAGAZIN SELBST. Das faellt beim Wechsel 34 cm nach unten, und
+## dorthin reicht kein Arm — die Hand haenge dem Magazin hinterher, statt es
+## zu wechseln. So laedt auch niemand nach: Man greift an den Schacht, loest
+## das Magazin, und es faellt von allein.
+var magwell_point: Node3D
 
 var _action_home: Vector3
 var _magazine_home: Vector3
@@ -262,8 +303,13 @@ func notify_action_locked(locked: bool) -> void:
 
 
 ## Nachladen laeuft. progress geht von 0 auf 1.
-func notify_reload(progress: float, from_empty: bool) -> void:
-	_animate_magazine_swap(progress)
+func notify_reload(progress: float, from_empty: bool,
+		chamber_only: bool = false) -> void:
+	# Beim blossen Durchladen bleibt das Magazin, wo es ist. Sonst faellt hier
+	# ein Magazin heraus, das gleich darauf wieder erscheint, obwohl es die
+	# Waffe nie verlassen hat — siehe Weapon._reload_chamber_only.
+	if not chamber_only:
+		_animate_magazine_swap(progress)
 	# Bei leergeschossener Waffe muss der Verschluss zum Schluss vor.
 	if from_empty and progress > 0.85:
 		_handle_pull = _ramp(progress, 0.85, 1.0)
@@ -348,6 +394,9 @@ func _collect_parts() -> void:
 	selector = get_node_or_null("Selector") as Node3D
 	charging_handle = get_node_or_null("ChargingHandle") as Node3D
 	muzzle_point = get_node_or_null("MuzzlePoint") as Node3D
+	grip_point = get_node_or_null("GripPoint") as Node3D
+	support_point = get_node_or_null("SupportPoint") as Node3D
+	magwell_point = get_node_or_null("MagwellPoint") as Node3D
 
 	if action != null:
 		_action_home = action.position

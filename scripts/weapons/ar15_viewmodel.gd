@@ -130,6 +130,28 @@ func _build_points() -> void:
 	# Auswurffenster: rechts neben dem Verschluss.
 	add_child(GlbParts.pivot("EjectPoint", Vector3(0.030, 0.026, -0.098)))
 
+	# Wo die Haende anfassen. Beide Werte sind am Modell gemessen, nicht
+	# geschaetzt: Der Abzug sitzt bei z = -0,088, das Magazin reicht von
+	# -0,125 bis -0,237, die Muendung liegt bei -0,621.
+	#
+	# Der Pistolengriff steht hinter und unter dem Abzug, die Faust umschliesst
+	# ihn also etwa eine Handbreit darunter. Der Vorderschaft liegt vor dem
+	# Magazin auf halbem Weg zur Muendung.
+	# Diese Punkte sind am Modell gemessen, deshalb darf der Spieler seine
+	# Haende hier sehen. Bei den uebrigen Waffen fehlt das noch — siehe
+	# `shows_hands` in WeaponViewmodel.
+	shows_hands = true
+
+	add_child(GlbParts.pivot("GripPoint", Vector3(0.0, -0.085, -0.050)))
+	# Der Stuetzgriff sitzt bewusst weit hinten am Schaft, dicht hinter dem
+	# Magazin: Weiter vorn kaeme die linke Hand nicht mehr hin, seit die
+	# Waffe rechts am Koerper sitzt. Das ist auch ein gebraeuchlicher Griff.
+	add_child(GlbParts.pivot("SupportPoint", Vector3(0.0, -0.020, -0.240)))
+
+	# Der Magazinschacht: am unteren Drittel des sitzenden Magazins, das von
+	# y = -0,007 bis -0,236 reicht und bei z = -0,181 sitzt.
+	add_child(GlbParts.pivot("MagwellPoint", Vector3(0.0, -0.185, -0.181)))
+
 
 ## Die vier Steckplaetze.
 ##

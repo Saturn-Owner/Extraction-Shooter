@@ -263,6 +263,59 @@ func _test_weapon_cycling() -> void:
 		"dieselbe Waffe erneut anlegen verdoppelt sie nicht (%d -> %d)"
 			% [before, inv.get_carried_weapons().size()])
 
+	# --- UND JETZT DER WEG, DEN DAS SPIEL WIRKLICH GEHT ---
+	#
+	# Alles darueber benutzt `equip_weapon()` direkt. Das Spiel ruft aber
+	# `PlayerController.assign_weapon()`, und die legt die Waffe auf einen
+	# AUSRUESTUNGSPLATZ statt ins Raster zurueck.
+	#
+	# Mit zwei Waffen faellt der Unterschied nicht auf. Ab der dritten steckt
+	# eine dauerhaft auf dem zweiten Platz — und die zaehlte niemand mit. Im
+	# Testgelaende pendelte Q/E dadurch zwischen Gewehr und Flinte, die
+	# Pistole kam nie wieder. Die Pruefungen oben blieben dabei alle gruen,
+	# weil sie diesen Weg gar nicht benutzen.
+	var equipment := Equipment.new()
+	equipment.name = "Equipment"
+	root.add_child(equipment)
+	var slot_inv := _make_inventory()
+	slot_inv.equipment = equipment
+	for id in ids:
+		slot_inv.add(id, 1)
+
+	# Zwei Waffen auf die beiden Plaetze legen, so wie assign_weapon() es tut:
+	# aus dem Raster nehmen und anlegen.
+	var pool := slot_inv.get_carried_weapons()
+	for i in range(2):
+		var stack: ItemStack = pool[i]
+		for source in slot_inv.get_all_grids():
+			if source.get_stack(stack.instance_id) != null:
+				source.remove_item(stack.instance_id)
+				break
+		equipment.equip(stack, ItemData.EquipSlot.PRIMARY if i == 0
+			else ItemData.EquipSlot.SECONDARY)
+	slot_inv.equipped_weapon = pool[0]
+
+	var listed := slot_inv.get_carried_weapons()
+	_check(listed.size() == ids.size(),
+		"auch umgehaengte Waffen bleiben in der Liste (%d von %d)"
+			% [listed.size(), ids.size()])
+
+	var names: Array[String] = []
+	for stack in listed:
+		names.append(String(stack.item_id))
+	_check(names.has("weapon_pistol_g17"),
+		"die Pistole auf dem zweiten Platz ist dabei (%s)" % ", ".join(names))
+
+	# Und keine doppelt: Die Waffe in der Hand steht auch auf einem Platz.
+	var unique_ids := {}
+	for stack in listed:
+		unique_ids[stack.instance_id] = true
+	_check(unique_ids.size() == listed.size(),
+		"und keine kommt doppelt vor (%d von %d)"
+			% [unique_ids.size(), listed.size()])
+
+	equipment.queue_free()
+
 	inv.free()
 
 

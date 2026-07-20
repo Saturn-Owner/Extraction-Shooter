@@ -91,6 +91,15 @@ var _pose: Node3D
 var _sway: Node3D
 var _recoil: Node3D
 
+## Die eigenen Haende an der Waffe. Siehe ViewmodelArms.
+var _arms: ViewmodelArms
+
+## Wohin die Hand greift, um ein frisches Magazin zu holen — relativ zur
+## Kamera. Unten links und dicht am Koerper, also dort, wo die Magazintaschen
+## der Weste sitzen. Bewusst unterhalb des Bildrands: Man sieht die Hand
+## hinuntergehen und mit dem Magazin zurueckkommen, nicht die Tasche selbst.
+const POUCH_IN_VIEW := Vector3(-0.22, -0.46, -0.10)
+
 ## Das Modell der Waffe, die gerade in der Hand liegt.
 var _viewmodel: WeaponViewmodel
 
@@ -116,6 +125,9 @@ var _sequence_duration: float = 0.0
 var _sequence_kind: StringName = &""
 var _sequence_from_empty: bool = false
 
+## Magazin bleibt drin, es wird nur durchgeladen — siehe Weapon.
+var _sequence_chamber_only: bool = false
+
 
 func _ready() -> void:
 	_build_hierarchy()
@@ -133,6 +145,21 @@ func _build_hierarchy() -> void:
 	_recoil = Node3D.new()
 	_recoil.name = "Recoil"
 	_sway.add_child(_recoil)
+
+	# ---------------------------------------------------------------------
+	# DIE ARME HAENGEN NEBEN DER WAFFE, NICHT AN IHR
+	#
+	# Sie kommen an WeaponView selbst und damit ins feste Kameraraster — die
+	# Schultern bleiben stehen, wo Schultern hingehoeren, waehrend die Waffe
+	# darueber schwankt, zurueckstoesst und sich beim Nachladen anhebt.
+	#
+	# Haengte man sie unter `_recoil`, wuerden sie jede Waffenbewegung
+	# mitmachen und dabei genau das verlieren, was sie zeigen sollen: dass
+	# HAENDE die Waffe fuehren. Die Verbindung entsteht stattdessen ueber die
+	# Kinematik in `_update_arms()`.
+	_arms = ViewmodelArms.new()
+	_arms.name = "Arme"
+	add_child(_arms)
 
 
 ## Waffe anmelden. Ab hier reagiert die Darstellung auf ihre Signale.
@@ -246,6 +273,12 @@ func _process(delta: float) -> void:
 	# Die beweglichen Teile bewegt die Waffe selbst.
 	if _viewmodel != null:
 		_viewmodel.update_mechanics(delta)
+
+	# GANZ ZUM SCHLUSS: Die Arme greifen dorthin, wo die Waffe nach allen
+	# Bewegungen dieses Bildes wirklich steht. Stuenden sie weiter oben,
+	# griffen sie um einen Frame versetzt — bei Rueckstoss sichtbar als
+	# Zittern zwischen Hand und Griff.
+	_update_arms()
 
 
 ## Zielen ist eine reine Zeitinterpolation. Die Ergonomie der Waffe bestimmt
@@ -365,6 +398,83 @@ func _update_recoil(delta: float) -> void:
 	_recoil.rotation_degrees.x = _recoil_angle
 
 
+## Legt die Haende an die Waffe.
+##
+## ---------------------------------------------------------------------------
+## DIE LINKE HAND VERLAESST DIE WAFFE BEIM NACHLADEN
+##
+## Die rechte bleibt am Griff — die Waffe haelt man dabei fest. Die linke
+## macht den Wechsel: zum Schacht, das leere Magazin heraus, ein neues holen,
+## einschieben, Ladehebel durchziehen.
+##
+## Die Wegmarken kommen aus `CharacterAnimation`, wo derselbe Ablauf fuer die
+## Figuren steht. Sie hier abzuschreiben hiesse, dass beide beim naechsten
+## Abstimmen auseinanderlaufen — dieselbe Ueberlegung wie bei der
+## Nachladedrehung, die aus dem Waffenmodell kommt.
+func _update_arms() -> void:
+	if _arms == null:
+		return
+
+	# Nur Waffen mit gemessenen Griffpunkten bekommen Haende. Bei allen
+	# anderen fassten sie sichtbar daneben, und das ist schlimmer als gar
+	# keine Haende — siehe `shows_hands` in WeaponViewmodel.
+	var wanted := (_viewmodel != null and _viewmodel.shows_hands
+		and _viewmodel.grip_point != null and _viewmodel.support_point != null)
+	if _arms.visible != wanted:
+		_arms.visible = wanted
+	if not wanted:
+		return
+
+	var grip := _viewmodel.grip_point.global_position
+	var handguard := _viewmodel.support_point.global_position
+	var support := handguard
+
+	if _sequence_kind == &"reload" and _sequence_duration > 0.0:
+		var progress := 1.0 - _sequence_time_left / _sequence_duration
+		support = _support_hand_while_reloading(progress, handguard)
+
+	_arms.aim_at(grip, support)
+
+
+## Wo die linke Hand im jeweiligen Abschnitt des Nachladens ist.
+##
+## Der Ablauf kommt aus `CharacterAnimation.reload_hand_path()` — dieselbe
+## Choreografie, die auch die Figuren im Level laufen. Hier werden nur die
+## Punkte eingesetzt, die es im Kameraraum gibt.
+func _support_hand_while_reloading(progress: float, handguard: Vector3) -> Vector3:
+	if _viewmodel.magwell_point == null:
+		return handguard
+
+	var magwell := _viewmodel.magwell_point.global_position
+	# Nach unten aus der WAFFE heraus, nicht nach Weltkoordinaten unten: Beim
+	# Nachladen ist sie gekippt.
+	var down := -_viewmodel.magwell_point.global_basis.y.normalized()
+	var pulled := magwell + down * CharacterAnimation.PULL_DISTANCE
+	var handle := magwell
+	if _viewmodel.charging_handle != null:
+		handle = _viewmodel.charging_handle.global_position
+
+	# Beim blossen Durchladen wird kein Magazin gewechselt: Die Hand bleibt am
+	# Schaft und zieht nur zum Schluss den Ladehebel.
+	if _sequence_chamber_only:
+		if progress < CharacterAnimation.RELOAD_SEAT:
+			return handguard
+		if progress < CharacterAnimation.RELOAD_CHARGE:
+			return handguard.lerp(handle,
+				smoothstep(CharacterAnimation.RELOAD_SEAT,
+					CharacterAnimation.RELOAD_CHARGE, progress))
+		return handle.lerp(handguard,
+			smoothstep(CharacterAnimation.RELOAD_CHARGE, 1.0, progress))
+
+	# Wo das frische Magazin herkommt. Im Kameraraum gibt es keine Weste, also
+	# ein Punkt unten links ausserhalb des Bildes — dorthin greift man auch in
+	# Wirklichkeit, zur Tasche an der Brust.
+	var pouch: Vector3 = global_transform * POUCH_IN_VIEW
+
+	return CharacterAnimation.reload_hand_path(progress, handguard, magwell,
+		pulled, pouch, handle)
+
+
 ## Zeitleiste fuer Nachladen und Ladehemmung.
 ##
 ## Der Fortschritt wird nur ausgerechnet und weitergereicht — was dabei
@@ -381,7 +491,8 @@ func _update_sequence(delta: float) -> void:
 	if _viewmodel != null:
 		match _sequence_kind:
 			&"reload":
-				_viewmodel.notify_reload(progress, _sequence_from_empty)
+				_viewmodel.notify_reload(progress, _sequence_from_empty,
+					_sequence_chamber_only)
 			&"unjam":
 				_viewmodel.notify_unjam(progress)
 
@@ -429,9 +540,10 @@ func _on_dry_fire() -> void:
 		_viewmodel.notify_shot_dry()
 
 
-func _on_reload_started(duration: float, from_empty: bool) -> void:
+func _on_reload_started(duration: float, from_empty: bool, chamber_only: bool) -> void:
 	_sequence_kind = &"reload"
 	_sequence_from_empty = from_empty
+	_sequence_chamber_only = chamber_only
 	_sequence_duration = duration
 	_sequence_time_left = duration
 

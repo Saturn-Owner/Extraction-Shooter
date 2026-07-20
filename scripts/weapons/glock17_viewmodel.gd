@@ -191,8 +191,12 @@ func _animate_magazine_swap(progress: float) -> void:
 ## Bei leerer Pistole bleibt der Schlitten hinten. Nachladen endet damit,
 ## dass er per Schlittenfang vorschnellt — deshalb hier kein Ladehebelzug
 ## wie bei den Gewehren.
-func notify_reload(progress: float, from_empty: bool) -> void:
-	_animate_magazine_swap(progress)
+func notify_reload(progress: float, from_empty: bool,
+		chamber_only: bool = false) -> void:
+	# Volles Magazin, leerer Lauf: Es wird nur der Schlitten losgelassen, das
+	# Magazin bleibt im Griff. Wie beim Gewehr — siehe WeaponViewmodel.
+	if not chamber_only:
+		_animate_magazine_swap(progress)
 	_handle_pull = 0.0
 	if from_empty and progress > 0.90:
 		notify_action_locked(false)

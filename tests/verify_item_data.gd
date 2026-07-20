@@ -22,6 +22,7 @@ var _failed := false
 func _initialize() -> void:
 	print("=== Item-Daten prüfen ===\n")
 	_check_all_ammo()
+	_check_plate_exists()
 	_check_plate_degradation()
 	_check_ammo_vs_plate()
 	_check_arsenal_coverage()
@@ -475,6 +476,62 @@ func _check_all_ammo() -> void:
 
 
 ## Die Schutzwirkung muss mit sinkender Haltbarkeit abnehmen und nie negativ werden.
+## Gibt es ueberhaupt eine Platte IM SPIEL?
+##
+## ---------------------------------------------------------------------------
+## WARUM DIESE PRUEFUNG EXISTIERT
+##
+## Am 2026-07-20 flog plate_class4.tres beim Aufraeumen mit heraus. Danach gab
+## es im ganzen Spiel keine Ruestung mehr — trotzdem blieben alle 16 Suiten
+## gruen, und zwar volle drei Tage lang. Aufgefallen ist es erst durch eine
+## Warnung beim Spielstart.
+##
+## Der Grund: JEDE Plattenpruefung baute sich ihre Platte selbst. Die
+## Abnutzung unten tut es mit ArmorPlateData.new(), die Ballistik nahm sie aus
+## TestItems. Damit pruefte das Durchschlagssystem — Grundsatzentscheidung 4 —
+## nur noch sich selbst.
+##
+## Diese Pruefung ist die einzige, die die Datei auf der Platte anfasst.
+## Rechnen tut sie nichts; sie beantwortet nur die Frage, die sonst niemand
+## stellt: Kann ein Spieler ueberhaupt Ruestung tragen?
+func _check_plate_exists() -> void:
+	print("\n--- Es gibt Ruestung im Spiel")
+	ItemRegistry.ensure_loaded()
+
+	var plates := ItemRegistry.get_by_category(ItemData.Category.ARMOR_PLATE)
+	print("  %d Platte(n) in assets/data" % plates.size())
+	if plates.is_empty():
+		_fail("keine einzige Schutzplatte — penetration_power hat keine Wirkung")
+		return
+
+	for p in plates:
+		var plate := p as ArmorPlateData
+		if plate == null:
+			_fail("Gegenstand in der Kategorie ARMOR_PLATE ist keine ArmorPlateData")
+			continue
+		print("  %-22s Klasse %d, Haltbarkeit %.0f"
+			% [plate.id, plate.armor_class, plate.max_durability])
+		if plate.armor_class <= 0:
+			_fail("%s schuetzt nicht (Klasse %d)" % [plate.id, plate.armor_class])
+		if plate.max_durability <= 0.0:
+			_fail("%s haelt keinen Treffer aus (Haltbarkeit %.1f)"
+				% [plate.id, plate.max_durability])
+
+		# Ohne Platz zum Anlegen ist eine Platte nur Ballast im Rucksack:
+		# Equipment.get_chest_plate() sieht ausschliesslich in EquipSlot.CHEST
+		# nach. Genau diese Zeile fehlte in der .tres — jahrelang unbemerkt,
+		# weil die Testattrappe sie setzte und die echte Datei nie geladen
+		# wurde.
+		if plate.equip_slot != ItemData.EquipSlot.CHEST:
+			_fail("%s laesst sich nicht anlegen (equip_slot %d statt CHEST)"
+				% [plate.id, plate.equip_slot])
+
+	# Die Szenen und Tests nennen diese ID beim Namen. Verschwindet sie, stehen
+	# die gepanzerten Scheiben im Testgelaende ungeschuetzt da.
+	if not ItemRegistry.has_item(&"plate_class4_front"):
+		_fail("plate_class4_front fehlt — testgelaende.tscn verweist darauf")
+
+
 func _check_plate_degradation() -> void:
 	print("\n--- Plattenabnutzung (Klasse 4)")
 	var plate := ArmorPlateData.new()

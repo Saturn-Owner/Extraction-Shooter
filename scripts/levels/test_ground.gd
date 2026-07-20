@@ -13,6 +13,7 @@
 ##   Strg          Ducken
 ##   Leertaste     Springen
 ##   Linksklick    Schiessen
+##   Tab           Charakterfenster: Ausrüstung, Trefferpunkte, Inventar
 ##   R             Nachladen (verbraucht echte Munition aus dem Inventar)
 ##   B             Feuermodus wechseln
 ##   Q / E         Waffe wechseln (nur was im Inventar liegt)
@@ -54,7 +55,196 @@ func _ready() -> void:
 	for target in _find_targets():
 		target.was_hit.connect(_on_target_hit.bind(target))
 
+	_place_humanoids()
+	_add_character_window()
 	_give_loadout()
+
+
+## Das Charakterfenster gab es hier bisher nicht.
+##
+## ---------------------------------------------------------------------------
+## WARUM DAS FEHLTE UND WARUM ES STÖRT
+##
+## Es hängt in `raid_eisstadt.tscn`, nicht in der Spielerszene — im
+## Testgelände tat `Tab` deshalb schlicht nichts. Solange man hier nur auf
+## flache Scheiben geschossen hat, fiel das niemandem auf.
+##
+## Mit den Figuren fällt es sofort auf: Sie haben Trefferpunkte pro Körperteil,
+## und die will man beim Schiessen sehen. Ohne das Fenster ist der einzige
+## Hinweis die kurze Schrift über ihrem Kopf, und die eigenen Trefferpunkte
+## sieht man gar nicht.
+##
+## AUS DEM CODE UND NICHT IN DIE SZENE, aus demselben Grund wie die Figuren
+## selbst: An `testgelaende.tscn` haben zuletzt beide Entwickler gearbeitet,
+## und `.tscn` lässt sich bei Konflikten praktisch nicht zusammenführen.
+const CHARACTER_WINDOW := preload("res://scenes/ui/character_window.tscn")
+
+var _character_window: CharacterWindow
+
+
+func _add_character_window() -> void:
+	var hud := get_node_or_null("HUD")
+	if hud == null:
+		return
+
+	_character_window = CHARACTER_WINDOW.instantiate() as CharacterWindow
+	hud.add_child(_character_window)
+
+	# Bei offenem Fenster steht die Figur still und die Maus ist frei —
+	# sonst dreht man sich beim Ziehen im Raster im Kreis.
+	_character_window.opened.connect(func(): _player.set_ui_open(true))
+	_character_window.closed.connect(func(): _player.set_ui_open(false))
+
+
+func _toggle_character_window() -> void:
+	if _character_window == null:
+		return
+	if _character_window.is_open():
+		_character_window.close()
+		return
+	_character_window.open_for(_player)
+
+
+## Wo die Figuren stehen. Dritte Reihe neben den flachen Scheiben, damit man
+## auf dieselbe Entfernung vergleichen kann: Scheibe ohne Platte bei x = -3,
+## mit Platte bei x = 0, Figur bei x = +3.
+## Die mittlere geht, die beiden anderen stehen. Ein bewegliches Ziel prüft
+## den Vorhalt, ein stehendes die Trefferzonen — man braucht beides.
+##
+## DER GEHER STEHT WEITER RECHTS, und das ist kein Geschmack: Er pendelt um
+## seinen Standplatz, also über acht Meter von x = 4 bis x = 12. Bliebe er
+## wie die anderen bei x = 3, liefe seine Bahn von -1 bis 7 — mitten durch
+## die gepanzerte Scheibe bei x = 0.
+## ---------------------------------------------------------------------------
+## ALLE FIGUREN TRAGEN EINE WAFFE
+##
+## Die vier auf Entfernung standen zuerst mit leeren Händen da, weil sie nur
+## fürs Treffen und für die Bewegung gedacht waren. Nebeneinander sah man
+## dadurch zwei verschiedene Figuren — bewaffnete mit angelegten Armen und
+## unbewaffnete mit frei schwingenden.
+##
+## Jetzt fassen alle zehn die Waffe gleich. Nebenbei prüft das die Armhaltung
+## auch in Bewegung und auf Entfernung mit: Wenn eine Hand irgendwo abrutscht,
+## fällt es an zehn Figuren eher auf als an dreien.
+const HUMANOID_PLACES := [
+	{
+		distance = 25.0, x = 3.0, patrol = 0.0, speed = 0.0, label = "steht",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
+	{
+		distance = 50.0, x = 9.0, patrol = 14.0, speed = 4.4, label = "rennt",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
+	{
+		distance = 100.0, x = 8.0, patrol = 8.0, speed = 1.6, label = "geht",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
+	{
+		distance = 300.0, x = 3.0, patrol = 0.0, speed = 0.0, label = "steht",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
+
+	# Drei bewaffnete, dicht beieinander bei 15 m — man soll die Mechanik
+	# sehen können, und dafür muss man nah genug stehen. Alle mit
+	# Schalldämpfer: Ein ungedämpfter Dauerbeschuss dreier Figuren im
+	# Hintergrund wäre nach zwei Minuten unerträglich.
+	{
+		distance = 15.0, x = -8.0, patrol = 0.0, speed = 0.0, label = "haelt",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
+	{
+		distance = 15.0, x = -11.0, patrol = 0.0, speed = 0.0, label = "laedt nach",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.RELOAD,
+	},
+	{
+		distance = 15.0, x = -14.0, patrol = 0.0, speed = 0.0, label = "schiesst",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.SHOOT,
+	},
+
+	# Die Haltungen zum Vergleichen: rechts daneben, dieselbe Entfernung,
+	# damit man sie nebeneinander sieht statt nacheinander suchen zu muessen.
+	# Aufrecht stehend gibt es schon links — hier nur, was neu ist.
+	{
+		distance = 15.0, x = 4.0, patrol = 0.0, speed = 0.0, label = "zielt",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+		aiming = true,
+	},
+	{
+		distance = 15.0, x = 7.0, patrol = 0.0, speed = 0.0, label = "geduckt",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+		crouching = true, aiming = true,
+	},
+	# Der Renner laeuft wirklich, sonst sieht man nur die Neigung und nicht,
+	# dass Schrittzyklus und Haltung zusammenpassen.
+	{
+		distance = 20.0, x = 12.0, patrol = 12.0,
+		speed = PlayerController.SPRINT_SPEED, label = "rennt mit Waffe",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+		sprinting = true,
+	},
+]
+
+
+## Stellt die Figuren AUS DEM CODE hin, nicht in testgelaende.tscn.
+##
+## Szenen lassen sich bei Konflikten praktisch nicht mergen, und an dieser
+## Szene haben zuletzt beide Entwickler gearbeitet — die Werkbank und die
+## Zielscheiben liegen nur Stunden auseinander. Drei Knoten dafür in eine
+## .tscn zu schreiben, wäre genau die Konfliktquelle, die uns beim letzten
+## Zusammenführen Arbeit gemacht hat.
+##
+## Dieselbe Überlegung steht schon hinter `Weapon._build_voices()` und der
+## Werkbank: Was sich im Code beschreiben lässt, gehört nicht in eine Szene.
+func _place_humanoids() -> void:
+	var container := get_node_or_null("Ziele")
+	if container == null:
+		return
+
+	# Durchnummeriert, damit man ueber eine bestimmte Figur reden kann.
+	#
+	# Ohne Nummer heissen fuenf Figuren "15 m" und man muss sie umstaendlich
+	# umschreiben ("die dritte von links, die nachlaedt"). Mit Nummer sagt
+	# man "Nummer 6" — beim Berichten eines Fehlers ist das der Unterschied
+	# zwischen einer klaren Angabe und Raten.
+	var number := 0
+
+	for place in HUMANOID_PLACES:
+		var distance: float = place.distance
+		number += 1
+		var figure := HumanoidTarget.new()
+		# Nummer UND Beschriftung im Namen: Bei 15 m stehen inzwischen fuenf
+		# Figuren, die sonst alle "Figur15m" hiessen und von Godot
+		# durchnummeriert wuerden. Im Szenenbaum sucht man dann, welche
+		# welche ist.
+		figure.name = "Figur%02d_%s" % [number, String(place.label).capitalize()]
+		# Die Nummer als eigenes Feld, NICHT in label_text: Dort wuerde ein
+		# Umbruch auch die einzeilige HUD-Ausgabe zerreissen.
+		figure.marking = "#%d" % number
+		figure.label_text = "%d m  %s" % [int(distance), place.label]
+		figure.patrol_width = place.patrol
+		figure.patrol_speed = place.speed
+
+		if place.get("weapon", false):
+			figure.weapon_id = &"weapon_rifle_ar15"
+			figure.weapon_attachments = [&"ar15_muzzle_suppressor"] as Array[StringName]
+			figure.weapon_behaviour = place.behaviour
+			# Wer nachlaedt, braucht Magazine am Koerper.
+			figure.wears_vest = true
+
+		container.add_child(figure)
+
+		# Die Haltung erst nach dem Einhängen: Ihre Setter reichen sie an
+		# Animation und Waffe weiter, und die gibt es erst nach _ready().
+		figure.aiming = place.get("aiming", false)
+		figure.crouching = place.get("crouching", false)
+		figure.sprinting = place.get("sprinting", false)
+
+		# Nach dem Einhängen setzen: global_position braucht den Baum.
+		figure.global_position = Vector3(place.x, 0.0, -distance)
+		# Sie schaut den Schützen an — sonst zielt man auf ihre Seite und
+		# die Arme decken den Rumpf ab.
+		figure.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+		figure.part_hit.connect(_on_humanoid_hit.bind(figure))
 
 
 ## Füllt das Inventar und nimmt die erste Waffe in die Hand.
@@ -96,6 +286,28 @@ func _on_target_hit(result: Ballistics.HitResult, _hits: int, target: TargetDumm
 	_last_hit = "%s: %s" % [target.label_text, result.describe()]
 
 
+## Bei der Figur steht das KÖRPERTEIL vorn, nicht der Schaden.
+##
+## Das ist die Frage, die man an einer Figur hat: Habe ich getroffen, was ich
+## treffen wollte? Wie viel Schaden es war, sagt die Beschriftung über ihrem
+## Kopf ohnehin dauerhaft.
+func _on_humanoid_hit(part: HealthSystem.Part, result: Ballistics.HitResult,
+		figure: HumanoidTarget) -> void:
+	_last_hit = "%s — %s: %s" % [
+		figure.label_text, BlockyCharacter.part_name(part), result.describe()]
+
+
+func _find_humanoids() -> Array[HumanoidTarget]:
+	var result: Array[HumanoidTarget] = []
+	var container := get_node_or_null("Ziele")
+	if container == null:
+		return result
+	for child in container.get_children():
+		if child is HumanoidTarget:
+			result.append(child as HumanoidTarget)
+	return result
+
+
 func _switch_weapon(step: int) -> void:
 	var inventory := _player.inventory
 	if inventory == null:
@@ -135,6 +347,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	var inventory := _player.inventory
 
 	match (event as InputEventKey).physical_keycode:
+		KEY_TAB:
+			_toggle_character_window()
+		KEY_ESCAPE:
+			# Das Fenster schreibt unten selbst "[Tab] / [Esc] schliessen" —
+			# ohne diese Zeile wäre der Hinweis hier gelogen.
+			#
+			# Kein Streit mit der Maustaste: PlayerController prüft bei
+			# `toggle_mouse` ausdrücklich `not ui_open`, und offen ist offen.
+			if _character_window != null and _character_window.is_open():
+				_character_window.close()
 		KEY_Q:
 			_switch_weapon(-1)
 		KEY_E:
@@ -164,6 +386,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_player.velocity = Vector3.ZERO
 			for target in _find_targets():
 				target.reset()
+			for figure in _find_humanoids():
+				figure.reset()
 			_last_hit = "zurückgesetzt"
 			_last_action = ""
 
@@ -209,7 +433,7 @@ func _process(_delta: float) -> void:
 		lines.append("> %s" % _last_action)
 
 	lines.append("")
-	lines.append("Q/E Waffe  5/6 Munition  R Laden  B Modus")
+	lines.append("Tab Charakter  Q/E Waffe  5/6 Munition  R Laden  B Modus")
 	lines.append("T Nachschub  Z Ballast  0 Reset  Esc Maus")
 
 	_label.text = "\n".join(lines)

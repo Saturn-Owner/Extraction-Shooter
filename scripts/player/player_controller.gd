@@ -26,8 +26,22 @@ signal exhausted()
 ## in der der Spieler die meiste Zeit unterwegs ist.
 @export var walk_speed: float = 2.4
 
+## ---------------------------------------------------------------------------
+## MASSE, DIE AUCH DIE SICHTBARE FIGUR BRAUCHT
+##
+## `CharacterAnimation` leitet daraus ab, wie tief sich eine Figur duckt und
+## ab welchem Tempo sie voll ausschwingt. Vorher standen dort abgeschriebene
+## Zahlen — und der Kommentar „entspricht etwa dem Sprint des Spielers" war
+## bereits falsch, weil hier inzwischen 5,2 steht und dort noch 4,5.
+##
+## Deshalb Konstanten statt nackter Zahlen: Der Spieler ist die Quelle, die
+## Figur liest mit. Wer hier dreht, dreht die Figur mit.
+const STAND_HEIGHT := 1.8
+const CROUCH_HEIGHT := 1.2
+const SPRINT_SPEED := 5.2
+
 ## Sprint. Kostet Ausdauer und macht laut.
-@export var sprint_speed: float = 5.2
+@export var sprint_speed: float = SPRINT_SPEED
 
 ## Geduckt. Langsam, aber leise und schwerer zu treffen.
 @export var crouch_speed: float = 1.2
@@ -188,6 +202,9 @@ func _ready() -> void:
 		if weapon_view != null:
 			weapon_view.attach_weapon(weapon)
 			weapon.set_visual_muzzle(weapon_view.get_muzzle_point())
+	_build_body()
+	_build_crosshair()
+
 	# Schritte und Atmen. Ebenfalls im Code erzeugt, aus demselben Grund wie
 	# der Muendungsknall: kein Eingriff in player.tscn.
 	sounds = PlayerSounds.new()
@@ -310,6 +327,491 @@ func select_weapon_slot(slot: ItemData.EquipSlot) -> bool:
 	return true
 
 
+## ---------------------------------------------------------------------------
+## DER SICHTBARE KOERPER
+##
+## Dieselbe `BlockyCharacter`, die im Testgelaende steht. Nicht eine zweite
+## Fassung fuer den Spieler — genau darum wurde sie so gebaut: Die Animation
+## kennt nur `stance`, `is_sprinting`, `is_aiming` und `speed`, und wer diese
+## Felder fuellt, ist ihr egal. Bisher tat es ein Dummy-Skript, jetzt tun es
+## die Tasten.
+##
+## Er bekommt das Gesundheitssystem des Spielers mitgegeben, statt sich ein
+## eigenes anzulegen. Damit wird der Spieler zum ersten Mal NACH KOERPERTEILEN
+## treffbar: Ein Beintreffer ist etwas anderes als ein Kopftreffer, und genau
+## dafuer gibt es HealthSystem.
+##
+## In player.tscn steht davon nichts — Szenen lassen sich bei Konflikten nicht
+## mergen, und an dieser arbeitet der Kollege. Dieselbe Ueberlegung wie beim
+## Muendungsknall und den Schrittgeraeuschen.
+var body: BlockyCharacter
+var _body_animation: CharacterAnimation
+
+## Die Waffe in der Hand des Koerpers — die, die andere sehen wuerden.
+var body_weapon: CharacterWeapon
+
+## Das Fadenkreuz in der Bildmitte.
+var crosshair: Crosshair
+
+## Die taktische Weste am Koerper und das Magazin, das darin steckt.
+var vest: CharacterVest
+var _spare_magazine: Node3D
+
+var _body_reload_left: float = 0.0
+var _body_reload_total: float = 0.0
+var _body_reload_from_empty: bool = false
+var _body_reload_chamber_only: bool = false
+
+## Sichtebene fuer die Teile, die der Traeger selbst NICHT sehen darf.
+##
+## Andere Kameras sehen die Ebene weiterhin — die Teile sind also nicht
+## unsichtbar, sondern nur fuer ihren eigenen Traeger.
+const OWN_BODY_LAYER := 2
+
+## Welche Koerperteile die eigene Kamera ausblendet.
+##
+## ---------------------------------------------------------------------------
+## NUR DER KOPF, NICHT DER GANZE KOERPER
+##
+## Zuerst hatte ich ALLES ausgeblendet, mit der Begruendung, die Kamera stecke
+## im Kopf. Fuer den Kopf stimmt das — beim Spielen sah man daraufhin aber
+## ueberhaupt keinen Koerper mehr, nur die Waffe. Genau das, was vorher auch
+## schon da war.
+##
+## Nachgemessen liegt die Kamera auf 1,65 m, und nur der Kopf umschliesst sie:
+##
+##     Kopf     1,56 bis 1,80   <- Kamera steckt drin
+##     Brust    1,11 bis 1,52
+##     Arme     0,88 bis 1,52
+##     Bauch    0,79 bis 1,09
+##     Beine    0,00 bis 0,75
+##
+## Alles unterhalb des Kopfes kann sichtbar bleiben. Wer nach unten schaut,
+## sieht seinen Koerper.
+##
+## ---------------------------------------------------------------------------
+## WARUM DER EIGENE KOERPER NICHT IN DER ERSTEN PERSON TAUGT
+##
+## Der Versuch stand hier schon: Arme, Bauch, Beine und die Waffe des Koerpers
+## sichtbar, das Modell im Kameraraum aus. Es sah im Standbild sogar richtig
+## aus — und war unspielbar.
+##
+## ZIELEN BRAUCHT DIE WAFFE AUF DER KAMERAACHSE. Die Waffe des Koerpers sitzt
+## 18 cm rechts der Mitte und 12 Grad eingedreht (WEAPON_MOUNT), weil das die
+## Haltung fuer die Aussenansicht ist. In der ersten Person zeigte sie damit
+## am Fadenkreuz vorbei, und beim Hoch- und Runterschauen schwang sie im
+## Bogen, weil der Rumpf sich um die Huefte dreht und nicht um das Auge.
+##
+## Genau dafuer gibt es in Shootern ein eigenes Modell im Kameraraum: Es ist
+## an der Kamera festgemacht und zeigt immer dorthin, wo man hinsieht.
+##
+## Der Koerper bleibt deshalb fuer den Traeger unsichtbar — aber vollstaendig
+## vorhanden: Trefferzonen, Waffe, Bewegung, Schatten. F5 zeigt ihn.
+##
+## Wer die eigenen Arme wirklich sehen will, braucht sie AM KAMERAMODELL,
+## nicht am Weltkoerper. Das ist Modellierarbeit, keine Sichtbarkeitsfrage.
+## ---------------------------------------------------------------------------
+## WARUM DER WELTKOERPER IN DER ERSTEN PERSON NICHTS ZU SUCHEN HAT
+##
+## Dreimal versucht, dreimal aus demselben Grund gescheitert:
+##
+##   1. Nur Kopf versteckt   -> die Brust fuellte den Schirm.
+##   2. Kopf und Brust       -> die Arme standen als Flaechen quer im Bild.
+##   3. Nur die Arme sichtbar, greifend am Kameramodell
+##                           -> beim Geradeausschauen sah man sie gar nicht,
+##                              beim Schwenken verdeckten sie alles.
+##
+## Der Grund ist nicht die Position, sondern die GROESSE. Ein Oberarm ist
+## 0,24 m dick und 0,64 m lang — das sind Masse fuer eine Figur, die man aus
+## drei Metern sieht. Aus einer Kamera, die im selben Koerper steckt, ist er
+## 20 bis 40 cm entfernt und damit riesig. Verschieben hilft dagegen nicht.
+##
+## Shooter loesen das mit eigenen Armen im KAMERARAUM: kleiner, naeher an der
+## Waffe, an ihr festgemacht. Das ist Geometriearbeit am Waffenmodell und
+## keine Frage von Sichtbarkeitsebenen.
+##
+## Bis es die gibt, bleibt der Koerper fuer den Traeger unsichtbar — aber
+## vollstaendig vorhanden: Trefferzonen, Waffe, Bewegung, Schatten. F5 zeigt
+## ihn, und dort stimmt jede Animation.
+const HIDDEN_FROM_SELF := [
+	HealthSystem.Part.HEAD,
+	HealthSystem.Part.CHEST,
+	HealthSystem.Part.STOMACH,
+	HealthSystem.Part.LEFT_ARM,
+	HealthSystem.Part.RIGHT_ARM,
+	HealthSystem.Part.LEFT_LEG,
+	HealthSystem.Part.RIGHT_LEG,
+]
+
+## Schulterkamera zum Nachsehen.
+##
+## ---------------------------------------------------------------------------
+## WARUM ES DIE GEBEN MUSS
+##
+## Der Koerper haelt die Waffe, rennt, duckt sich, springt und schiesst — nur
+## sehen kann man davon in der ersten Person fast nichts, weil die Kamera im
+## Kopf steckt. Ohne diese Ansicht laesst sich nicht pruefen, ob die
+## Animationen stimmen; man muesste sich von einer zweiten Figur filmen
+## lassen.
+##
+## Bewusst ein Werkzeug zum Pruefen, kein Spielmodus: Das Spiel ist erste
+## Person. Deshalb liegt es auf einer Taste und nicht in den Einstellungen.
+const THIRD_PERSON_KEY := KEY_F5
+const THIRD_PERSON_OFFSET := Vector3(0.55, 0.05, 2.8)
+
+var _third_person: bool = false
+var _first_person_camera_position: Vector3
+
+
+func _build_body() -> void:
+	body = BlockyCharacter.new()
+	body.name = "Koerper"
+	# VOR dem Einhaengen setzen: BlockyCharacter legt sich in _ready() sonst
+	# ein eigenes System an, und dann haette der Spieler zwei Gesundheiten,
+	# von denen die sichtbare niemanden interessiert.
+	body.health = health
+	# Ebene 4 wie bei allen Trefferzonen — NICHT Ebene 2, wo die
+	# Kollisionskapsel liegt. Die umschliesst den ganzen Leib und wuerde jedes
+	# Geschoss abfangen, bevor es eine Trefferzone erreicht. Siehe
+	# Weapon.projectile_mask.
+	body.hit_layer = 4
+	add_child(body)
+
+	_body_animation = CharacterAnimation.new()
+	_body_animation.name = "Bewegung"
+	add_child(_body_animation)
+	# Erst nach dem Einhaengen: attach() liest die Ruhelage der Gelenke, und
+	# die gibt es erst, nachdem build() gelaufen ist.
+	_body_animation.attach(body)
+
+	_arm_body()
+	_put_on_vest()
+	_hide_own_body_from_camera()
+
+
+## Zieht dem Koerper die taktische Weste an — dieselbe wie die Figuren tragen.
+##
+## ---------------------------------------------------------------------------
+## WOFUER, WENN MAN SIE SELBST NICHT SIEHT
+##
+## Der eigene Koerper ist fuer den Traeger unsichtbar, die Weste also auch. Sie
+## macht trotzdem die Nachladeanimation des Koerpers vollstaendig: Die linke
+## Hand greift beim Wechsel an eine ECHTE Tasche, und ein sichtbares
+## Ersatzmagazin kommt daraus hervor, statt aus dem Nichts an der Waffe
+## aufzutauchen. Zu sehen ist das in der dritten Person (F5) und spaeter fuer
+## Mitspieler.
+##
+## Der Griffpunkt kommt aus dem Westenmodell, nicht aus einer Konstante — wer
+## eine Tasche in Blender verschiebt, verschiebt damit, wohin die Hand greift.
+## Dieselbe Mechanik wie bei HumanoidTarget._put_on_vest().
+func _put_on_vest() -> void:
+	if body == null:
+		return
+	var chest := body.joint_of(HealthSystem.Part.CHEST)
+	if chest == null:
+		return
+
+	vest = CharacterVest.new()
+	vest.name = "Weste"
+	chest.add_child(vest)
+	if _body_animation != null:
+		_body_animation.pouch_target = vest.front_pouch()
+
+	# Ein sichtbares Ersatzmagazin, das in der Tasche steckt und beim Nachladen
+	# mitwandert. DASSELBE Modell wie in der Waffe, kein zweites.
+	const MAGAZINE := "res://assets/models/weapons/ar15/AR15_Magazin.glb"
+	if not ResourceLoader.exists(MAGAZINE):
+		return
+	_spare_magazine = Node3D.new()
+	_spare_magazine.name = "Ersatzmagazin"
+	add_child(_spare_magazine)
+	_spare_magazine.add_child((load(MAGAZINE) as PackedScene).instantiate())
+	# Waffenteil: schaut entlang +X, das Spiel erwartet -Z.
+	_spare_magazine.rotation_degrees = GlbParts.TURN
+
+
+## Setzt das Ersatzmagazin dorthin, wo es gerade sein muss: in der Tasche,
+## an der Hand waehrend des Tragens, unsichtbar sobald es in der Waffe sitzt.
+## Wortgleich zu HumanoidTarget — die Figuren tun genau dasselbe.
+func _update_spare_magazine() -> void:
+	if _spare_magazine == null or vest == null or _body_animation == null:
+		return
+	var pouch := vest.front_pouch()
+	if pouch == null:
+		return
+
+	if _body_animation.carries_spare_magazine():
+		var hand := body.hand_of(HealthSystem.Part.LEFT_ARM)
+		if hand != null:
+			_spare_magazine.visible = true
+			_spare_magazine.global_position = hand.global_position
+			return
+
+	# Waehrend es in die Waffe geht, zeigt die Waffe es selbst.
+	var in_weapon := _body_animation.reload_progress >= CharacterAnimation.RELOAD_SEAT
+	_spare_magazine.visible = not in_weapon
+	_spare_magazine.global_position = pouch.global_position
+
+
+## Gibt dem Koerper dieselbe Waffe in die Hand, die der Spieler traegt.
+##
+## ---------------------------------------------------------------------------
+## DIESELBE MECHANIK WIE BEI DEN DUMMYS
+##
+## Der Koerper haelt eine `CharacterWeapon` — genau die Klasse, mit der die
+## Figuren im Testgelaende halten, nachladen und schiessen. Dadurch greifen
+## die Arme sie ueber `grip_point` und `support_point` von selbst; es gibt
+## keine eigene Armhaltung fuer den Spieler.
+##
+## Sie laeuft als DRIVEN: Sie entscheidet nichts, sondern zeigt nur, was die
+## echte `Weapon` gerade tut. Munition und Nachladen bleiben dort, wo sie
+## hingehoeren.
+##
+## ZWEI WAFFEN, EINE SICHTBAR: Vor der Kamera haengt weiterhin das
+## `WeaponView`-Modell — das ist die Waffe, die DU siehst. Die am Koerper ist
+## die, die ANDERE sehen wuerden, und deshalb liegt sie auf der versteckten
+## Ebene. Ohne das haette man zwei Gewehre im Bild.
+func _arm_body() -> void:
+	if weapon == null or body == null:
+		return
+	var mount := body.weapon_mount()
+	if mount == null:
+		return
+
+	body_weapon = CharacterWeapon.new()
+	body_weapon.name = "Waffe"
+	body_weapon.weapon_id = weapon.weapon_id
+	body_weapon.behaviour = CharacterWeapon.Behaviour.DRIVEN
+	mount.add_child(body_weapon)
+
+	# Die Arme gehoeren jetzt an die Waffe statt in den Gehzyklus.
+	_body_animation.holding_weapon = true
+
+	# ---------------------------------------------------------------------
+	# DIE HAENDE GREIFEN DAS MODELL IM KAMERARAUM, NICHT DAS AM KOERPER
+	#
+	# Beides existiert: Am Koerper haengt die Waffe, die andere sehen; vor der
+	# Kamera die, die der Spieler sieht. Beide zeigen dasselbe Gewehr, stehen
+	# aber an verschiedenen Stellen — die eine an der Schulter, die andere auf
+	# der Blickachse.
+	#
+	# Sichtbar sind die eigenen Arme. Griffen sie nach der Koerperwaffe,
+	# fassten sie sichtbar neben das Gewehr, das der Spieler vor sich sieht.
+	# Sie greifen deshalb das Kameramodell — die inverse Kinematik loest auf
+	# WELTPOSITIONEN, ihr ist es also gleich, an welchem Knoten das Ziel
+	# haengt.
+	#
+	# Fuer die dritte Person bleibt es trotzdem stimmig: Dort ist das
+	# Kameramodell ausgeblendet, und die Koerperwaffe steht dicht genug an
+	# derselben Stelle.
+	_refresh_grip_targets()
+
+	# Die echte Waffe treibt die sichtbare an.
+	weapon.fired.connect(_on_body_weapon_fired)
+	weapon.dry_fire.connect(_on_body_weapon_dry)
+	weapon.reload_started.connect(_on_body_reload_started)
+	weapon.reload_finished.connect(_on_body_reload_ended)
+	weapon.reload_cancelled.connect(_on_body_reload_cancelled)
+
+
+## Holt die Griffpunkte des Kameramodells - JEDES BILD, nicht einmal.
+##
+## ---------------------------------------------------------------------------
+## SONST GREIFEN DIE ARME INS NICHTS
+##
+## Die Punkte einmal in `_ready()` zu merken sah richtig aus und war es nicht:
+## `WeaponView` baut sein Modell bei jedem Waffenwechsel NEU auf und wirft das
+## alte weg. Die gemerkten Knoten waren danach geloescht.
+##
+## Im Testgelaende faellt das sofort auf, weil dort beim Start ausgeruestet
+## wird — die Arme standen von der ersten Sekunde an im Himmel, weit weg von
+## der Waffe. Gemessen: `is_instance_valid(grip_target)` war nach dem Wechsel
+## `false`.
+##
+## Ein Signal "Modell gewechselt" waere sparsamer, aber es gibt keines, und
+## vier Zuweisungen pro Bild sind billiger als ein weiteres Signal, das
+## irgendwann jemand zu verbinden vergisst.
+func _refresh_grip_targets() -> void:
+	if _body_animation == null:
+		return
+	var view_model: WeaponViewmodel = null
+	if weapon_view != null:
+		view_model = weapon_view.get_viewmodel()
+	if view_model == null and body_weapon != null:
+		view_model = body_weapon.viewmodel
+	if view_model == null:
+		return
+	_body_animation.grip_target = view_model.grip_point
+	_body_animation.support_target = view_model.support_point
+	_body_animation.magwell_target = view_model.magwell_point
+	_body_animation.charge_target = view_model.charging_handle
+
+
+func _on_body_weapon_fired(_ammo: AmmoData, _rounds: int) -> void:
+	if body_weapon != null:
+		body_weapon.drive_shot()
+
+
+func _on_body_weapon_dry() -> void:
+	if body_weapon != null:
+		body_weapon.drive_dry_shot()
+
+
+func _on_body_reload_started(duration: float, from_empty: bool,
+		chamber_only: bool) -> void:
+	_body_reload_total = maxf(0.01, duration)
+	_body_reload_left = _body_reload_total
+	_body_reload_from_empty = from_empty
+	_body_reload_chamber_only = chamber_only
+
+
+func _on_body_reload_ended(_rounds: int) -> void:
+	_end_body_reload()
+
+
+func _on_body_reload_cancelled() -> void:
+	_end_body_reload()
+
+
+func _end_body_reload() -> void:
+	_body_reload_left = 0.0
+	if body_weapon != null:
+		body_weapon.drive_reload(-1.0, false, false)
+	if _body_animation != null:
+		_body_animation.reload_progress = -1.0
+
+
+## Schiebt den Nachladefortschritt in Koerper und Haende.
+##
+## Die Hand greift beim Nachladen zum Magazin — dafuer braucht die Animation
+## denselben Fortschritt wie die Waffe. Genau so macht es HumanoidTarget.
+func _update_body_reload(delta: float) -> void:
+	if _body_reload_left <= 0.0:
+		return
+	_body_reload_left = maxf(0.0, _body_reload_left - delta)
+	var progress := 1.0 - _body_reload_left / _body_reload_total
+	if body_weapon != null:
+		body_weapon.drive_reload(progress, _body_reload_from_empty,
+			_body_reload_chamber_only)
+	if _body_animation != null:
+		_body_animation.reload_progress = progress
+	if _body_reload_left <= 0.0:
+		_end_body_reload()
+
+
+## Nimmt die Teile aus dem Blickfeld, in denen die eigene Kamera steckt.
+func _hide_own_body_from_camera() -> void:
+	var own_bit := 1 << (OWN_BODY_LAYER - 1)
+	for part: HealthSystem.Part in HIDDEN_FROM_SELF:
+		for mesh: MeshInstance3D in body.meshes_of(part):
+			mesh.layers = own_bit
+
+	# Die Waffe am Koerper ebenfalls verstecken: Sichtbar ist das Modell im
+	# Kameraraum, weil nur das zum Zielen taugt. Zwei Gewehre gleichzeitig
+	# waeren ohnehin eines zuviel.
+	if body_weapon != null:
+		for node in _all_children(body_weapon):
+			if node is VisualInstance3D:
+				(node as VisualInstance3D).layers = own_bit
+
+	# Weste und Ersatzmagazin ebenso: Sie haengen am Koerper und wuerden dem
+	# Traeger sonst auf der Brust schweben.
+	for owner_node in [vest, _spare_magazine]:
+		if owner_node != null:
+			for node in _all_children(owner_node):
+				if node is VisualInstance3D:
+					(node as VisualInstance3D).layers = own_bit
+
+	if _camera != null:
+		_camera.cull_mask &= ~own_bit
+
+
+## Schaltet zwischen erster und dritter Person um.
+##
+## In der dritten Person sieht die Kamera ALLES: Kopf, Brust, Arme und die
+## Waffe am Koerper. Das Kameramodell vor dem Gesicht wird dafuer
+## ausgeblendet, sonst schwebte es mitten im Bild.
+func _toggle_third_person() -> void:
+	_third_person = not _third_person
+	if _camera == null:
+		return
+
+	var own_bit := 1 << (OWN_BODY_LAYER - 1)
+	if _third_person:
+		_first_person_camera_position = _camera.position
+		_camera.position = THIRD_PERSON_OFFSET
+		_camera.cull_mask |= own_bit
+		# Das Kameramodell schwebte sonst mitten im Bild, weit vor der Figur.
+		if weapon_view != null:
+			weapon_view.visible = false
+	else:
+		_camera.position = _first_person_camera_position
+		_camera.cull_mask &= ~own_bit
+		if weapon_view != null:
+			weapon_view.visible = true
+
+	# Dem Muendungsknall die neue Ruhelage mitteilen. Er setzt die
+	# Kameraposition beim Ruetteln absolut und zoege die Schulterkamera sonst
+	# in jedem Bild wieder nach vorn — die dritte Person waere nach einem
+	# Frame vorbei.
+	if muzzle_blast != null:
+		muzzle_blast.camera_home = _camera.position
+
+
+static func _all_children(node: Node) -> Array[Node]:
+	var found: Array[Node] = []
+	for child in node.get_children():
+		found.append(child)
+		found.append_array(_all_children(child))
+	return found
+
+
+## Das Fadenkreuz.
+##
+## Wie Muendungsknall, Schrittgeraeusche und Koerper im Code erzeugt, nicht in
+## player.tscn: Szenen lassen sich bei Konflikten nicht mergen, und an dieser
+## arbeitet der Kollege.
+##
+## Eine eigene CanvasLayer, damit es ueber allem liegt und von der 3D-Kamera
+## unabhaengig ist.
+func _build_crosshair() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "Fadenkreuz"
+	add_child(layer)
+
+	crosshair = Crosshair.new()
+	crosshair.name = "Kreuz"
+	layer.add_child(crosshair)
+
+
+## Reicht die Haltung an den sichtbaren Koerper weiter.
+##
+## Die vier Werte, die die Animation braucht — mehr ist die Schnittstelle
+## nicht. `velocity` liefert das Tempo, ohne die Senkrechte: Ein Sprung ist
+## kein Laufen, und ohne diese Zeile ruderte die Figur im Fallen mit den
+## Beinen.
+func _update_body(_delta: float) -> void:
+	if _body_animation == null:
+		return
+	# Vor allem anderen: Das Kameramodell wird bei jedem Waffenwechsel neu
+	# gebaut, die gemerkten Griffpunkte waeren danach geloescht.
+	_refresh_grip_targets()
+	_update_body_reload(_delta)
+	_update_spare_magazine()
+	_body_animation.speed = Vector2(velocity.x, velocity.z).length()
+	_body_animation.stance = (CharacterAnimation.Stance.CROUCH if is_crouching
+		else CharacterAnimation.Stance.STAND)
+	_body_animation.is_sprinting = is_sprinting
+	_body_animation.is_aiming = is_aiming
+	# Springen: is_on_floor() kommt von CharacterBody3D, velocity.y sagt, ob
+	# es hoch oder runter geht.
+	_body_animation.is_airborne = not is_on_floor()
+	_body_animation.vertical_speed = velocity.y
+	# Der Oberkoerper dreht sich mit dem Blick, sonst zeigte die Waffe stur
+	# waagerecht, waehrend man nach oben oder unten sieht.
+	_body_animation.look_pitch = _pitch
+
+
 ## Merkt sich, was im Magazin der Waffe steckt, die gerade in der Hand liegt.
 func _remember_magazine() -> void:
 	if weapon == null or equipment == null:
@@ -319,9 +821,18 @@ func _remember_magazine() -> void:
 		return
 	# Die Patrone im Lauf gehoert mit gemerkt. Ohne sie ginge bei jedem
 	# Waffenwechsel genau eine verloren — siehe Weapon.restore_magazine().
+	# Die Ladehemmung gehoert mit gemerkt.
+	#
+	# Ohne sie war Waffenwechseln die schnellste Art, eine Hemmung
+	# loszuwerden: Taste 2, Taste 1, Waffe wieder sauber — waehrend das
+	# richtige Beheben `jam_clear_time` kostet. Dazu kam ein Folgefehler:
+	# Eine Hemmung laesst die Kammer leer und das Magazin voll. Nach dem
+	# Zuruecksetzen der Hemmung stand die Waffe genau so da, und das
+	# naechste Nachladen wechselte dann ein volles Magazin gegen sich selbst.
 	_magazines[held.instance_id] = {
 		"rounds": weapon.rounds_in_magazine,
 		"chambered": weapon.round_chambered,
+		"jammed": weapon.is_jammed,
 		"ammo": weapon.ammo_id,
 	}
 
@@ -347,7 +858,8 @@ func _put_in_hand(stack: ItemStack) -> void:
 	if (saved_rounds > 0 or saved_chambered) and saved_ammo != &"":
 		weapon.setup(stack.item_id, saved_ammo)
 		_load_condition(stack)
-		weapon.restore_magazine(saved_rounds, saved_chambered)
+		weapon.restore_magazine(saved_rounds, saved_chambered,
+			bool(saved.get("jammed", false)))
 		return
 
 	var compatible := inventory.get_compatible_ammo(weapon_data)
@@ -613,6 +1125,11 @@ func set_ui_open(open: bool) -> void:
 		if weapon != null:
 			weapon.release_trigger()
 
+	# Bei offenem Fenster gehoert kein Fadenkreuz ins Bild: Man zielt nicht,
+	# man packt um — und mitten im Inventar sieht es aus wie ein Fehler.
+	if crosshair != null:
+		crosshair.visible = not open
+
 	_capture_mouse(not open)
 
 
@@ -707,6 +1224,14 @@ func _update_weapon_view(_delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# F5 schaltet die Schulterkamera. Bewusst direkt auf die Taste statt ueber
+	# eine Aktion in project.godot: Das ist ein Pruefwerkzeug, keine
+	# Spielsteuerung, und project.godot gehoert beiden Entwicklern.
+	if event is InputEventKey and event.pressed and not event.echo:
+		if (event as InputEventKey).keycode == THIRD_PERSON_KEY:
+			_toggle_third_person()
+			return
+
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var motion := event as InputEventMouseMotion
 		# Die Waffe haengt der Blickbewegung hinterher.
@@ -741,6 +1266,9 @@ func _physics_process(delta: float) -> void:
 	_update_aiming(delta)
 	_handle_weapon_input()
 	_update_weapon_view(delta)
+	# Nach _update_aiming und _update_crouch: Der Koerper stellt dar, was
+	# diese Zeilen entschieden haben.
+	_update_body(delta)
 
 	move_and_slide()
 
@@ -774,7 +1302,7 @@ func _update_crouch(delta: float) -> void:
 
 	var shape := _collision.shape as CapsuleShape3D
 	if shape != null:
-		var target_shape_height := 1.2 if is_crouching else 1.8
+		var target_shape_height := CROUCH_HEIGHT if is_crouching else STAND_HEIGHT
 		shape.height = move_toward(shape.height, target_shape_height, 4.0 * delta)
 
 

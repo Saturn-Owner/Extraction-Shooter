@@ -186,8 +186,18 @@ func notify_shot() -> void:
 ## Es gibt kein Magazin zum Wechseln. Stattdessen werden Patronen einzeln
 ## von unten in die Roehre geschoben — sichtbar als Folge kurzer Stoesse,
 ## damit der Spieler mitzaehlen kann, wie lange es noch dauert.
-func notify_reload(progress: float, _from_empty: bool) -> void:
+func notify_reload(progress: float, _from_empty: bool,
+		chamber_only: bool = false) -> void:
 	_handle_pull = 0.0
+
+	# Volle Roehre, leerer Lauf: Es wird nichts nachgeschoben, nur einmal
+	# durchrepetiert. Ohne das schiebt die Flinte sichtbar Patronen nach, die
+	# sie gar nicht hat.
+	if chamber_only:
+		_shell_push = 0.0
+		_pump_cycle = maxf(_pump_cycle, action_cycle_time * sin(progress * PI))
+		return
+
 	var phase: float = fposmod(progress * float(SHELLS_PER_RELOAD), 1.0)
 	# Jede Patrone: kurzer Druck nach oben, dann zurueck.
 	_shell_push = sin(clampf(phase, 0.0, 0.55) / 0.55 * PI)

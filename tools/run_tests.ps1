@@ -84,7 +84,8 @@ $suites = @(
     "verify_player_audio",
     "verify_backpack",
     "verify_container_window",
-    "verify_frachthafen"
+    "verify_frachthafen",
+    "verify_character"
 )
 
 $failed = @()

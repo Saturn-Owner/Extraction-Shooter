@@ -4,7 +4,6 @@
 ## geflogen — die kommen spaeter zurueck. Ohne Ersatz waeren damit still und
 ## leise auch die Pruefungen verschwunden, die an ihnen haengen:
 ##
-##   * Schutzplatte  — das gesamte Durchschlagssystem (Grundsatzentscheidung 4)
 ##   * Rucksack      — verschachtelte Container, Gewicht des Inhalts
 ##   * Kleidung      — Waerme und Ausruestungsplaetze
 ##
@@ -13,38 +12,25 @@
 ## zur Laufzeit eingetragen. Die Werte sind die der geloeschten Dateien.
 ##
 ## Wenn die echten Gegenstaende zurueckkommen, kann diese Datei weg.
+##
+## Die Schutzplatte hat diesen Weg bereits hinter sich: Sie stand hier, ist
+## seit 2026-07-20 wieder eine echte Datei und wurde deshalb entfernt. Das ist
+## die Richtung, in die diese Datei schrumpfen soll.
 class_name TestItems
 extends RefCounted
 
 
 ## Traegt alle Ersatzvorlagen ein. Mehrfaches Aufrufen schadet nicht.
+##
+## Die Schutzplatte steht hier bewusst NICHT mehr: Sie ist als echte Datei
+## zurueck (assets/data/armor/plate_class4.tres). Stuende sie noch hier,
+## wuerde ItemRegistry.register() die echte Datei ueberschreiben — und die
+## Durchschlagstests pruefen wieder nur sich selbst statt das Spiel.
 static func install() -> void:
-	ItemRegistry.register(make_plate())
 	ItemRegistry.register(make_backpack())
 	ItemRegistry.register(make_coat())
 	ItemRegistry.register(make_boots())
 	ItemRegistry.register(make_thermal_shirt())
-
-
-static func make_plate() -> ArmorPlateData:
-	var plate := ArmorPlateData.new()
-	plate.id = &"plate_class4_front"
-	plate.display_name = "Schutzplatte Klasse 4"
-	plate.category = ItemData.Category.ARMOR_PLATE
-	plate.equip_slot = ItemData.EquipSlot.CHEST
-	plate.grid_width = 2
-	plate.grid_height = 3
-	plate.can_rotate = true
-	plate.weight_kg = 3.4
-	plate.max_stack = 1
-	plate.base_price = 18500
-	plate.armor_class = 4
-	plate.max_durability = 40.0
-	plate.degradation_threshold = 0.5
-	plate.movement_penalty_percent = 6.0
-	plate.ergonomics_penalty = 4.0
-	plate.insulation_bonus = 0.8
-	return plate
 
 
 static func make_backpack() -> ItemData:
