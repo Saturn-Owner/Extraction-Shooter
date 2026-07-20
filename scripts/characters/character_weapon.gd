@@ -69,17 +69,21 @@ const VOICES := 3
 ## Wohin die Waffe beim Nachladen wandert, relativ zur Haltung.
 ##
 ## ---------------------------------------------------------------------------
-## WARUM DIE WAFFE SICH BEWEGT UND NICHT NUR DIE HAND
+## SO WENIG WIE MÖGLICH — ABER NICHT NULL
 ##
-## Im Anschlag sitzt die Waffe rechts am Körper. Der Magazinschacht liegt
-## damit 0,68 m von der linken Schulter entfernt — der Arm ist 0,637 m lang.
-## Die Hand käme nicht hin, und ein gestreckter Arm, der 4 cm vor dem Magazin
-## endet, sieht schlimmer aus als gar keine Animation.
+## Die Waffe soll beim Wechseln auf ihrer Seite bleiben und nicht vor die
+## Körpermitte wandern. Ganz ohne Verschieben geht es aber nicht: Der
+## Magazinschacht liegt im Anschlag zu weit von der linken Schulter entfernt,
+## der Arm ist 0,637 m lang und käme 70 mm zu kurz. Ein gestreckter Arm, der
+## kurz vor dem Magazin endet, sieht schlimmer aus als gar keine Animation.
 ##
-## Ein Mensch löst das genauso: Zum Wechseln zieht man die Waffe an sich
-## heran und kippt sie, damit der Schacht zur greifenden Hand zeigt. Danach
-## geht sie zurück in den Anschlag.
-const RELOAD_SHIFT := Vector3(-0.16, -0.02, 0.10)
+## 7 cm sind das gemessene Minimum, mit dem die Hand überall hinkommt (7 mm
+## Rest). Die Waffe rückt damit von x = 0,18 auf 0,11 — sichtbar noch rechts
+## der Mitte. Bei 16 cm stand sie fast mittig vor dem Bauch, und genau das
+## sollte weg.
+##
+## Wer PULL_DISTANCE in CharacterAnimation vergrössert, muss hier nachlegen.
+const RELOAD_SHIFT := Vector3(-0.07, 0.0, 0.04)
 
 ## Wie die Waffe dabei gedreht wird — DIESELBE HALTUNG WIE BEIM SPIELER.
 ##
