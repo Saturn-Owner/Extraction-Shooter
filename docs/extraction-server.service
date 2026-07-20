@@ -9,7 +9,7 @@ After=network.target
 Type=simple
 User=extraction
 WorkingDirectory=/opt/extraction
-ExecStart=/opt/extraction/extraction_server.x86_64 --headless -- --server --port 24567
+ExecStart=/opt/extraction/godot/Godot_v4.7.1-stable_linux.x86_64 --headless --path /opt/extraction/projekt -- --server --port 24567
 Restart=on-failure
 RestartSec=3
 

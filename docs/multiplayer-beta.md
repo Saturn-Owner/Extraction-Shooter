@@ -56,43 +56,34 @@ Ergebnis:
   (pck ist eingebettet, eine Datei genügt)
 - `build/linux/extraction_server.x86_64` — für den VPS
 
-## VPS einrichten (Ubuntu/Debian, einmalig)
+## Der VPS (bereits eingerichtet, Stand 21.07.2026)
 
-Alle Befehle führt Tim/Lucas per SSH selbst aus.
+Läuft auf **193.23.160.41** (ZAP-Hosting, Ubuntu 24.04). Aufbau:
 
-```bash
-# 1. Benutzer und Verzeichnis
-sudo useradd -r -m -d /opt/extraction extraction
-sudo mkdir -p /opt/extraction
-sudo chown extraction:extraction /opt/extraction
+- `/opt/extraction/godot/` — offizielle Godot-4.7.1-Linux-Binary. **Kein
+  Export-Build nötig**: Der Server läuft mit der normalen Binary direkt auf
+  dem Projektquellcode. Exakt 4.7.1, damit nichts konvertiert wird.
+- `/opt/extraction/projekt/` — der Projektstand (aus `git archive HEAD`)
+- systemd-Dienst `extraction-server` (läuft als Benutzer `extraction`,
+  startet nach Absturz neu, UDP-Port 24567)
 
-# 2. Firewall: Spielport freigeben (ENet = UDP!)
-sudo ufw allow 24567/udp
-
-# 3. systemd-Dienst
-sudo cp extraction-server.service /etc/systemd/system/   # aus docs/
-sudo systemctl daemon-reload
-sudo systemctl enable extraction-server
-```
-
-Empfehlung: SSH-Schlüssel statt Passwort (`ssh-keygen` auf dem eigenen
-Rechner, dann `ssh-copy-id benutzer@vps`). Danach fragt kein Skript mehr
-nach einem Passwort.
+Tester verbinden sich im Startmenü mit `193.23.160.41` (Port ist vorbelegt).
 
 ## Neuen Stand ausrollen
 
 ```bash
-./tools/deploy_server.sh benutzer@vps-adresse    # in der Git Bash
+./tools/deploy_server.sh root@193.23.160.41 /pfad/zum/ssh-schluessel   # Git Bash
 ```
 
-Kopiert den Build, tauscht ihn aus, startet den Dienst neu. Log ansehen:
+Packt HEAD, kopiert, importiert, startet den Dienst neu. Log ansehen:
 
 ```bash
-ssh benutzer@vps 'journalctl -u extraction-server -f'
+ssh -i <schluessel> root@193.23.160.41 'journalctl -u extraction-server -f'
 ```
 
-Tester verbinden sich dann im Startmenü mit `<vps-adresse>` (Port 24567 ist
-vorbelegt).
+Falls der VPS je neu aufgesetzt werden muss: Benutzer `extraction` anlegen,
+Godot-Binary nach `/opt/extraction/godot`, `docs/extraction-server.service`
+nach `/etc/systemd/system/`, `ufw allow 24567/udp` — dann normal ausrollen.
 
 ## Was der Server prüft (und was noch nicht)
 
