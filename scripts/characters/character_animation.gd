@@ -42,13 +42,26 @@ const FULL_SWING_SPEED := 4.5
 ## Wie weit die Figur bei einem vollen Doppelschritt kommt.
 ##
 ## DARAN HÄNGT, OB DIE FÜSSE RUTSCHEN. Zu kurz gewählt, trippelt die Figur
-## hektisch; zu lang, gleitet sie. 1,4 m ist ein normaler Doppelschritt eines
-## Erwachsenen.
-const STRIDE_LENGTH := 1.4
+## hektisch; zu lang, gleitet sie.
+##
+## DER WERT IST NICHT FREI, sondern folgt aus dem Ausschlag: Ein Bein von
+## 0,75 m Länge, das um SWING_LEG nach vorn und ebenso weit nach hinten
+## schwingt, überstreicht je Schritt 2 × 0,75 × sin(SWING_LEG), und ein
+## Doppelschritt sind zwei davon:
+##
+##     STRIDE_LENGTH ≈ 4 × 0,75 × sin(SWING_LEG)
+##
+## Wer SWING_LEG ändert, muss diesen Wert mitziehen — sonst rutschen die
+## Füsse, und das sieht man sofort, ohne sagen zu können, was stört.
+const STRIDE_LENGTH := 1.7
 
 ## Grösster Ausschlag in Grad.
-const SWING_LEG := 26.0
-const SWING_ARM := 18.0
+##
+## Bei 26 Grad wirkten die Schritte zu klein — die Figur lief, aber
+## trippelig. 34 Grad ergeben einen raumgreifenden Schritt, ohne dass es nach
+## Stechschritt aussieht.
+const SWING_LEG := 34.0
+const SWING_ARM := 22.0
 
 ## Wie weit sich das Knie beim Vorschwingen anwinkelt.
 ##
@@ -63,7 +76,7 @@ const SWING_ARM := 18.0
 ## Gebeugt wird in der SCHWUNGPHASE, also wenn das Bein von hinten nach vorn
 ## kommt und der Fuss vom Boden ab ist. In der Standphase bleibt es fast
 ## gerade, sonst würde die Figur einsinken.
-const BEND_KNEE := 34.0
+const BEND_KNEE := 42.0
 
 ## Grundbeugung der Ellenbogen, auch im Stand.
 ##
