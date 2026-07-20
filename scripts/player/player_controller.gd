@@ -338,13 +338,16 @@ func stow_equipment(slot: ItemData.EquipSlot, x: int = -1, y: int = -1) -> bool:
 		if equipment.get_item(other) != null:
 			select_weapon_slot(other)
 		else:
-			_empty_hands()
+			empty_hands()
 
 	return true
 
 
 ## Leere Haende. Schiessen ist damit unmoeglich (Weapon.try_fire prueft `data`).
-func _empty_hands() -> void:
+##
+## Oeffentlich, weil auch das Level das braucht: Die Waffe in der Spielerszene
+## ist voreingestellt, wer unbewaffnet starten soll, muss sie loswerden.
+func empty_hands() -> void:
 	if weapon != null:
 		weapon.data = null
 		weapon.loaded_ammo = null

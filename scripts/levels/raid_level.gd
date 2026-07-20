@@ -28,12 +28,12 @@ extends Node3D
 ## und ein 5x2-Gewehr passt nicht mehr, wenn kleine Dinge die Reihen
 ## zerstueckelt haben.
 ##
-## HINWEIS: Das ist eine Testausruestung, kein Balancing. Sobald es das
-## Lager und das Terminal gibt, waehlt der Spieler selbst aus, was er
-## mitnimmt — und ein Gewehr gratis zu bekommen widerspricht dem Genre.
+## OHNE WAFFE. Man startet unbewaffnet und muss sich eine suchen — das ist
+## der Punkt des Genres, und ein Gewehr gratis zu bekommen widerspricht ihm.
+##
+## Die Munition bleibt: Sie ist der Grund, ueberhaupt nach einer Waffe zu
+## suchen, statt an der ersten Kiste vorbeizulaufen.
 const STARTING_KIT := [
-	{id = &"weapon_rifle_ar15", count = 1},
-	{id = &"weapon_pistol_g17", count = 1},
 	{id = &"ammo_556x45_m855a1", count = 60},
 	{id = &"ammo_9x19_fmj", count = 34},
 ]
@@ -83,11 +83,21 @@ func _give_starting_kit() -> void:
 			# erst auf, wenn jemand im Raid nachladen will.
 			push_error("[Raid] Startausruestung passt nicht ins Inventar: %s" % entry.id)
 
-	# Gezielt das Gewehr in die Hand, nicht die zuletzt angelegte Waffe.
+	# Gezielt die Primaerwaffe in die Hand, nicht die zuletzt angelegte.
 	# assign_weapon() nimmt jede neue Waffe in die Hand — sonst stuende man
 	# mit der Pistole da, nur weil sie in der Liste weiter unten steht.
-	if not _player.select_weapon_slot(ItemData.EquipSlot.PRIMARY):
-		_player.select_weapon_slot(ItemData.EquipSlot.SECONDARY)
+	if _player.select_weapon_slot(ItemData.EquipSlot.PRIMARY):
+		return
+	if _player.select_weapon_slot(ItemData.EquipSlot.SECONDARY):
+		return
+
+	# Kein Waffenplatz belegt: Die Haende muessen wirklich leer sein.
+	#
+	# Die Waffe in der Spielerszene ist auf ein AR-15 voreingestellt — ein
+	# Ueberbleibsel vom Schiessstand. Ohne diese Zeile startet man also
+	# bewaffnet, obwohl in der Startausruestung keine Waffe steht, und der
+	# ganze Sinn des unbewaffneten Starts waere dahin.
+	_player.empty_hands()
 
 
 func _on_window_opened() -> void:
@@ -268,6 +278,10 @@ func _update_info() -> void:
 
 	if _player.weapon != null and _player.weapon.data != null:
 		lines.append("Waffe:     %s" % _player.weapon.get_status_text())
+	else:
+		# Nicht weglassen: Wer unbewaffnet startet, soll das lesen koennen und
+		# nicht raten, warum das Schiessen nichts tut.
+		lines.append("Waffe:     keine — in den Kisten suchen")
 
 	lines.append("Dabei:     %d Gegenstaende" % _player.inventory.grid.get_item_count())
 	lines.append("Lager:     %d Gegenstaende" % _raid.stash.get_item_count())

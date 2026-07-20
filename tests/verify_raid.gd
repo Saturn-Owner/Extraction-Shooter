@@ -515,15 +515,21 @@ func _test_starting_kit() -> void:
 	_check(worn == expected_weapons,
 		"und jede Waffe haengt am Koerper (%d von %d)" % [worn, expected_weapons])
 
-	# Gezielt das Gewehr, nicht irgendeine Waffe.
-	var equipped := player.inventory.equipped_weapon
-	_check(equipped != null, "eine Waffe ist in der Hand")
-	if equipped != null:
-		_check(equipped.item_id == &"weapon_rifle_ar15",
-			"es ist das Gewehr, nicht die Pistole (%s)" % equipped.item_id)
+	# Man startet UNBEWAFFNET. Die Waffe in der Spielerszene ist auf ein
+	# AR-15 voreingestellt — ohne dass jemand sie ausdruecklich abnimmt,
+	# startet man also bewaffnet, obwohl in der Startausruestung keine Waffe
+	# steht. Genau das prueft die zweite Zeile.
+	_check(player.inventory.equipped_weapon == null, "keine Waffe in der Hand")
+	_check(player.weapon.data == null,
+		"und wirklich leere Haende, nicht nur ein leerer Platz")
+	_check(not player.weapon.try_fire(true, true), "es faellt kein Schuss")
 
+	# Erst eine GEFUNDENE Waffe macht wieder schussbereit — der Weg, den der
+	# Spieler jetzt gehen muss. Die mitgebrachte Munition ist genau dafuer da.
+	player.assign_weapon(ItemStack.create(&"weapon_rifle_ar15", 1))
+	_check(player.weapon.data != null, "eine gefundene Waffe landet in der Hand")
 	_check(player.weapon.rounds_in_magazine > 0,
-		"das Gewehr ist geladen (%d)" % player.weapon.rounds_in_magazine)
+		"und wird aus dem mitgebrachten Vorrat geladen (%d)" % player.weapon.rounds_in_magazine)
 	_check(player.weapon.ammo_id == &"ammo_556x45_m855a1",
 		"mit passender Munition (%s)" % player.weapon.ammo_id)
 
