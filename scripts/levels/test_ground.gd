@@ -54,7 +54,42 @@ func _ready() -> void:
 	for target in _find_targets():
 		target.was_hit.connect(_on_target_hit.bind(target))
 
+	_place_humanoids()
 	_give_loadout()
+
+
+## Wo die Figuren stehen. Dritte Reihe neben den flachen Scheiben, damit man
+## auf dieselbe Entfernung vergleichen kann: Scheibe ohne Platte bei x = -3,
+## mit Platte bei x = 0, Figur bei x = +3.
+const HUMANOID_DISTANCES := [25.0, 100.0, 300.0]
+
+
+## Stellt die Figuren AUS DEM CODE hin, nicht in testgelaende.tscn.
+##
+## Szenen lassen sich bei Konflikten praktisch nicht mergen, und an dieser
+## Szene haben zuletzt beide Entwickler gearbeitet — die Werkbank und die
+## Zielscheiben liegen nur Stunden auseinander. Drei Knoten dafür in eine
+## .tscn zu schreiben, wäre genau die Konfliktquelle, die uns beim letzten
+## Zusammenführen Arbeit gemacht hat.
+##
+## Dieselbe Überlegung steht schon hinter `Weapon._build_voices()` und der
+## Werkbank: Was sich im Code beschreiben lässt, gehört nicht in eine Szene.
+func _place_humanoids() -> void:
+	var container := get_node_or_null("Ziele")
+	if container == null:
+		return
+
+	for distance in HUMANOID_DISTANCES:
+		var figure := HumanoidTarget.new()
+		figure.name = "Figur%dm" % int(distance)
+		figure.label_text = "%d m  Figur" % int(distance)
+		container.add_child(figure)
+		# Nach dem Einhängen setzen: global_position braucht den Baum.
+		figure.global_position = Vector3(3.0, 0.0, -distance)
+		# Sie schaut den Schützen an — sonst zielt man auf ihre Seite und
+		# die Arme decken den Rumpf ab.
+		figure.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+		figure.part_hit.connect(_on_humanoid_hit.bind(figure))
 
 
 ## Füllt das Inventar und nimmt die erste Waffe in die Hand.
@@ -94,6 +129,28 @@ func _find_targets() -> Array[TargetDummy]:
 
 func _on_target_hit(result: Ballistics.HitResult, _hits: int, target: TargetDummy) -> void:
 	_last_hit = "%s: %s" % [target.label_text, result.describe()]
+
+
+## Bei der Figur steht das KÖRPERTEIL vorn, nicht der Schaden.
+##
+## Das ist die Frage, die man an einer Figur hat: Habe ich getroffen, was ich
+## treffen wollte? Wie viel Schaden es war, sagt die Beschriftung über ihrem
+## Kopf ohnehin dauerhaft.
+func _on_humanoid_hit(part: HealthSystem.Part, result: Ballistics.HitResult,
+		figure: HumanoidTarget) -> void:
+	_last_hit = "%s — %s: %s" % [
+		figure.label_text, BlockyCharacter.part_name(part), result.describe()]
+
+
+func _find_humanoids() -> Array[HumanoidTarget]:
+	var result: Array[HumanoidTarget] = []
+	var container := get_node_or_null("Ziele")
+	if container == null:
+		return result
+	for child in container.get_children():
+		if child is HumanoidTarget:
+			result.append(child as HumanoidTarget)
+	return result
 
 
 func _switch_weapon(step: int) -> void:
@@ -164,6 +221,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_player.velocity = Vector3.ZERO
 			for target in _find_targets():
 				target.reset()
+			for figure in _find_humanoids():
+				figure.reset()
 			_last_hit = "zurückgesetzt"
 			_last_action = ""
 

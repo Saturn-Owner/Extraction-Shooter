@@ -24,6 +24,7 @@ func _initialize() -> void:
 	await _test_a_real_ray_finds_the_body()
 	await _test_damage_reaches_the_right_part()
 	await _test_the_plate_covers_only_the_chest()
+	await _test_the_target_can_be_reset()
 	_test_colours()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
@@ -259,6 +260,57 @@ func _test_the_plate_covers_only_the_chest() -> void:
 		"der Kopf nicht — eine Brustplatte deckt keinen Kopf ab")
 
 	character.queue_free()
+
+
+## Die Zielfigur muss sich zurücksetzen lassen — sonst ist sie einmal
+## benutzbar und man muss das Level neu starten, um weiterzuprobieren.
+func _test_the_target_can_be_reset() -> void:
+	_section("Zielfigur")
+
+	var figure := HumanoidTarget.new()
+	figure.label_text = "Prüfung"
+	root.add_child(figure)
+	await process_frame
+
+	var ammo := _ammo(&"ammo_556x45_m855a1")
+	for i in range(6):
+		figure.take_hit_on_part(HealthSystem.Part.HEAD, ammo, 10.0,
+			Vector3.ZERO, Vector3.FORWARD)
+
+	_check(figure.health.is_dead, "sechs Kopftreffer töten sie")
+	_check(figure.describe().contains("TOT"),
+		"und die HUD-Zeile sagt es: %s" % figure.describe())
+
+	# DIE SCHRIFT ÜBER DEM KOPF MUSS KURZ BLEIBEN. Stand dort die lange
+	# Fassung, war sie viermal so breit wie die Schilder der flachen
+	# Scheiben — auf 25 m überlappten sich alle drei zu einem grauen Brei.
+	_check(figure.label_lines().length() < figure.describe().length(),
+		"das Schild ist kürzer als die HUD-Zeile (%d gegen %d Zeichen)"
+			% [figure.label_lines().length(), figure.describe().length()])
+	for line in figure.label_lines().split("\n"):
+		_check(String(line).length() <= 16,
+			"jede Zeile bleibt schmal: '%s'" % line)
+
+	figure.reset()
+	_check(not figure.health.is_dead, "reset() bringt sie zurück")
+	_check(is_equal_approx(figure.health.get_hp(HealthSystem.Part.HEAD),
+		HealthSystem.MAX_HP[HealthSystem.Part.HEAD]),
+		"mit vollen Trefferpunkten (%.0f)" % figure.health.get_hp(HealthSystem.Part.HEAD))
+	_check(not figure.describe().contains("TOT"),
+		"und die HUD-Zeile auch: %s" % figure.describe())
+	_check(figure.label_lines() == figure.label_text,
+		"unbeschädigt steht nur der Name auf dem Schild: '%s'" % figure.label_lines())
+
+	# Die Trefferzähler müssen mit zurück, sonst zählt die Beschriftung
+	# über mehrere Durchgänge weiter und die Zahl ist wertlos.
+	_check(figure.describe().contains("0 Treffer"),
+		"der Trefferzähler steht wieder auf null")
+
+	# Dieselbe Schnittstelle wie die flache Scheibe, damit das Testgelände
+	# beide über denselben Aufruf zurücksetzen kann.
+	_check(figure.has_method("reset"), "sie hat reset() wie TargetDummy")
+
+	figure.queue_free()
 
 
 func _test_colours() -> void:
