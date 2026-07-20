@@ -16,17 +16,29 @@
 ## Waffen: Das Modell weiss, wo es angefasst wird.
 ##
 ## ---------------------------------------------------------------------------
-## ACHSEN
+## ACHSEN UND HÖHE
 ##
-## Wie bei den Waffen: Das Modell schaut entlang +X, das Spiel erwartet -Z.
-## Die Drehung um 90 Grad passiert hier an einer Stelle.
+## Anders als die Waffen schaut dieses Modell bereits entlang -Z, also so, wie
+## Godot es erwartet: `front_panel` liegt bei z = -0.125, `back_panel` bei
+## +0.125. Es wird deshalb NICHT gedreht.
+##
+## Dafür ist es in Standhöhe gebaut — die Magazintaschen liegen bei y = 1.02,
+## der Kragen bei 1.60, gemessen vom Boden. Aufgehängt wird die Weste aber am
+## Brustgelenk, und das sitzt selbst schon auf 1.52 m. Ohne Korrektur schwebte
+## die Weste einen ganzen Körper über dem Kopf.
+##
+## `_mount_height()` misst deshalb, wie hoch der Aufhängepunkt über den Füssen
+## liegt, und zieht genau das wieder ab. Damit steht die Weste dort, wo der
+## Modellierer sie hingebaut hat — und bleibt richtig, wenn sich die
+## Körperproportionen in `BlockyCharacter` einmal ändern.
 class_name CharacterVest
 extends Node3D
 
 const MODEL := "res://assets/models/gear/taktische_weste.glb"
 
-## Blender/glTF liefert +X als Vorderseite, Godot erwartet -Z.
-const TURN := Vector3(0.0, 90.0, 0.0)
+## Das Modell steht schon richtig herum. Die Konstante bleibt, damit der
+## Unterschied zu den Waffenteilen sichtbar dokumentiert ist.
+const TURN := Vector3.ZERO
 
 ## Wie viele Magazintaschen die Weste hat.
 const POUCH_COUNT := 4
@@ -36,7 +48,26 @@ var _pouches: Array[Node3D] = []
 
 func _ready() -> void:
 	rotation_degrees = TURN
+	position.y = -_mount_height()
 	_build()
+
+
+## Wie hoch der Punkt, an dem die Weste hängt, über den Füssen liegt.
+##
+## Aufsummiert entlang der Elternkette bis zur Figur. Die Gelenke stehen in
+## Ruhelage achsenparallel, deshalb genügt das Addieren der Höhen — gemessen
+## wird beim Aufbau, nicht während einer Bewegung.
+func _mount_height() -> float:
+	var height := 0.0
+	var node := get_parent() as Node3D
+	while node != null and not (node is BlockyCharacter):
+		height += node.position.y
+		node = node.get_parent() as Node3D
+
+	if node == null:
+		push_warning("[CharacterVest] Keine Figur gefunden — Höhe ungeprüft")
+		return 0.0
+	return height
 
 
 func _build() -> void:

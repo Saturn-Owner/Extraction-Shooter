@@ -144,8 +144,12 @@ func _add_spare_magazine() -> void:
 
 	var model := (load(MAGAZINE) as PackedScene).instantiate()
 	_spare_magazine.add_child(model)
-	# Wie bei der Weste: Das Modell schaut entlang +X, das Spiel erwartet -Z.
-	_spare_magazine.rotation_degrees = CharacterVest.TURN
+	# Das Magazin ist ein Waffenteil und schaut entlang +X, das Spiel erwartet
+	# -Z. Die Drehung kommt deshalb von GlbParts, nicht von der Weste: Hier
+	# stand frueher CharacterVest.TURN, was nur zufaellig stimmte, solange
+	# beide Modelle dieselbe Achse hatten. Seit die Weste schon richtig herum
+	# exportiert wird, laege das Magazin damit quer.
+	_spare_magazine.rotation_degrees = GlbParts.TURN
 
 
 ## Gibt der Figur eine Waffe.

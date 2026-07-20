@@ -913,4 +913,6 @@ func _test_colours() -> void:
 	var half := BlockyCharacter.color_for(0.5)
 	_check(not half.is_equal_approx(BlockyCharacter.COLOR_HEALTHY)
 		and not half.is_equal_approx(BlockyCharacter.COLOR_DESTROYED),
-		"halb verletzt liegt dazwischen (%v)" % half)
+		# %v gilt nur fuer Vektoren, eine Color faellt durch — die Meldung blieb
+		# dadurch unlesbar, obwohl die Pruefung selbst stimmte.
+		"halb verletzt liegt dazwischen (%.2f/%.2f/%.2f)" % [half.r, half.g, half.b])
