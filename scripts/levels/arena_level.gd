@@ -48,6 +48,19 @@ func _exit_tree() -> void:
 	Net.unregister_arena(self)
 
 
+## Waffenwechsel auf 1 und 2, wie im Raid. Die Werkbank hat ihr eigenes Tab.
+func _unhandled_input(event: InputEvent) -> void:
+	if _player == null or _player.ui_open:
+		return
+	if not (event is InputEventKey) or not event.is_pressed() or event.is_echo():
+		return
+	match (event as InputEventKey).physical_keycode:
+		KEY_1:
+			_player.select_weapon_slot(ItemData.EquipSlot.PRIMARY)
+		KEY_2:
+			_player.select_weapon_slot(ItemData.EquipSlot.SECONDARY)
+
+
 ## Die Ecke mit diesem Index, als Weltposition. Die Marker stehen in der
 ## Szene — wer die Map umbaut, verschiebt die Marker, nicht den Code.
 func spawn_position(index: int) -> Vector3:
