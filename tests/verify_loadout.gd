@@ -189,8 +189,16 @@ func _finish() -> void:
 	quit(1 if _failed > 0 else 0)
 
 
+## Ein Inventar mit reichlich Platz.
+##
+## Die eigenen Taschen sind nur 2x8 gross — hier geht es aber um Buchhaltung
+## (verschwindet Munition? zaehlt der Rucksack mit?), nicht um Platzmangel.
+## Mit den nackten Taschen wuerden diese Tests am fehlenden Platz scheitern
+## statt an dem, was sie pruefen sollen.
 func _make_inventory() -> PlayerInventory:
 	var inv := PlayerInventory.new()
+	inv.grid_width = 10
+	inv.grid_height = 8
 	root.add_child(inv)
 	return inv
 

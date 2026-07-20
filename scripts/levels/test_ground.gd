@@ -63,6 +63,12 @@ func _give_loadout() -> void:
 	if inventory == null:
 		return
 
+	# Der Schiessstand ist kein Raid: Hier geht es darum, jede Waffe mit jedem
+	# Kaliber auszuprobieren, nicht darum, Platz zu verwalten. Die nackten
+	# Taschen (2x8) fassen davon nicht einmal die Haelfte, deshalb bekommt
+	# der Spieler hier ein grosszuegiges Raster.
+	inventory.grid.resize(10, 8)
+
 	for entry in LOADOUT:
 		if not inventory.add(entry.id, entry.count):
 			# Lauter Fehler statt stiller Warnung: Wenn die Startausruestung

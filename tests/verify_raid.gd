@@ -607,9 +607,24 @@ func _test_rotate_while_dragging() -> void:
 	player.free()
 
 
+## Ein Spieler mit grosszuegigem Raster.
+##
+## Die eigenen Taschen sind nur 2x8 gross. Hier geht es aber um Ziehen,
+## Ablegen und Extraction — nicht um Platzmangel. Mit den nackten Taschen
+## wuerden diese Tests am fehlenden Platz scheitern statt an dem, was sie
+## pruefen sollen. Dass zu wenig Platz sauber abgelehnt wird, prueft
+## verify_inventory an eigener Stelle.
 func _make_player() -> PlayerController:
 	var packed: PackedScene = load("res://scenes/player/player.tscn")
 	var player: PlayerController = packed.instantiate()
+
+	# Ueber get_node, nicht ueber player.inventory: Das @onready-Feld ist erst
+	# gesetzt, wenn der Knoten im Baum haengt — und dann hat _ready() das
+	# Raster laengst in Taschengroesse gebaut.
+	var inventory: PlayerInventory = player.get_node("Inventory")
+	inventory.grid_width = 10
+	inventory.grid_height = 8
+
 	root.add_child(player)
 	return player
 
