@@ -53,6 +53,9 @@ var support_target: Node3D
 ## Der Magazinschacht der Waffe. Dorthin greift die Stützhand beim Nachladen.
 var magwell_target: Node3D
 
+## Der Ladehebel. Zum Schluss des Nachladens zieht die Hand ihn durch.
+var charge_target: Node3D
+
 ## Fortschritt des Nachladens, 0 bis 1. Negativ heisst: wird nicht nachgeladen.
 var reload_progress: float = -1.0
 
@@ -65,27 +68,33 @@ const POUCH := Vector3(-0.24, 0.95, -0.14)
 ## Der Ablauf des Nachladens, als Wegmarken der Stützhand.
 ##
 ## ---------------------------------------------------------------------------
-## DIE HAND GREIFT AN DEN SCHACHT, NICHT AN DAS FALLENDE MAGAZIN
+## SECHS SCHRITTE, WIE ES WIRKLICH GEHT
 ##
-## Naheliegend wäre, das Magazin selbst zum Ziel zu machen — die Waffe
-## animiert es ja bereits, und die Hand würde von selbst synchron laufen.
-## Gerechnet geht das aber nicht auf: Das Magazin fällt 34 cm, und der linke
-## Arm ist 0,64 m lang bei 0,57 m Abstand zur Waffe. Die Hand käme nicht
-## hinterher und bliebe mit gestrecktem Arm in der Luft hängen.
+##   hinreichen  →  greifen  →  herausziehen  →  neues holen
+##               →  einschieben  →  Ladehebel durchziehen
 ##
-## Es wäre auch falsch. Niemand begleitet ein fallendes Magazin zu Boden: Man
-## greift an den Schacht, löst es, und es fällt von allein. Genau das machen
-## die Wegmarken unten — die Hand bleibt am Schacht, während das Magazin
-## darunter wegfällt.
+## Die Zeiten sind auf `WeaponViewmodel._animate_magazine_swap` abgestimmt und
+## dürfen nicht frei verschoben werden: Dort fällt das Magazin bis 0,30, ist
+## bis 0,45 verschwunden, sitzt bei 0,85 wieder, und ab 0,85 läuft der
+## Ladehebel. Wer hier eine Marke verschiebt, muss dort nachsehen — sonst
+## greift die Hand ins Leere, während das Magazin woanders ist.
 ##
-## Die Zeiten sind auf `WeaponViewmodel._animate_magazine_swap` abgestimmt:
-## Dort fällt das Magazin bis 0,30, ist bis 0,45 verschwunden und sitzt bei
-## 0,85 wieder.
-const RELOAD_REACH := 0.12   ## bis hierhin: vom Schaft zum Schacht
-const RELOAD_RELEASE := 0.30 ## bis hierhin: am Schacht, das Magazin fällt
-const RELOAD_FETCH := 0.44   ## bis hierhin: zur Tasche, neues holen
-const RELOAD_CARRY := 0.58   ## bis hierhin: zurück an den Schacht
-const RELOAD_SEAT := 0.86    ## bis hierhin: am Schacht, Magazin geht hinein
+## ---------------------------------------------------------------------------
+## HERAUSZIEHEN HEISST NICHT HINTERHERFALLEN
+##
+## Das Magazin fällt 34 cm. So weit reicht kein Arm, und niemand begleitet ein
+## fallendes Magazin zu Boden. Die Hand zieht es 8 cm heraus — so weit, dass
+## man die Bewegung sieht — und lässt es dann fallen.
+const RELOAD_REACH := 0.10   ## vom Schaft zum Schacht
+const RELOAD_GRIP := 0.16    ## kurz halten, bevor es losgeht
+const RELOAD_PULL := 0.30    ## herausziehen
+const RELOAD_FETCH := 0.45   ## zur Tasche, altes weg und neues in die Hand
+const RELOAD_CARRY := 0.72   ## neues zurück an den Schacht
+const RELOAD_SEAT := 0.85    ## einschieben
+const RELOAD_CHARGE := 0.96  ## Ladehebel greifen und durchziehen
+
+## Wie weit die Hand das Magazin herauszieht, bevor sie es loslässt.
+const PULL_DISTANCE := 0.08
 
 
 ## Haltung mit Waffe. Werte in Grad.
@@ -342,19 +351,43 @@ func _support_hand_goal() -> Vector3:
 	var pouch := character.global_transform * POUCH
 	var p := reload_progress
 
+	# Herausgezogen wird nach unten aus der Waffe heraus, nicht nach
+	# Weltkoordinaten unten: Die Waffe ist beim Nachladen gekippt.
+	var down := -magwell_target.global_basis.y.normalized()
+	var pulled := magwell + down * PULL_DISTANCE
+
+	# 1. Hinreichen. smoothstep statt lerp, damit die Hand anfährt und
+	#    abbremst, statt ruckartig loszuschnellen.
 	if p < RELOAD_REACH:
-		# Hinuntergreifen. smoothstep statt lerp, damit die Hand anfährt und
-		# abbremst, statt ruckartig loszuschnellen.
 		return handguard.lerp(magwell, smoothstep(0.0, RELOAD_REACH, p))
-	if p < RELOAD_RELEASE:
+
+	# 2. Greifen — kurz stillhalten. Ohne diese Pause liest sich das
+	#    Herausziehen nicht als Griff, sondern als Durchwischen.
+	if p < RELOAD_GRIP:
 		return magwell
+
+	# 3. Herausziehen.
+	if p < RELOAD_PULL:
+		return magwell.lerp(pulled, smoothstep(RELOAD_GRIP, RELOAD_PULL, p))
+
+	# 4. Altes fallen lassen, neues aus der Tasche holen.
 	if p < RELOAD_FETCH:
-		return magwell.lerp(pouch, smoothstep(RELOAD_RELEASE, RELOAD_FETCH, p))
+		return pulled.lerp(pouch, smoothstep(RELOAD_PULL, RELOAD_FETCH, p))
+
+	# 5. Neues heranführen und einschieben.
 	if p < RELOAD_CARRY:
-		return pouch.lerp(magwell, smoothstep(RELOAD_FETCH, RELOAD_CARRY, p))
+		return pouch.lerp(pulled, smoothstep(RELOAD_FETCH, RELOAD_CARRY, p))
 	if p < RELOAD_SEAT:
-		return magwell
-	return magwell.lerp(handguard, smoothstep(RELOAD_SEAT, 1.0, p))
+		return pulled.lerp(magwell, smoothstep(RELOAD_CARRY, RELOAD_SEAT, p))
+
+	# 6. Ladehebel. Das Modell zieht ihn ab 0,85 nach hinten — die Hand
+	#    folgt ihm einfach, statt eine eigene Bahn zu laufen.
+	var handle := charge_target.global_position if charge_target != null else magwell
+	if p < RELOAD_CHARGE:
+		return magwell.lerp(handle, smoothstep(RELOAD_SEAT, RELOAD_CHARGE, p))
+
+	# Zurück an den Schaft.
+	return handle.lerp(handguard, smoothstep(RELOAD_CHARGE, 1.0, p))
 
 
 ## Stellt einen Arm so, dass die Hand auf dem Zielpunkt liegt.

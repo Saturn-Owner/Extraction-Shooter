@@ -556,6 +556,24 @@ func _test_hinges() -> void:
 	character.queue_free()
 
 
+## Stellt ein Einzelbild mitten im Nachladen her — in derselben Reihenfolge,
+## in der es das Spiel tut: erst die Waffe, dann das Modell, dann der Arm.
+func _advance_reload_frame(figure: HumanoidTarget, progress: float) -> void:
+	var weapon := figure.weapon
+	if progress < 0.0:
+		weapon._reloading = false
+	else:
+		weapon._reloading = true
+		weapon._reload_left = (1.0 - progress) * weapon.reload_seconds
+
+	weapon._update_hold_pose()
+	weapon.viewmodel.notify_reload(maxf(progress, 0.0), true)
+	weapon.viewmodel.update_mechanics(1.0 / 60.0)
+
+	figure._animation.reload_progress = weapon.reload_progress()
+	figure._animation._process(1.0 / 60.0)
+
+
 ## Die Waffe in der Hand.
 func _test_weapon_in_hand() -> void:
 	_section("Waffe")
@@ -667,12 +685,17 @@ func _test_weapon_in_hand() -> void:
 	_check(figure.weapon.viewmodel.magwell_point != null,
 		"die Waffe nennt ihren Magazinschacht")
 
+	# DEN ECHTEN ABLAUF NACHSTELLEN, NICHT NUR DEN FORTSCHRITT SETZEN.
+	#
+	# Beim Nachladen zieht die Figur die Waffe an sich heran — ohne das läge
+	# der Schacht ausserhalb der Armlänge. Ein Test, der nur
+	# `reload_progress` setzt, misst deshalb eine Lage, die es im Spiel nie
+	# gibt, und meldet 109 mm Abweichung, wo in Wahrheit alles passt.
 	var worst := 0.0
 	var worst_at := 0.0
 	for step in range(41):
 		var progress := float(step) / 40.0
-		figure._animation.reload_progress = progress
-		figure._animation._process(1.0 / 60.0)
+		_advance_reload_frame(figure, progress)
 
 		var goal := figure._animation._support_hand_goal()
 		var hand_now := figure.hand_of(HealthSystem.Part.LEFT_ARM)
@@ -687,26 +710,63 @@ func _test_weapon_in_hand() -> void:
 
 	# Und sie muss sich dabei WIRKLICH bewegen — eine Hand, die stur am
 	# Schaft klebt, bestünde die Prüfung darüber mühelos.
-	figure._animation.reload_progress = -1.0
-	figure._animation._process(1.0 / 60.0)
+	_advance_reload_frame(figure, -1.0)
 	var resting_hand := figure.hand_of(HealthSystem.Part.LEFT_ARM).global_position
 
-	figure._animation.reload_progress = 0.5
-	figure._animation._process(1.0 / 60.0)
+	_advance_reload_frame(figure, 0.38)
 	var fetching_hand := figure.hand_of(HealthSystem.Part.LEFT_ARM).global_position
 
 	_check(resting_hand.distance_to(fetching_hand) > 0.15,
 		"und wandert dabei zur Magazintasche (%.2f m)"
 			% resting_hand.distance_to(fetching_hand))
 
+	# DIE SECHS SCHRITTE MÜSSEN WIRKLICH STATTFINDEN.
+	#
+	# Nicht alle haben eine eigene Stelle: Greifen und Einschieben passieren
+	# beide am Schacht, das ist die Sache selbst und kein Fehler. Geprüft
+	# wird deshalb, was die Schritte voneinander unterscheidet.
+	var at := func(progress: float) -> Vector3:
+		_advance_reload_frame(figure, progress)
+		return figure.hand_of(HealthSystem.Part.LEFT_ARM).global_position
+
+	var gripping: Vector3 = at.call(0.13)
+	var pulled: Vector3 = at.call(0.30)
+	# Am Umkehrpunkt messen, nicht auf dem Weg dorthin: Bei 0,38 ist die Hand
+	# erst gut zur Haelfte an der Tasche.
+	var at_pouch: Vector3 = at.call(0.44)
+	var seating: Vector3 = at.call(0.80)
+	var charging: Vector3 = at.call(0.94)
+
+	# Herausziehen: die Hand wandert aus der Waffe heraus.
+	var pull := gripping.distance_to(pulled)
+	_check(pull > CharacterAnimation.PULL_DISTANCE * 0.8,
+		"das Magazin wird herausgezogen (%.0f mm)" % (pull * 1000.0))
+
+	# Zur Tasche: der weiteste Weg des ganzen Ablaufs.
+	_check(at_pouch.distance_to(gripping) > 0.20,
+		"die Hand holt ein neues aus der Tasche (%.2f m entfernt)"
+			% at_pouch.distance_to(gripping))
+
+	# Einschieben: zurück nach oben in den Schacht, nicht irgendwohin.
+	_check(seating.distance_to(gripping) < pulled.distance_to(gripping),
+		"das neue Magazin geht wieder hinein")
+
+	# Ladehebel: hinten oben, deutlich woanders als der Schacht.
+	_check(charging.distance_to(gripping) > 0.10,
+		"der Ladehebel wird durchgezogen (%.2f m vom Schacht)"
+			% charging.distance_to(gripping))
+	_check(charging.y > gripping.y,
+		"und er liegt höher als der Schacht (%.2f gegen %.2f)"
+			% [charging.y, gripping.y])
+
 	# Die rechte Hand bleibt derweil am Griff — die Waffe hält man fest.
+	_advance_reload_frame(figure, 0.55)
 	var right_hand := figure.hand_of(HealthSystem.Part.RIGHT_ARM)
 	_check(right_hand.global_position.distance_to(
 		figure.weapon.viewmodel.grip_point.global_position) < 0.02,
 		"die rechte Hand bleibt beim Nachladen am Griff")
 
-	figure._animation.reload_progress = -1.0
-	figure._animation._process(1.0 / 60.0)
+	_advance_reload_frame(figure, -1.0)
 	_check(figure.hand_of(HealthSystem.Part.LEFT_ARM).global_position
 		.distance_to(support.global_position) < 0.02,
 		"danach liegt sie wieder am Vorderschaft")

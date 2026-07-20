@@ -110,6 +110,7 @@ func _arm_with_weapon() -> void:
 		_animation.grip_target = weapon.viewmodel.grip_point
 		_animation.support_target = weapon.viewmodel.support_point
 		_animation.magwell_target = weapon.viewmodel.magwell_point
+		_animation.charge_target = weapon.viewmodel.charging_handle
 
 
 ## Läuft hin und her, falls patrol_width gesetzt ist.

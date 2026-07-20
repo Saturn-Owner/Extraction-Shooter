@@ -138,7 +138,10 @@ func _build_points() -> void:
 	# ihn also etwa eine Handbreit darunter. Der Vorderschaft liegt vor dem
 	# Magazin auf halbem Weg zur Muendung.
 	add_child(GlbParts.pivot("GripPoint", Vector3(0.0, -0.085, -0.050)))
-	add_child(GlbParts.pivot("SupportPoint", Vector3(0.0, -0.020, -0.290)))
+	# Der Stuetzgriff sitzt bewusst weit hinten am Schaft, dicht hinter dem
+	# Magazin: Weiter vorn kaeme die linke Hand nicht mehr hin, seit die
+	# Waffe rechts am Koerper sitzt. Das ist auch ein gebraeuchlicher Griff.
+	add_child(GlbParts.pivot("SupportPoint", Vector3(0.0, -0.020, -0.240)))
 
 	# Der Magazinschacht: am unteren Drittel des sitzenden Magazins, das von
 	# y = -0,007 bis -0,236 reicht und bei z = -0,181 sitzt.

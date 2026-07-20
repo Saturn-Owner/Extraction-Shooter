@@ -66,6 +66,29 @@ var _shot_sound: AudioStream
 ## stehen.
 const VOICES := 3
 
+## Wohin die Waffe beim Nachladen wandert, relativ zur Haltung.
+##
+## ---------------------------------------------------------------------------
+## WARUM DIE WAFFE SICH BEWEGT UND NICHT NUR DIE HAND
+##
+## Im Anschlag sitzt die Waffe rechts am Körper. Der Magazinschacht liegt
+## damit 0,68 m von der linken Schulter entfernt — der Arm ist 0,637 m lang.
+## Die Hand käme nicht hin, und ein gestreckter Arm, der 4 cm vor dem Magazin
+## endet, sieht schlimmer aus als gar keine Animation.
+##
+## Ein Mensch löst das genauso: Zum Wechseln zieht man die Waffe an sich
+## heran und kippt sie, damit der Schacht zur greifenden Hand zeigt. Danach
+## geht sie zurück in den Anschlag.
+const RELOAD_SHIFT := Vector3(-0.12, 0.0, 0.08)
+
+## Wie weit die Waffe dabei zur Seite kippt, in Grad.
+const RELOAD_ROLL := -16.0
+
+## In diesem Abschnitt wird herangezogen bzw. wieder ausgerichtet.
+const BRING_IN_END := 0.12
+const PUSH_OUT_START := 0.90
+
+var _home_position: Vector3
 var _timer: float = 0.0
 var _rounds: int = 0
 var _reloading: bool = false
@@ -75,6 +98,7 @@ var _resting: float = 0.0
 
 func _ready() -> void:
 	ItemRegistry.ensure_loaded()
+	_home_position = position
 	_build()
 
 
@@ -126,6 +150,7 @@ func _process(delta: float) -> void:
 	# Ohne diesen Aufruf steht der Verschluss still und das Magazin klebt
 	# fest — die Mechanik läuft nicht von allein.
 	viewmodel.update_mechanics(delta)
+	_update_hold_pose()
 
 	match behaviour:
 		Behaviour.HOLD:
@@ -134,6 +159,22 @@ func _process(delta: float) -> void:
 			_tick_reload_loop(delta)
 		Behaviour.SHOOT:
 			_tick_shooting(delta)
+
+
+## Zieht die Waffe zum Nachladen heran und richtet sie danach wieder aus.
+func _update_hold_pose() -> void:
+	var amount := 0.0
+	var progress := reload_progress()
+	if progress >= 0.0:
+		if progress < BRING_IN_END:
+			amount = smoothstep(0.0, BRING_IN_END, progress)
+		elif progress < PUSH_OUT_START:
+			amount = 1.0
+		else:
+			amount = 1.0 - smoothstep(PUSH_OUT_START, 1.0, progress)
+
+	position = _home_position + RELOAD_SHIFT * amount
+	rotation_degrees.z = RELOAD_ROLL * amount
 
 
 ## Lädt endlos nach, mit Pause dazwischen.
