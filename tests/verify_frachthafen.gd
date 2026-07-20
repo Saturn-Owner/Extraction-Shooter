@@ -48,6 +48,7 @@ func _run_all() -> void:
 		return
 
 	_test_inventory()
+	_test_container_model()
 	_test_spawn_distance()
 	_test_exit_requirements()
 	_test_loot_tables()
@@ -55,9 +56,10 @@ func _run_all() -> void:
 	_test_crates_free()
 	_test_spawn_free()
 	_test_ramps()
-	_test_bridge_clear()
+	_test_ships_boardable()
 	_test_world_bounds()
 	_test_collision_layers()
+	_test_asset_sizes()
 
 	_level.free()
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
@@ -117,6 +119,79 @@ func _test_inventory() -> void:
 
 	var player := _level.get_node_or_null("Player")
 	_check(player != null, "der Spieler steht in der Szene")
+
+
+## Das Containermodell — das haeufigste Objekt der Karte, gut vierhundert Stueck.
+func _test_container_model() -> void:
+	_section("Containermodell")
+
+	_check(WorldParts.has_container_model(), "das Modell liegt im Projekt")
+	if not WorldParts.has_container_model():
+		return
+
+	var mesh: Mesh = load(WorldParts.CONTAINER_MESH)
+	_check(mesh != null, "container_20ft.res laedt als Mesh")
+	if mesh == null:
+		return
+
+	# Die Mesh kommt roh und schief aus dem Paket. Erst diese Rechnung macht
+	# einen Container daraus, der mittig um den Ursprung sitzt und die Groesse
+	# hat, mit der das Layout rechnet. Liegt sie daneben, stehen vierhundert
+	# Container in falscher Groesse oder halb im Boden.
+	var placed := WorldParts.container_mesh_transform(mesh) * mesh.get_aabb()
+	var want := WorldParts.CONTAINER_SIZE
+
+	_check(placed.size.is_equal_approx(want),
+		"nach dem Zurechtruecken %.2f x %.2f x %.2f (soll %.2f x %.2f x %.2f)" % [
+			placed.size.x, placed.size.y, placed.size.z, want.x, want.y, want.z])
+
+	var centre := placed.position + placed.size * 0.5
+	_check(centre.length() < 0.01,
+		"und sitzt mittig um den Ursprung (Abweichung %.3f m)" % centre.length())
+
+	# Rasterfreundlich: Alle drei Masse muessen restlos in 0,2 m aufgehen,
+	# sonst laesst sich im Editor nichts buendig aneinanderschieben — und genau
+	# daran ist Lucas beim ersten Versuch haengengeblieben.
+	for axis: float in [want.x, want.y, want.z]:
+		_check(absf(fmod(axis, 0.2)) < 0.001 or absf(fmod(axis, 0.2) - 0.2) < 0.001,
+			"%.2f m passt ins 0,2-m-Raster" % axis)
+
+	# Die entfaerbte Textur ist der Grund, warum eine Textur alle Farben traegt.
+	# Steckt die Farbe doch noch drin, kaempft sie gegen die eingestellte.
+	var albedo: Texture2D = load(WorldParts.CONTAINER_ALBEDO)
+	_check(albedo != null, "die BaseColor-Textur laedt")
+	if albedo != null:
+		var image := albedo.get_image()
+		var coloured := 0
+		for i in range(200):
+			var x := (i * 37) % image.get_width()
+			var y := (i * 53) % image.get_height()
+			var c := image.get_pixel(x, y)
+			if absf(c.r - c.g) > 0.02 or absf(c.g - c.b) > 0.02:
+				coloured += 1
+		_check(coloured == 0,
+			"sie ist wirklich entfaerbt (%d von 200 Stichproben farbig)" % coloured)
+
+	_check(load(WorldParts.CONTAINER_ORM) != null, "die ORM-Textur laedt")
+	_check(load(WorldParts.CONTAINER_NORMAL) != null, "die Normalenkarte laedt")
+
+	# Genug unterscheidbare Farben, und alle teilen sich EINE Textur.
+	var colours := WorldParts.container_colors()
+	_check(colours.size() >= 4, "mindestens vier Farben (%d)" % colours.size())
+
+	var mats := WorldParts.container_materials()
+	var shared := true
+	var seen: Texture2D = null
+	for key: String in colours:
+		var mat: BaseMaterial3D = mats.get(key)
+		if mat == null:
+			_check(false, "Material '%s' fehlt" % key)
+			continue
+		if seen == null:
+			seen = mat.albedo_texture
+		elif mat.albedo_texture != seen:
+			shared = false
+	_check(shared, "alle Farben teilen sich dieselbe Textur")
 
 
 ## Der Fehler der alten Karte: Dort liegt ein Ausgang zehn Meter vom Spawn.
@@ -208,20 +283,18 @@ func _test_risk_and_reward() -> void:
 	for crate in housing:
 		farthest_housing = maxf(farthest_housing, crate.global_position.distance_to(spawn))
 
-	_check(nearest_military > farthest_housing,
-		"jede Militaerkiste liegt tiefer drin als jede Wohnungskiste (%.0f m gegen %.0f m)" % [
+	# Der Faktor ist das Entscheidende, nicht die blosse Reihenfolge: Liegt das
+	# gute Zeug nur zehn Meter weiter, ist der Weg dorthin keine Entscheidung.
+	_check(nearest_military > farthest_housing * 1.5,
+		"Militaerloot liegt mehr als anderthalbmal so tief wie Wohnungsloot (%.0f m gegen %.0f m)" % [
 			nearest_military, farthest_housing])
 
-	# Und der naechste Ausgang beim guten Zeug darf kein schneller sein.
-	# Sonst waere der tiefe Weg belohnt UND billig — dann gibt es keinen Grund,
-	# jemals den langen Rueckweg zu nehmen.
+	# Das gute Zeug liegt an Deck. Ein Ausgang dort oben darf ruhig schnell
+	# sein — bezahlt wird mit dem WEG, nicht mit dem Timer. Der Test haelt nur
+	# fest, dass der Weg auch wirklich lang ist.
 	for crate in military:
-		var zone := _nearest_exit(crate.global_position)
-		if zone == null:
-			continue
-		_check(zone.required_time >= 12.0,
-			"%s: naechster Ausgang ist %s mit %.0f s (mindestens 12)" % [
-				crate.name, zone.display_name, zone.required_time])
+		_check(crate.global_position.y > 1.0,
+			"%s liegt erhoeht, nicht ebenerdig zu erreichen" % crate.name)
 
 
 ## Eine Kiste in einer Wand kann man sehen, aber nicht erreichen — und das
@@ -246,8 +319,19 @@ func _test_spawn_free() -> void:
 	_check(blocker == "", "der Spieler startet im Freien%s" % [
 		"" if blocker == "" else " — steckt in %s" % blocker])
 
-	var ground := _level.get_node_or_null("Boden")
-	_check(ground != null, "es gibt einen Boden unter ihm")
+	# Boden unter den Fuessen — das Land baut das Layout selbst, es gibt keine
+	# durchgehende Platte mehr. Ohne diese Pruefung faellt man beim Start
+	# einfach ins Leere, und das merkt man erst beim Starten.
+	var below := _solid_containing(spawn - Vector3(0.0, 0.6, 0.0))
+	_check(below != "", "unter ihm ist Land%s" % [
+		"" if below == "" else " (%s)" % below])
+
+	# Und ueber dem Wasser darf KEIN Boden liegen. Frueher lag eine 220 m
+	# grosse Platte auf y = 0 quer ueber dem ganzen Hafenbecken — man konnte
+	# aufs Wasser laufen.
+	var on_water := _solid_containing(Vector3(0.0, -0.3, -120.0))
+	_check(on_water == "", "ueber dem Hafenbecken liegt kein Boden%s" % [
+		"" if on_water == "" else " — %s ist im Weg" % on_water])
 
 
 ## Der Spieler springt knapp 0,8 m hoch. Auf einen 2,6 m hohen Container kommt
@@ -256,17 +340,19 @@ func _test_spawn_free() -> void:
 func _test_ramps() -> void:
 	_section("Rampen")
 
-	var ramps := _level.find_child("Rampen", true, false)
-	_check(ramps != null, "es gibt Rampen")
-	if ramps == null:
-		return
+	# Ueber die Neigung suchen, nicht ueber einen Elternknoten: Rampen koennen
+	# ueberall haengen — an den Schiffen, an einem Block, irgendwo im Gelaende.
+	# Der Test soll sie finden, egal wohin jemand sie spaeter schiebt.
+	var ramps: Array[StaticBody3D] = []
+	for body in _solids:
+		if absf(body.global_rotation_degrees.x) > 0.5:
+			ramps.append(body)
 
-	for child in ramps.get_children():
-		var body := child as StaticBody3D
-		if body == null:
-			continue
-		var angle := absf(body.rotation_degrees.x)
-		_check(angle > 0.5 and angle <= MAX_RAMP_DEGREES,
+	_check(not ramps.is_empty(), "es gibt Rampen (%d)" % ramps.size())
+
+	for body in ramps:
+		var angle := absf(body.global_rotation_degrees.x)
+		_check(angle <= MAX_RAMP_DEGREES,
 			"%s steigt mit %.1f Grad (hoechstens %.0f)" % [body.name, angle, MAX_RAMP_DEGREES])
 
 	# Die Rechnung im Layout muss zur Geometrie passen: Rampe hoch, Container
@@ -279,34 +365,37 @@ func _test_ramps() -> void:
 			"%s: %.2f m auf %.1f m sind %.1f Grad" % [entry.name, rise, run, degrees])
 
 
-## Der Laufsteg streift die Containerreihe bei z = 6 nur knapp: Ein Zweierstapel
-## endet bei 5,18 m, der Steg beginnt bei 5,60 m. Vier Zentimeter mehr als eine
-## Handbreit.
-##
-## Wer in `CONTAINER_ROWS` bei z = 6 eine Hoehe von 2 auf 3 setzt — eine
-## harmlos aussehende Zahl —, schiebt einen Container mitten durch die Bruecke.
-## Im Spiel merkt man das erst, wenn man oben davorsteht und nicht weiterkommt.
-func _test_bridge_clear() -> void:
-	_section("Die Bruecke ist frei")
+## Die Schiffe sind der einzige Ort mit Militaerloot — und die Gangways der
+## einzige Weg hinauf. Landet eine davon neben dem Deck statt darauf, ist das
+## beste Zeug der Karte unerreichbar, und niemand merkt es beim Hinsehen.
+func _test_ships_boardable() -> void:
+	_section("Die Schiffe sind zu betreten")
 
-	var bridge := _level.find_child("Laufsteg", true, false) as StaticBody3D
-	_check(bridge != null, "der Laufsteg steht")
-	if bridge == null:
-		return
+	for entry: Dictionary in FrachthafenLayout.RAMPS:
+		var foot: Vector3 = entry.fuss
+		var run: float = entry.run
+		var rise: float = entry.rise
 
-	var walkway := _aabb_of(bridge)
-	var blockers: Array[String] = []
-	for body in _solids:
-		if body == bridge or body.name.begins_with("Rampe") \
-				or body.name == "Plattform" or body.name.begins_with("Kran") \
-				or body.name.begins_with("Ausleger"):
-			continue
-		if _aabb_of(body).intersects(walkway):
-			blockers.append(body.get_parent().name)
+		# richtung 180 heisst nach Norden, also -Z.
+		var facing: float = entry.richtung
+		var forward := Vector3(sin(deg_to_rad(facing)), 0.0, cos(deg_to_rad(facing)))
+		var top := foot + forward * run + Vector3(0.0, rise, 0.0)
 
-	_check(blockers.is_empty(),
-		"nichts ragt in den Laufsteg%s" % [
-			"" if blockers.is_empty() else " — " + ", ".join(blockers)])
+		# Knapp ueber dem Deck nachsehen, ob dort wirklich Schiff ist.
+		var landing := _solid_containing(top - Vector3(0.0, 0.2, 0.0))
+		_check(landing != "",
+			"%s endet auf festem Grund (%s)" % [entry.name,
+				landing if landing != "" else "im Leeren"])
+
+		_check(absf(rise - FrachthafenLayout.DECK_Y) < 0.01,
+			"%s endet auf Deckshoehe (%.2f m)" % [entry.name, rise])
+
+	# Und auf jedem Schiff muss auch etwas liegen, sonst lohnt der Weg nicht.
+	var on_deck := 0
+	for crate in _crates:
+		if crate.global_position.y > 1.0:
+			on_deck += 1
+	_check(on_deck >= 2, "es liegt Loot an Deck (%d Kisten)" % on_deck)
 
 
 func _test_world_bounds() -> void:
@@ -340,6 +429,66 @@ func _test_collision_layers() -> void:
 	_check(wrong_layer == 0, "alle %d Festkoerper liegen auf Ebene 1 (%d falsch)" % [
 		_solids.size(), wrong_layer])
 	_check(wrong_mask == 0, "keiner tastet selbst ab (%d falsch)" % wrong_mask)
+
+
+## Waechter gegen zu grosse Dateien.
+##
+## Das Containerpaket, aus dem das Modell stammt, ist 675 MB gross. GitHub
+## weist JEDE Datei ueber 100 MB beim Push ab — wer so etwas versehentlich
+## einchecked, merkt es erst, wenn der Push scheitert, und muss dann die
+## Historie umschreiben. Das ist die unangenehmste Art, das zu lernen.
+##
+## Geprueft wird, was tatsaechlich im Projekt liegt und nicht ignoriert ist.
+func _test_asset_sizes() -> void:
+	_section("Dateigroessen")
+
+	# 50 MB, nicht 100: GitHubs harte Grenze liegt bei 100 MB, und wer erst
+	# dort anschlaegt, hat schon eingecheckt. Die Haelfte laesst Luft zum
+	# Reagieren. Der groesste Brocken im Repo ist heute ein 30-MB-Waffenmodell —
+	# unschoen, aber kein Grund, den Test rot zu lassen.
+	var limit := 50 * 1024 * 1024
+	var oversized: Array[String] = []
+	var total := 0
+	var count := 0
+	var biggest := 0
+	var biggest_name := ""
+
+	for path in _all_files("res://assets"):
+		var file := FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			continue
+		var size := file.get_length()
+		file.close()
+		total += size
+		count += 1
+		if size > biggest:
+			biggest = size
+			biggest_name = path.get_file()
+		if size > limit:
+			oversized.append("%s (%.0f MB)" % [path.get_file(), size / 1048576.0])
+
+	_check(oversized.is_empty(),
+		"keine Datei ueber 50 MB%s" % [
+			"" if oversized.is_empty() else " — " + ", ".join(oversized)])
+	print("         %d Dateien unter assets/, zusammen %.1f MB" % [
+		count, total / 1048576.0])
+	print("         groesste: %s mit %.0f MB" % [biggest_name, biggest / 1048576.0])
+
+
+func _all_files(dir_path: String) -> Array[String]:
+	var found: Array[String] = []
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return found
+
+	for sub in dir.get_directories():
+		found.append_array(_all_files("%s/%s" % [dir_path, sub]))
+	for file in dir.get_files():
+		# Godot haengt im Editor .import an; die eigentliche Datei zaehlt.
+		if file.ends_with(".import"):
+			continue
+		found.append("%s/%s" % [dir_path, file])
+	return found
 
 
 # ---------------------------------------------------------------------------

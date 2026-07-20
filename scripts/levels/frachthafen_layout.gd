@@ -1,178 +1,182 @@
-## Baut die Karte "Frachthafen" auf.
+## Baut die Karte "Frachthafen" auf — nach dem Vorbild eines echten
+## Containerterminals (Port of Nordhaven, Winter Operations Plan).
 ##
 ## ---------------------------------------------------------------------------
-## WARUM IM CODE UND NICHT IN DER SZENE
+## DER PLAN, VON NORD NACH SUED
 ##
-## Eine Karte mit hundert Quadern waere eine riesige .tscn — und .tscn-Dateien
-## lassen sich bei Konflikten nicht mergen. Bei zwei Entwicklern an einer Karte
-## waere das eine dauerhafte Konfliktquelle. Dieselbe Begruendung steht schon
-## in `workbench_station.gd` fuer die Werkbank.
+##            WASSER / AUSSENREEDE            (z < -58)
+##     ▄▄▄▄▄▄ Schiff West ▄▄▄▄▄▄    ▄▄▄▄▄▄ Schiff Ost ▄▄▄▄▄▄
+##     ╥   ╥   ╥   ╥   KAIANLAGE mit Containerbruecken   ╥   ╥
+##  ═══╧═══╧═══╧═══╧═══════════════════════════════════╧═══╧═══  Kaimauer
 ##
-## Damit die Karte trotzdem anfassbar bleibt, steht das LAYOUT hier oben als
-## reine Daten. Eine Gasse verschieben heisst: eine Zahl aendern.
+##   ┌────┐ ┌────┐ ┌────┐   ║SLIP║   ┌────┐ ┌────┐ ┌────┐
+##   │BLOCK│ │BLOCK│ │BLOCK│  ║ 1  ║   │BLOCK│ │BLOCK│ │BLOCK│
+##   └────┘ └────┘ └────┘   ║    ║   └────┘ └────┘ └────┘
+##   ══════ TERMINALSTRASSE ══════════════════════════════
+##   ┌────┐ ┌────┐ ┌────┐             ┌────┐ ┌────┐ ┌────┐
+##   │BLOCK│ │BLOCK│ │BLOCK│             │BLOCK│ │BLOCK│ │BLOCK│
+##   └────┘ └────┘ └────┘             └────┘ └────┘ └────┘
+##       WEST-TERMINAL                    OST-TERMINAL
+##
+##   ══════════ BAHNHOF ══════════   ┌───┐ ┌───┐ ┌───┐
+##   [TOR]        ▲ SPAWN            │LAGERHALLEN      │
+##                                    └───┘ └───┘ └───┘
+##
+## Rund 330 x 185 m Landflaeche. Zum Vergleich: die Vorgaengerfassung hatte
+## 110 x 125 m, die alte Eisstadt 50 x 48 m.
 ##
 ## ---------------------------------------------------------------------------
-## DIE KARTE
+## DIE ENTSCHEIDUNG, UM DIE ES GEHT
 ##
-##                          -Z (Norden)
-##    [Eisbrecher]              ┌───────────────┐
-##     (-48, -48)               │  LAGERHALLE   │  Militaerloot
-##      15 Sekunden             └───────┬───────┘  (0, -48)
+## Das beste Zeug liegt auf den beiden Schiffen — ueber 175 m vom Spawn, ganz
+## im Norden, und man kommt nur ueber eine Gangway hinauf. Dafuer liegt dort
+## oben auch der schnellste Ausgang (8 s): Wer es bis aufs Schiff schafft, ist
+## schnell draussen. Der sichere Weg ueber das Tor kostet dagegen 12 Sekunden
+## und den ganzen Rueckweg.
 ##
-##         ═════════ KRANBRUECKE, y = 6 ═════════  [Kranhaus] (34, 6, 5)
-##         Kran (-30)                Kran (30)      8 Sekunden, exponiert
+## ---------------------------------------------------------------------------
+## WARUM IM CODE
 ##
-##              ▨▨ ▨▨ ▨▨ CONTAINERFELD ▨▨ ▨▨
-##                     Werkstattloot
-##
-##    [Fischerkai]              KAI
-##     (-52, 58)          Wohnungsloot, Rucksack
-##      12 Sekunden          ▲ SPAWN (0, 55)
-##                          +Z (Sueden)
-##
-## Die Entscheidung, um die es geht: Das beste Zeug liegt 103 m vom Spawn in
-## der Lagerhalle. Zurueck kommt man entweder ueber den Eisbrecher — 38 m
-## entfernt, aber fuenfzehn Sekunden stillstehen, tief in der Karte — oder man
-## traegt alles 110 m zurueck zum sicheren Fischerkai.
-##
-## Der class_name ist fuer den Test da: Der rechnet die Rampenwinkel aus
-## denselben Zahlen nach, aus denen sie gebaut werden.
+## Zwoelf Containerblocks mit je zwanzig Stapeln von Hand zu setzen waere eine
+## Woche Klickarbeit. Der Code erzeugt sie aus wenigen Zahlen. Danach wird die
+## Karte mit `tools/bake_frachthafen.gd` in eine echte Szene gebacken — ab dann
+## laesst sie sich im Editor anfassen wie jede andere.
+@tool
 class_name FrachthafenLayout
 extends Node3D
 
 # ---------------------------------------------------------------------------
-# Layout
+# Layout — hier stehen die Zahlen, die man dreht
 # ---------------------------------------------------------------------------
 
-## Wo der Spieler anfaengt. Die Szene setzt den Player selbst dorthin; hier
-## steht es, damit der Test nachrechnen kann, wie weit der naechste Ausgang ist.
-const SPAWN := Vector3(0.0, 0.2, 55.0)
+## Wo der Spieler anfaengt: am Suedrand zwischen Tor und Bahnhof.
+const SPAWN := Vector3(-60.0, 0.2, 100.0)
 
-## Das Containerfeld, Reihe fuer Reihe von Sued nach Nord.
-##
-## Jede Reihe ist eine Ost-West-Wand aus Containern. Die LUECKEN sind das
-## eigentliche Leveldesign: Wo in einer Reihe kein Container steht, kommt man
-## nach Norden durch. Wer eine Gasse aufmachen will, nimmt hier eine Zahl aus
-## `x` heraus.
-##
-## `hoch` ist die Stapelhoehe pro Container — gleich lang wie `x`.
-const CONTAINER_ROWS := [
-	{z = 34.0, x = [-32.0, -25.0, -18.0, -4.0, 3.0, 10.0, 24.0, 31.0],
-		hoch = [1, 2, 1, 1, 2, 1, 1, 2]},
-	{z = 27.0, x = [-32.0, -18.0, -11.0, -4.0, 10.0, 17.0, 24.0, 31.0],
-		hoch = [2, 1, 2, 1, 1, 2, 1, 1]},
-	{z = 20.0, x = [-25.0, -18.0, -11.0, 3.0, 10.0, 17.0, 31.0],
-		hoch = [1, 3, 1, 2, 1, 1, 2]},
-	{z = 13.0, x = [-32.0, -25.0, -11.0, -4.0, 3.0, 17.0, 24.0],
-		hoch = [1, 1, 2, 1, 3, 1, 2]},
-	{z = 6.0, x = [-32.0, -25.0, -18.0, -4.0, 10.0, 17.0, 24.0, 31.0],
-		hoch = [2, 1, 1, 2, 1, 1, 2, 1]},
-	{z = -1.0, x = [-25.0, -18.0, -11.0, 3.0, 10.0, 24.0, 31.0],
-		hoch = [1, 2, 1, 1, 2, 1, 1]},
-	{z = -8.0, x = [-32.0, -18.0, -11.0, -4.0, 3.0, 17.0, 24.0, 31.0],
-		hoch = [1, 1, 2, 1, 1, 2, 1, 1]},
+## Wo das Land aufhoert und das Hafenbecken anfaengt.
+const QUAY_EDGE := -58.0
+
+## Land- und Wassergrenzen.
+const EAST_EDGE := 165.0
+const SOUTH_EDGE := 126.0
+const WATER_NORTH := -178.0
+
+## Slip 1 — der Wasserarm, der die beiden Terminals trennt. Er ist der Grund,
+## warum man nicht einfach quer laeuft: Wer von West nach Ost will, muss ganz
+## nach Sueden um ihn herum oder ganz nach Norden ueber die Kaianlage.
+const SLIP_HALF_WIDTH := 14.0
+const SLIP_SOUTH := 8.0
+
+## Ein Containerblock: 36 m breit, 40 m tief, darin 4 x 5 Stapelplaetze.
+const BLOCK_SIZE := Vector2(36.0, 40.0)
+const BLOCK_COLUMNS := 4
+const BLOCK_ROWS := 5
+const STACK_SPACING := Vector2(9.0, 7.5)
+
+## Wo die Blocks anfangen (linke/noerdliche Ecke).
+const BLOCK_X := [-145.0, -101.0, -57.0, 21.0, 65.0, 109.0]
+const BLOCK_Z := [-38.0, 16.0]
+
+## Die Containerbruecken am Kai — die hoechsten Dinger auf der Karte und
+## damit die einzige Orientierung, die ueber alles hinwegragt.
+const STS_CRANES := [-135.0, -105.0, -75.0, -45.0, 45.0, 75.0, 105.0, 135.0]
+const STS_HEIGHT := 28.0
+
+## Portalkrane ueber den Blocks. Gelb, damit man sie von unten aus den Gassen
+## sieht und weiss, in welchem Block man steckt.
+const RTG_HEIGHT := 12.0
+
+## Die beiden Schiffe laengsseits. Deck auf 3 m — man kommt nur ueber die
+## Gangway hinauf.
+const DECK_Y := 3.0
+const SHIPS := [
+	{name = "SchiffWest", pos = Vector3(-90.0, 0.0, -72.0), size = Vector3(120.0, 8.0, 22.0)},
+	{name = "SchiffOst", pos = Vector3(90.0, 0.0, -72.0), size = Vector3(120.0, 8.0, 22.0)},
 ]
 
-## Rampen. `rise` und `run` statt Grad: Man denkt beim Bauen in "von hier bis
-## dort hoch", nicht in Winkeln.
-##
-## `richtung` ist die Blickrichtung in Grad um die Hochachse; 180 heisst nach
-## Norden. `fuss` ist der Punkt, an dem man sie betritt.
+## Die Gangways. `rise`/`run` statt Grad — man denkt in "von hier bis dort
+## hoch". Sie sind der EINZIGE Weg auf die Schiffe.
 const RAMPS := [
-	{name = "RampeWest", fuss = Vector3(-4.0, 0.0, 41.0),
-		rise = 2.59, run = 7.5, breite = 3.0, richtung = 180.0},
-	{name = "RampeOst", fuss = Vector3(24.0, 0.0, 41.0),
-		rise = 2.59, run = 7.5, breite = 3.0, richtung = 180.0},
-	# Bewusst auf x = 37, nicht 36: Bei 36 streift die Rampenkante die
-	# Containerreihe bei x = 31, die bis x = 34.03 reicht. Drei Zentimeter
-	# Ueberschneidung sieht man nicht, aber man bleibt daran haengen.
-	{name = "RampeKran", fuss = Vector3(37.0, 0.0, 22.0),
-		rise = 6.0, run = 17.0, breite = 4.0, richtung = 180.0},
+	{name = "GangwayWest", fuss = Vector3(-90.0, 0.0, -56.0),
+		rise = DECK_Y, run = 9.0, breite = 3.0, richtung = 180.0},
+	{name = "GangwayOst", fuss = Vector3(90.0, 0.0, -56.0),
+		rise = DECK_Y, run = 9.0, breite = 3.0, richtung = 180.0},
 ]
 
-## Die Kranbruecke: der einzige Weg nach oben und die einzige Landmarke, die
-## ueber dem Nebel steht. Ohne sie sieht ein Containerfeld ueberall gleich aus.
-const BRIDGE_Y := 6.0
-const BRIDGE := {von = -34.0, bis = 36.0, z = 5.0, breite = 3.0}
-const CRANE_HEIGHT := 18.0
-const CRANES := [-30.0, 30.0]
-
-## Die Lagerhalle. Drei Zugaenge, damit sie kein Sackgassen-Tresor ist:
-## ein Tor nach Sueden, eine Tuer im Osten, eine Bresche im Westen.
-const HALL_POS := Vector3(0.0, 0.0, -48.0)
-const HALL_SIZE := Vector3(34.0, 6.0, 22.0)
-const HALL_OPENINGS := [
-	{side = "sued", offset = 0.0, width = 6.0},
-	{side = "ost", offset = -4.0, width = 2.5},
-	{side = "west", offset = 5.0, width = 4.0},
+## Der Bahnhof im Sueden: Gleise und ein paar abgestellte Wagen.
+const RAIL_Z := [78.0, 86.0, 94.0]
+const RAIL_FROM := -150.0
+const RAIL_TO := 55.0
+const RAILCARS := [
+	{pos = Vector3(-118.0, 0.0, 78.0), size = Vector3(16.0, 3.6, 3.2)},
+	{pos = Vector3(-96.0, 0.0, 78.0), size = Vector3(16.0, 3.6, 3.2)},
+	{pos = Vector3(-40.0, 0.0, 86.0), size = Vector3(16.0, 3.6, 3.2)},
+	{pos = Vector3(-18.0, 0.0, 86.0), size = Vector3(16.0, 3.6, 3.2)},
+	{pos = Vector3(20.0, 0.0, 94.0), size = Vector3(16.0, 3.6, 3.2)},
 ]
 
-## Huetten am Kai. Klein, mit einer Tuer, damit der Anfang nicht nur Schnee ist.
-const HUTS := [
-	{name = "HuetteWest", pos = Vector3(-30.0, 0.0, 52.0), size = Vector3(7.0, 3.0, 6.0),
-		openings = [{side = "ost", offset = 0.0, width = 2.0}]},
-	{name = "HuetteOst", pos = Vector3(12.0, 0.0, 52.0), size = Vector3(6.0, 3.0, 5.0),
-		openings = [{side = "west", offset = 0.0, width = 2.0}]},
+## Die Lagerhallen im Suedosten. Grosse Innenraeume — das Gegenstueck zu den
+## engen Gassen zwischen den Containern.
+const WAREHOUSES := [
+	{name = "LagerhalleA", pos = Vector3(78.0, 0.0, 92.0), size = Vector3(26.0, 8.0, 34.0),
+		openings = [{side = "nord", offset = 0.0, width = 6.0},
+			{side = "west", offset = 6.0, width = 3.0}]},
+	{name = "LagerhalleB", pos = Vector3(108.0, 0.0, 92.0), size = Vector3(26.0, 8.0, 34.0),
+		openings = [{side = "nord", offset = 0.0, width = 6.0},
+			{side = "ost", offset = -8.0, width = 3.0}]},
+	{name = "LagerhalleC", pos = Vector3(138.0, 0.0, 92.0), size = Vector3(26.0, 8.0, 34.0),
+		openings = [{side = "nord", offset = 0.0, width = 6.0},
+			{side = "sued", offset = 4.0, width = 3.0}]},
 ]
 
-## Deckung auf dem offenen Stueck zwischen Containerfeld und Lagerhalle.
-##
-## Ohne das waeren es dreissig Meter blanker Schnee — der Weg zum besten Loot
-## waere dann kein Risiko, sondern eine Hinrichtung, sobald es Gegner gibt.
-const COVER := [
-	{pos = Vector3(-20.0, 0.0, -18.0), size = Vector3(5.0, 2.2, 1.0), dreh = 20.0},
-	{pos = Vector3(-6.0, 0.0, -24.0), size = Vector3(6.0, 1.6, 1.0), dreh = -10.0},
-	{pos = Vector3(9.0, 0.0, -17.0), size = Vector3(4.0, 2.4, 1.0), dreh = 70.0},
-	{pos = Vector3(22.0, 0.0, -26.0), size = Vector3(5.0, 1.8, 1.0), dreh = 15.0},
-	{pos = Vector3(-14.0, 0.0, -31.0), size = Vector3(4.5, 2.0, 1.0), dreh = -35.0},
-	{pos = Vector3(4.0, 0.0, -33.0), size = Vector3(6.0, 2.2, 1.0), dreh = 5.0},
-]
+## Das Tor im Suedwesten. Wachhaus plus Schranken.
+const GATE_POS := Vector3(-142.0, 0.0, 106.0)
 
 ## Die Kisten. `tabelle` ist der Dateiname unter assets/data/loot/.
 ##
-## GRUNDSATZ: Gutes Zeug liegt weit weg. Militaerkisten stehen ausschliesslich
-## in der Lagerhalle, 100 m vom Spawn; Wohnungskisten am Kai, wo man anfaengt.
-## Der Test rechnet das nach — wer die Halle spaeter verschiebt, merkt es.
+## GRUNDSATZ: Gutes Zeug liegt weit weg. Militaerloot NUR auf den Schiffen,
+## ueber 175 m vom Spawn und nur ueber eine Gangway erreichbar. Wohnungsloot am
+## Bahnhof, wo man anfaengt. Der Test rechnet das Verhaeltnis nach.
 const CRATES := [
-	{name = "Ausruestung", pos = Vector3(3.0, 0.0, 50.0), tabelle = "ausruestung",
+	{name = "Ausruestung", pos = Vector3(-66.0, 0.0, 96.0), tabelle = "ausruestung",
 		anzeige = "Ausruestungskiste", raster = Vector2i(4, 2), zeit = 0.6},
 
-	{name = "KaiWest", pos = Vector3(-30.0, 0.0, 52.0), tabelle = "wohnung",
+	{name = "BahnhofWest", pos = Vector3(-100.0, 0.0, 86.0), tabelle = "wohnung",
+		anzeige = "Gueterwagen", raster = Vector2i(6, 4), zeit = 1.0},
+	{name = "BahnhofMitte", pos = Vector3(-20.0, 0.0, 86.0), tabelle = "wohnung",
 		anzeige = "Spind", raster = Vector2i(6, 4), zeit = 1.0},
-	{name = "KaiOst", pos = Vector3(12.0, 0.0, 52.0), tabelle = "wohnung",
-		anzeige = "Werkzeugschrank", raster = Vector2i(6, 4), zeit = 1.0},
-	{name = "KaiMitte", pos = Vector3(-2.0, 0.0, 44.0), tabelle = "wohnung",
-		anzeige = "Kiste am Kai", raster = Vector2i(6, 4), zeit = 1.0},
+	{name = "TorWache", pos = Vector3(-138.0, 0.0, 98.0), tabelle = "wohnung",
+		anzeige = "Wachhaus", raster = Vector2i(6, 4), zeit = 1.0},
 
-	{name = "Gasse1", pos = Vector3(-11.0, 0.0, 30.5), tabelle = "werkstatt",
-		anzeige = "Ersatzteilkiste", raster = Vector2i(6, 4), zeit = 1.4},
-	{name = "Gasse2", pos = Vector3(17.0, 0.0, 23.5), tabelle = "werkstatt",
+	{name = "BlockWest1", pos = Vector3(-108.0, 0.0, -20.0), tabelle = "werkstatt",
+		anzeige = "Offener Container", raster = Vector2i(6, 4), zeit = 1.4},
+	{name = "BlockWest2", pos = Vector3(-64.0, 0.0, 36.0), tabelle = "werkstatt",
 		anzeige = "Werkzeugkiste", raster = Vector2i(6, 4), zeit = 1.4},
-	{name = "Gasse3", pos = Vector3(28.0, 0.0, 16.5), tabelle = "werkstatt",
-		anzeige = "Container offen", raster = Vector2i(6, 4), zeit = 1.4},
-	{name = "Gasse4", pos = Vector3(-28.0, 0.0, 9.5), tabelle = "werkstatt",
-		anzeige = "Ladeguthaufen", raster = Vector2i(6, 4), zeit = 1.4},
-	{name = "Gasse5", pos = Vector3(6.0, 0.0, 2.5), tabelle = "werkstatt",
+	{name = "BlockOst1", pos = Vector3(60.0, 0.0, -20.0), tabelle = "werkstatt",
 		anzeige = "Ersatzteilkiste", raster = Vector2i(6, 4), zeit = 1.4},
+	{name = "BlockOst2", pos = Vector3(104.0, 0.0, 36.0), tabelle = "werkstatt",
+		anzeige = "Offener Container", raster = Vector2i(6, 4), zeit = 1.4},
+	{name = "LagerA", pos = Vector3(78.0, 0.0, 92.0), tabelle = "werkstatt",
+		anzeige = "Palettenregal", raster = Vector2i(6, 4), zeit = 1.6},
+	{name = "LagerB", pos = Vector3(108.0, 0.0, 92.0), tabelle = "werkstatt",
+		anzeige = "Palettenregal", raster = Vector2i(6, 4), zeit = 1.6},
+	{name = "LagerC", pos = Vector3(138.0, 0.0, 92.0), tabelle = "werkstatt",
+		anzeige = "Palettenregal", raster = Vector2i(6, 4), zeit = 1.6},
 
-	{name = "HalleWest", pos = Vector3(-10.0, 0.0, -48.0), tabelle = "militaer",
-		anzeige = "Militaerkiste", raster = Vector2i(6, 4), zeit = 1.8},
-	{name = "HalleNord", pos = Vector3(-4.0, 0.0, -52.0), tabelle = "militaer",
-		anzeige = "Munitionskiste", raster = Vector2i(6, 4), zeit = 1.8},
-	{name = "HalleMitte", pos = Vector3(6.0, 0.0, -46.0), tabelle = "militaer",
-		anzeige = "Waffenkiste", raster = Vector2i(6, 4), zeit = 1.8},
-	{name = "HalleOst", pos = Vector3(11.0, 0.0, -51.0), tabelle = "militaer",
-		anzeige = "Feldkiste", raster = Vector2i(6, 4), zeit = 1.8},
+	{name = "SchiffWestBug", pos = Vector3(-128.0, DECK_Y, -68.0), tabelle = "militaer",
+		anzeige = "Ladeluke", raster = Vector2i(6, 4), zeit = 1.8},
+	{name = "SchiffWestHeck", pos = Vector3(-56.0, DECK_Y, -76.0), tabelle = "militaer",
+		anzeige = "Frachtraum", raster = Vector2i(6, 4), zeit = 1.8},
+	{name = "SchiffOstBug", pos = Vector3(56.0, DECK_Y, -68.0), tabelle = "militaer",
+		anzeige = "Ladeluke", raster = Vector2i(6, 4), zeit = 1.8},
+	{name = "SchiffOstHeck", pos = Vector3(128.0, DECK_Y, -76.0), tabelle = "militaer",
+		anzeige = "Frachtraum", raster = Vector2i(6, 4), zeit = 1.8},
 ]
 
-## Die Ausgaenge. Der Reiz liegt im Verhaeltnis von Naehe zu Timer.
+## Die Ausgaenge. Der Reiz liegt im Verhaeltnis von Weg zu Timer.
 const EXITS = [
-	{name = "Fischerkai", pos = Vector3(-52.0, 0.0, 58.0), zeit = 12.0,
-		anzeige = "Fischerkai"},
-	{name = "Kranhaus", pos = Vector3(34.0, BRIDGE_Y, 5.0), zeit = 8.0,
-		anzeige = "Kranhaus"},
-	{name = "Eisbrecher", pos = Vector3(-48.0, 0.0, -48.0), zeit = 15.0,
-		anzeige = "Eisbrecher"},
+	{name = "Tor", pos = Vector3(-142.0, 0.0, 112.0), zeit = 12.0, anzeige = "Werkstor"},
+	{name = "BahnhofOst", pos = Vector3(50.0, 0.0, 88.0), zeit = 10.0, anzeige = "Bahnhof Ost"},
+	{name = "SchiffWest", pos = Vector3(-90.0, DECK_Y, -72.0), zeit = 8.0, anzeige = "Schiff West"},
 ]
 
 const LOOT_CONTAINER := preload("res://scenes/loot/loot_container.tscn")
@@ -182,122 +186,322 @@ var _mats: Dictionary = {}
 
 
 func _ready() -> void:
+	rebuild()
+
+
+## Baut die ganze Karte neu auf.
+##
+## Erst aufraeumen, dann bauen: Im Editor laeuft `_ready()` bei jedem Neuladen
+## des Skripts noch einmal. Ohne das Aufraeumen staende die Karte nach dem
+## dritten Zahlendrehen dreifach uebereinander.
+func rebuild() -> void:
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+
 	_mats = WorldParts.materials()
-	_build_kai()
-	_build_container_field()
-	_build_ramps()
-	_build_crane_bridge()
-	_build_hall()
-	_build_cover()
+	_build_ground()
+	_build_quay()
+	_build_ships()
+	_build_terminals()
+	_build_rail_yard()
+	_build_warehouses()
+	_build_gate()
 	_build_crates()
 	_build_exits()
 
 
 # ---------------------------------------------------------------------------
-# Bauen
+# Grund und Wasser
 # ---------------------------------------------------------------------------
 
-func _build_kai() -> void:
+## Land, Hafenbecken und Kaimauer.
+##
+## Das Land ist BEWUSST in drei Stuecke geteilt: Ohne die Luecke gaebe es
+## keinen Slip, und ohne Slip laeuft man einfach quer durch — dann waeren die
+## beiden Terminals nur eine breite Flaeche statt zweier Orte.
+func _build_ground() -> void:
 	var group := Node3D.new()
-	group.name = "Kai"
+	group.name = "Grund"
 	add_child(group)
 
-	# Kaimauer am Suedrand: gibt dem Anfang eine Kante, damit man weiss, wo
-	# hinten ist. Ohne sie steht man in einer Ebene ohne jeden Anhaltspunkt.
-	group.add_child(WorldParts.solid("Kaimauer", Vector3(120.0, 1.2, 1.0),
-		Vector3(-10.0, 0.6, 62.0), _mats.concrete))
+	var land_depth := SOUTH_EDGE - QUAY_EDGE
+	var land_centre_z := (QUAY_EDGE + SOUTH_EDGE) * 0.5
+	var west_width := EAST_EDGE - SLIP_HALF_WIDTH
 
-	for hut: Dictionary in HUTS:
-		group.add_child(WorldParts.building(hut.name, hut.size, hut.pos,
-			_mats.concrete, _mats.dark, hut.openings))
+	group.add_child(WorldParts.solid("LandWest",
+		Vector3(west_width, 2.0, land_depth),
+		Vector3(-(SLIP_HALF_WIDTH + west_width * 0.5), -1.0, land_centre_z), _mats.snow))
+	group.add_child(WorldParts.solid("LandOst",
+		Vector3(west_width, 2.0, land_depth),
+		Vector3(SLIP_HALF_WIDTH + west_width * 0.5, -1.0, land_centre_z), _mats.snow))
+
+	# Das Stueck suedlich vom Slip verbindet beide Terminals — der lange Weg.
+	var bridge_depth := SOUTH_EDGE - SLIP_SOUTH
+	group.add_child(WorldParts.solid("LandSued",
+		Vector3(SLIP_HALF_WIDTH * 2.0, 2.0, bridge_depth),
+		Vector3(0.0, -1.0, SLIP_SOUTH + bridge_depth * 0.5), _mats.snow))
+
+	# Hafenbecken: ein Boden drei Meter tiefer. Wer ueber die Kaimauer kommt,
+	# steht im Wasser statt ins Nichts zu fallen.
+	var basin_depth := QUAY_EDGE - WATER_NORTH
+	group.add_child(WorldParts.solid("Hafenbecken",
+		Vector3(EAST_EDGE * 2.0, 2.0, basin_depth),
+		Vector3(0.0, -4.0, WATER_NORTH + basin_depth * 0.5), _mats.dark))
+	group.add_child(WorldParts.solid("SlipBoden",
+		Vector3(SLIP_HALF_WIDTH * 2.0, 2.0, SLIP_SOUTH - QUAY_EDGE),
+		Vector3(0.0, -4.0, (QUAY_EDGE + SLIP_SOUTH) * 0.5), _mats.dark))
+
+	# Wasseroberflaeche: nur Optik, keine Kollision.
+	group.add_child(WorldParts.flat("Wasser",
+		Vector2(EAST_EDGE * 2.0, basin_depth),
+		Vector3(0.0, -0.6, WATER_NORTH + basin_depth * 0.5), _mats.water))
+	group.add_child(WorldParts.flat("SlipWasser",
+		Vector2(SLIP_HALF_WIDTH * 2.0, SLIP_SOUTH - QUAY_EDGE),
+		Vector3(0.0, -0.6, (QUAY_EDGE + SLIP_SOUTH) * 0.5), _mats.water))
+
+	# Kaimauer. 1,6 m hoch — der Spieler springt 0,8 m, kommt also nicht
+	# versehentlich hinein.
+	group.add_child(WorldParts.solid("KaimauerWest",
+		Vector3(west_width, 1.6, 1.2),
+		Vector3(-(SLIP_HALF_WIDTH + west_width * 0.5), 0.8, QUAY_EDGE), _mats.concrete))
+	group.add_child(WorldParts.solid("KaimauerOst",
+		Vector3(west_width, 1.6, 1.2),
+		Vector3(SLIP_HALF_WIDTH + west_width * 0.5, 0.8, QUAY_EDGE), _mats.concrete))
+
+	var slip_length := SLIP_SOUTH - QUAY_EDGE
+	for side: float in [-1.0, 1.0]:
+		group.add_child(WorldParts.solid("SlipMauer%d" % int(side),
+			Vector3(1.2, 1.6, slip_length),
+			Vector3(side * (SLIP_HALF_WIDTH + 0.6), 0.8, (QUAY_EDGE + SLIP_SOUTH) * 0.5),
+			_mats.concrete))
+	group.add_child(WorldParts.solid("SlipKopf",
+		Vector3(SLIP_HALF_WIDTH * 2.0, 1.6, 1.2),
+		Vector3(0.0, 0.8, SLIP_SOUTH + 0.6), _mats.concrete))
 
 
-func _build_container_field() -> void:
+# ---------------------------------------------------------------------------
+# Kai und Containerbruecken
+# ---------------------------------------------------------------------------
+
+func _build_quay() -> void:
 	var group := Node3D.new()
-	group.name = "Containerfeld"
+	group.name = "Kaianlage"
 	add_child(group)
 
-	var seed_counter := 0
-	for row: Dictionary in CONTAINER_ROWS:
-		var xs: Array = row.x
-		var heights: Array = row.hoch
-		for i in range(xs.size()):
-			var height: int = int(heights[i]) if i < heights.size() else 1
-			group.add_child(WorldParts.container_stack(
-				"Stapel_%d_%d" % [int(row.z), i],
-				Vector3(float(xs[i]), 0.0, float(row.z)),
-				height, _mats, 0.0, seed_counter))
-			seed_counter += 1
+	# Die Kaistrasse: nur Farbe, keine Kollision.
+	group.add_child(WorldParts.flat("Kaistrasse",
+		Vector2(EAST_EDGE * 2.0, 16.0),
+		Vector3(0.0, 0.02, QUAY_EDGE + 8.0), _mats.asphalt))
+
+	for x: float in STS_CRANES:
+		group.add_child(_build_sts_crane(x))
 
 
-func _build_ramps() -> void:
+## Eine Containerbruecke: zwei Beinpaare auf dem Kai, darueber ein Ausleger,
+## der weit ueber das Wasser reicht. Achtundzwanzig Meter hoch.
+func _build_sts_crane(x: float) -> Node3D:
 	var group := Node3D.new()
-	group.name = "Rampen"
+	group.name = "Bruecke%d" % int(x)
+
+	for leg_z: float in [QUAY_EDGE + 2.0, QUAY_EDGE + 14.0]:
+		for leg_x: float in [x - 7.0, x + 7.0]:
+			group.add_child(WorldParts.solid("Bein",
+				Vector3(1.6, STS_HEIGHT, 1.6),
+				Vector3(leg_x, STS_HEIGHT * 0.5, leg_z), _mats.steel))
+
+	group.add_child(WorldParts.solid("Portal",
+		Vector3(17.0, 2.0, 14.0),
+		Vector3(x, STS_HEIGHT + 1.0, QUAY_EDGE + 8.0), _mats.steel))
+
+	# Der Ausleger reicht ueber das Schiff — das ist die Silhouette, an der man
+	# den Hafen von ueberall wiedererkennt.
+	group.add_child(WorldParts.solid("Ausleger",
+		Vector3(3.0, 1.6, 48.0),
+		Vector3(x, STS_HEIGHT + 2.8, QUAY_EDGE - 20.0), _mats.yellow))
+
+	return group
+
+
+# ---------------------------------------------------------------------------
+# Schiffe
+# ---------------------------------------------------------------------------
+
+func _build_ships() -> void:
+	var group := Node3D.new()
+	group.name = "Schiffe"
 	add_child(group)
+
+	for ship: Dictionary in SHIPS:
+		group.add_child(_build_ship(ship))
 
 	for r: Dictionary in RAMPS:
 		group.add_child(WorldParts.ramp(r.name, r.rise, r.run, r.breite,
 			r.fuss, _mats.steel, r.richtung))
 
+	# Ein drittes Schiff liegt im Slip — nicht begehbar, nur Kulisse. Es macht
+	# aus dem Wasserarm einen Ort statt einer Luecke.
+	group.add_child(WorldParts.solid("SchiffImSlip",
+		Vector3(18.0, 8.0, 54.0), Vector3(0.0, -1.0, -26.0), _mats.rust))
 
-func _build_crane_bridge() -> void:
+
+func _build_ship(ship: Dictionary) -> Node3D:
 	var group := Node3D.new()
-	group.name = "Kranbruecke"
+	group.name = ship.name
+
+	var size: Vector3 = ship.size
+	var pos: Vector3 = ship.pos
+
+	# Rumpf: Oberkante liegt auf DECK_Y, der Rest steckt im Wasser.
+	group.add_child(WorldParts.solid("Rumpf", size,
+		pos + Vector3(0.0, DECK_Y - size.y * 0.5, 0.0), _mats.dark))
+
+	# Aufbau am Heck.
+	group.add_child(WorldParts.solid("Aufbau", Vector3(16.0, 11.0, 18.0),
+		pos + Vector3(size.x * 0.5 - 10.0, DECK_Y + 5.5, 0.0), _mats.concrete))
+
+	# Deckslast: zwei Reihen Container laengs. Sie sind gleichzeitig die
+	# Deckung an Deck — ohne sie waere das Schiff eine Schiessbude.
+	var colours := WorldParts.container_colors()
+	var count := 0
+	for row: float in [-6.0, 0.0, 6.0]:
+		var offset := -size.x * 0.5 + 12.0
+		while offset < size.x * 0.5 - 22.0:
+			var height := 1 + (count % 2)
+			group.add_child(WorldParts.container_stack("Decklast%d" % count,
+				pos + Vector3(offset, DECK_Y, row), height, _mats, 0.0, count))
+			offset += 7.5
+			count += 1
+
+	return group
+
+
+# ---------------------------------------------------------------------------
+# Die beiden Terminals
+# ---------------------------------------------------------------------------
+
+func _build_terminals() -> void:
+	var group := Node3D.new()
+	group.name = "Terminals"
 	add_child(group)
 
-	var length: float = BRIDGE.bis - BRIDGE.von
-	var middle: float = (BRIDGE.von + BRIDGE.bis) * 0.5
+	var index := 0
+	for block_x: float in BLOCK_X:
+		for block_z: float in BLOCK_Z:
+			group.add_child(_build_block(index, block_x, block_z))
+			index += 1
 
-	# Die Oberkante liegt auf BRIDGE_Y — darauf laeuft man.
-	group.add_child(WorldParts.solid("Laufsteg",
-		Vector3(length, 0.4, BRIDGE.breite),
-		Vector3(middle, BRIDGE_Y - 0.2, BRIDGE.z), _mats.steel))
-
-	# Plattform am Ostende, breit genug fuer die Ausgangszone.
-	group.add_child(WorldParts.solid("Plattform", Vector3(8.0, 0.4, 6.0),
-		Vector3(34.0, BRIDGE_Y - 0.2, BRIDGE.z), _mats.steel))
-
-	# Die Krantuerme. 18 Meter, damit sie ueber dem Nebel stehen und man sich
-	# an ihnen ausrichten kann.
-	for x: float in CRANES:
-		group.add_child(WorldParts.solid("Kran%d" % int(x),
-			Vector3(2.0, CRANE_HEIGHT, 2.0),
-			Vector3(x, CRANE_HEIGHT * 0.5, BRIDGE.z), _mats.rust))
-		group.add_child(WorldParts.solid("Ausleger%d" % int(x),
-			Vector3(2.0, 1.0, 14.0),
-			Vector3(x, CRANE_HEIGHT - 1.0, BRIDGE.z - 6.0), _mats.rust))
+	# Die Terminalstrasse zwischen den beiden Blockreihen.
+	var road_z := (BLOCK_Z[0] + BLOCK_SIZE.y + BLOCK_Z[1]) * 0.5
+	group.add_child(WorldParts.flat("Terminalstrasse",
+		Vector2(EAST_EDGE * 2.0, BLOCK_Z[1] - (BLOCK_Z[0] + BLOCK_SIZE.y)),
+		Vector3(0.0, 0.02, road_z), _mats.asphalt))
 
 
-func _build_hall() -> void:
+## Ein Containerblock samt Portalkran.
+##
+## Die Luecken im Raster sind das eigentliche Leveldesign: Sie entstehen aus
+## einer festen Rechnung, nicht aus Zufall — damit die Karte nach dem Neubauen
+## dieselbe bleibt und man sich Wege merken kann.
+func _build_block(index: int, block_x: float, block_z: float) -> Node3D:
 	var group := Node3D.new()
-	group.name = "Lagerhalle"
+	group.name = "Block%d" % index
+
+	for col in range(BLOCK_COLUMNS):
+		for row in range(BLOCK_ROWS):
+			# Jede siebte Stelle bleibt frei — das sind die Durchschluepfe.
+			if (col + row * 2 + index) % 7 == 0:
+				continue
+
+			var height := 1 + ((col * 3 + row * 5 + index * 7) % 3)
+			var pos := Vector3(
+				block_x + 4.5 + float(col) * STACK_SPACING.x,
+				0.0,
+				block_z + 4.0 + float(row) * STACK_SPACING.y)
+			group.add_child(WorldParts.container_stack(
+				"Stapel_%d_%d" % [col, row], pos, height, _mats, 0.0, index + col))
+
+	# Portalkran laengs ueber dem Block. Gelb und zwoelf Meter hoch: von unten
+	# aus jeder Gasse sichtbar.
+	var centre_x := block_x + BLOCK_SIZE.x * 0.5
+	for leg_z: float in [block_z + 2.0, block_z + BLOCK_SIZE.y - 2.0]:
+		for leg_x: float in [block_x + 1.0, block_x + BLOCK_SIZE.x - 1.0]:
+			group.add_child(WorldParts.solid("Kranbein",
+				Vector3(1.2, RTG_HEIGHT, 1.2),
+				Vector3(leg_x, RTG_HEIGHT * 0.5, leg_z), _mats.steel))
+
+	group.add_child(WorldParts.solid("Kranbruecke",
+		Vector3(BLOCK_SIZE.x, 1.4, 3.0),
+		Vector3(centre_x, RTG_HEIGHT + 0.7, block_z + BLOCK_SIZE.y * 0.5), _mats.yellow))
+
+	return group
+
+
+# ---------------------------------------------------------------------------
+# Bahnhof, Lagerhallen, Tor
+# ---------------------------------------------------------------------------
+
+func _build_rail_yard() -> void:
+	var group := Node3D.new()
+	group.name = "Bahnhof"
 	add_child(group)
 
-	group.add_child(WorldParts.building("Halle", HALL_SIZE, HALL_POS,
-		_mats.concrete, _mats.dark, HALL_OPENINGS))
+	var length := RAIL_TO - RAIL_FROM
+	var centre := (RAIL_FROM + RAIL_TO) * 0.5
 
-	# Deckung im Inneren. Eine leere Halle mit vier Kisten waere ein Raum, in
-	# dem man nirgends hinkann, sobald jemand im Tor steht.
-	group.add_child(WorldParts.container("RegalWest", Vector3(-8.0, 0.0, -42.0),
-		_mats.container_grey, 90.0))
-	group.add_child(WorldParts.container("RegalOst", Vector3(9.0, 0.0, -54.0),
-		_mats.container_grey, 90.0))
-	group.add_child(WorldParts.solid("Stuetze", Vector3(1.0, 6.0, 1.0),
-		Vector3(0.0, 3.0, -48.0), _mats.concrete))
+	for z: float in RAIL_Z:
+		# Zwei Schienen je Gleis, nur Optik.
+		for offset: float in [-0.72, 0.72]:
+			group.add_child(WorldParts.flat("Schiene",
+				Vector2(length, 0.16), Vector3(centre, 0.03, z + offset), _mats.steel))
+
+	for i in range(RAILCARS.size()):
+		var car: Dictionary = RAILCARS[i]
+		var size: Vector3 = car.size
+		group.add_child(WorldParts.solid("Wagen%d" % i, size,
+			car.pos + Vector3(0.0, size.y * 0.5 + 0.4, 0.0), _mats.rust))
 
 
-func _build_cover() -> void:
+func _build_warehouses() -> void:
 	var group := Node3D.new()
-	group.name = "Deckung"
+	group.name = "Lagerhallen"
 	add_child(group)
 
-	for i in range(COVER.size()):
-		var piece: Dictionary = COVER[i]
-		var size: Vector3 = piece.size
-		group.add_child(WorldParts.solid("Mauerrest%d" % i, size,
-			piece.pos + Vector3(0.0, size.y * 0.5, 0.0), _mats.concrete,
-			Vector3(0.0, float(piece.dreh), 0.0)))
+	for hall: Dictionary in WAREHOUSES:
+		group.add_child(WorldParts.building(hall.name, hall.size, hall.pos,
+			_mats.concrete, _mats.dark, hall.openings))
 
+		# Regale im Inneren. Eine leere Halle waere ein Raum, in dem man
+		# nirgends hinkann, sobald jemand in der Tuer steht.
+		var pos: Vector3 = hall.pos
+		for offset: float in [-9.0, 9.0]:
+			group.add_child(WorldParts.solid("Regal",
+				Vector3(3.0, 3.2, 20.0),
+				pos + Vector3(offset, 1.6, 0.0), _mats.wood))
+
+
+func _build_gate() -> void:
+	var group := Node3D.new()
+	group.name = "Tor"
+	add_child(group)
+
+	group.add_child(WorldParts.building("Wachhaus", Vector3(8.0, 3.5, 7.0),
+		GATE_POS + Vector3(4.0, 0.0, -8.0), _mats.concrete, _mats.dark,
+		[{side = "ost", offset = 0.0, width = 2.0}]))
+
+	# Schranken links und rechts der Durchfahrt.
+	for side: float in [-1.0, 1.0]:
+		group.add_child(WorldParts.solid("Schranke%d" % int(side),
+			Vector3(7.0, 0.4, 0.4),
+			GATE_POS + Vector3(side * 6.0, 1.2, 0.0), _mats.yellow))
+
+	group.add_child(WorldParts.flat("Zufahrt", Vector2(14.0, 26.0),
+		GATE_POS + Vector3(0.0, 0.02, -8.0), _mats.asphalt))
+
+
+# ---------------------------------------------------------------------------
+# Kisten und Ausgaenge
+# ---------------------------------------------------------------------------
 
 func _build_crates() -> void:
 	var group := Node3D.new()
@@ -310,8 +514,7 @@ func _build_crates() -> void:
 		box.position = entry.pos
 
 		# VOR add_child setzen: `_ready()` baut das Raster aus grid_width und
-		# grid_height, und danach ist es zu spaet — die Kiste haette dann
-		# stillschweigend die Standardgroesse.
+		# grid_height, danach ist es zu spaet.
 		var raster: Vector2i = entry.raster
 		box.grid_width = raster.x
 		box.grid_height = raster.y

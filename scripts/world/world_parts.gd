@@ -30,23 +30,126 @@ const WORLD_LAYER := 1
 ## "der rote Stapel" sagen zu koennen.
 static func materials() -> Dictionary:
 	return {
-		"snow": _material(Color(0.840, 0.870, 0.900), 0.0, 0.95),
-		"concrete": _material(Color(0.300, 0.310, 0.330), 0.0, 0.85),
-		"steel": _material(Color(0.340, 0.345, 0.360), 0.90, 0.40),
-		"rust": _material(Color(0.240, 0.140, 0.095), 0.20, 0.90),
-		"wood": _material(Color(0.205, 0.140, 0.080), 0.0, 0.92),
-		"dark": _material(Color(0.090, 0.095, 0.105), 0.0, 0.80),
-		"container_red": _material(Color(0.320, 0.130, 0.115), 0.30, 0.75),
-		"container_blue": _material(Color(0.130, 0.190, 0.270), 0.30, 0.75),
-		"container_green": _material(Color(0.145, 0.215, 0.160), 0.30, 0.75),
-		"container_grey": _material(Color(0.250, 0.255, 0.265), 0.30, 0.78),
-	}
+		# korn = wie fein die Struktur ist, tiefe = wie stark sie hervortritt,
+		# meter = ueber wie viele Meter sich ein Musterdurchgang zieht.
+		"snow": _surface(Color(0.840, 0.870, 0.900), 0.0, 0.95,
+			{korn = 0.05, tiefe = 0.5, meter = 6.0, zellig = false}),
+		"concrete": _surface(Color(0.300, 0.310, 0.330), 0.0, 0.85,
+			{korn = 0.18, tiefe = 1.1, meter = 3.0, zellig = false}),
+		"steel": _surface(Color(0.340, 0.345, 0.360), 0.90, 0.40,
+			{korn = 0.45, tiefe = 0.35, meter = 1.5, zellig = false}),
+		# Rost ist fleckig, nicht koernig — deshalb Zellrauschen statt Simplex.
+		"rust": _surface(Color(0.240, 0.140, 0.095), 0.20, 0.90,
+			{korn = 0.12, tiefe = 1.6, meter = 2.5, zellig = true}),
+		"wood": _surface(Color(0.205, 0.140, 0.080), 0.0, 0.92,
+			{korn = 0.30, tiefe = 0.9, meter = 2.0, zellig = false}),
+		"dark": _surface(Color(0.090, 0.095, 0.105), 0.0, 0.80,
+			{korn = 0.35, tiefe = 0.5, meter = 2.0, zellig = false}),
+		# Die Container kommen aus container_materials() — sie tragen ein
+		# echtes Modell mit eigenen UVs und brauchen weder Triplanar noch
+		# prozedurales Rauschen.
+		# Wasser: feine, weite Wellen. Kaum Rauigkeitsstreuung, sonst verliert
+		# es den Spiegel — und ohne Spiegelung sieht Wasser aus wie Linoleum.
+		"water": _surface(Color(0.360, 0.430, 0.480), 0.10, 0.20,
+			{korn = 0.09, tiefe = 0.35, meter = 5.0, zellig = false, streuung = 0.06}),
+		# Hafenkraene sind gelb, und zwar ueberall auf der Welt. Das ist hier
+		# nicht Dekoration: Gelb ist die einzige Farbe auf der Karte, die weder
+		# Schnee noch Container noch Beton ist — damit taugt sie als Wegmarke.
+		"yellow": _surface(Color(0.620, 0.480, 0.110), 0.40, 0.55,
+			{korn = 0.30, tiefe = 0.5, meter = 1.5, zellig = false}),
+		"asphalt": _surface(Color(0.175, 0.180, 0.190), 0.0, 0.88,
+			{korn = 0.55, tiefe = 1.0, meter = 1.2, zellig = false}),
+	}.merged(container_materials())
 
 
 ## Die Containerfarben in fester Reihenfolge — damit ein Stapel an derselben
 ## Stelle immer gleich aussieht und als Orientierungspunkt taugt.
 static func container_colors() -> Array[String]:
-	return ["container_red", "container_blue", "container_green", "container_grey"]
+	return ["container_red", "container_blue", "container_green",
+		"container_yellow", "container_grey"]
+
+
+# ---------------------------------------------------------------------------
+# Das Containermodell
+# ---------------------------------------------------------------------------
+
+const CONTAINER_MESH := "res://assets/models/world/container_20ft.res"
+const CONTAINER_ALBEDO := "res://assets/models/world/container_20ft_basecolor.webp"
+const CONTAINER_ORM := "res://assets/models/world/container_20ft_orm.webp"
+const CONTAINER_NORMAL := "res://assets/models/world/container_20ft_normal.webp"
+
+
+## Ein Container, wie ihn das Spiel benutzt.
+##
+## BEWUSST RASTERFREUNDLICH statt masszahlengetreu. Ein echter 20-Fuss-Container
+## ist 6,058 x 2,591 x 2,438 — lauter krumme Zahlen, an denen man sich beim
+## Bauen im Editor die Finger bricht: Zwei Container buendig nebeneinander
+## schieben scheitert, weil das Raster 6,0 anbietet und 6 cm Spalt bleiben.
+##
+## 6,0 x 2,6 x 2,4 geht restlos in einem 0,2-m-Raster auf. Der Unterschied ist
+## im Spiel unsichtbar, beim Bauen ist er der Unterschied zwischen flutschen
+## und fummeln.
+const CONTAINER_SIZE := Vector3(6.0, 2.6, 2.4)
+
+
+## Die eingefaerbten Containermaterialien.
+##
+## Die Textur ist ENTFAERBT — Rost, Dellen und Streifen ohne eigene Farbe.
+## Deshalb kann dieselbe Textur jede Farbe tragen, und alle fuenf Materialien
+## teilen sich ein einziges Bild statt fuenf eigene zu brauchen.
+##
+## Die Farben sind kraeftiger, als man auf den ersten Blick denkt: Die
+## Graustufentextur liegt im Mittel bei etwa der Haelfte, und multiplizieren
+## macht alles dunkler. Ein zurueckhaltendes Rot waere im Schnee braun.
+static func container_materials() -> Dictionary:
+	return {
+		"container_red": _container_material(Color(0.72, 0.20, 0.16)),
+		"container_blue": _container_material(Color(0.17, 0.36, 0.64)),
+		"container_green": _container_material(Color(0.21, 0.46, 0.27)),
+		"container_yellow": _container_material(Color(0.86, 0.66, 0.14)),
+		"container_grey": _container_material(Color(0.60, 0.62, 0.64)),
+	}
+
+
+## Ob das Modell ueberhaupt da ist.
+##
+## Ohne diese Pruefung wuerde ein frischer Clone ohne die Modelldateien mit
+## roten Fehlern um sich werfen, statt einfach die Quader zu zeigen.
+static func has_container_model() -> bool:
+	return ResourceLoader.exists(CONTAINER_MESH)
+
+
+static func _container_material(tint: Color) -> BaseMaterial3D:
+	if not has_container_model():
+		return _material(tint, 0.30, 0.75)
+
+	# ORM: Occlusion, Roughness und Metallic in den drei Kanaelen eines Bildes —
+	# so liefert glTF sie, und so spart man zwei Texturen.
+	var mat := ORMMaterial3D.new()
+	mat.albedo_color = tint
+	mat.albedo_texture = load(CONTAINER_ALBEDO)
+	mat.orm_texture = load(CONTAINER_ORM)
+	mat.normal_enabled = true
+	mat.normal_texture = load(CONTAINER_NORMAL)
+	mat.normal_scale = 1.0
+	return mat
+
+
+## Wie die Modell-Mesh sitzen muss, damit sie wie ein Quader um den Ursprung
+## herum liegt und genau CONTAINER_SIZE gross ist.
+##
+## Wird AUSGERECHNET statt eingetippt: Das Modell kommt mit dem Ursprung in
+## einer Ecke und in High-Cube-Hoehe aus dem Paket. Wer es spaeter neu
+## extrahiert oder eine andere Variante nimmt, bekommt andere Rohmasse — und
+## muesste sonst von Hand nachrechnen, was hier von selbst passiert.
+static func container_mesh_transform(mesh: Mesh) -> Transform3D:
+	var box := mesh.get_aabb()
+	var scale := Vector3(
+		CONTAINER_SIZE.x / maxf(0.001, box.size.x),
+		CONTAINER_SIZE.y / maxf(0.001, box.size.y),
+		CONTAINER_SIZE.z / maxf(0.001, box.size.z))
+	var centre := (box.position + box.size * 0.5) * scale
+	return Transform3D(Basis().scaled(scale), -centre)
 
 
 ## Ein Festkoerper: Mesh und Kollision in einem Knoten.
@@ -82,6 +185,25 @@ static func solid(node_name: String, size: Vector3, pos: Vector3,
 	return body
 
 
+## Eine flache Flaeche OHNE Kollision — Strassen, Gleise, Wasseroberflaeche.
+##
+## Bewusst ohne Kollision: Eine Strasse ist nur Farbe auf dem Boden. Als
+## Festkoerper waere sie eine zwei Zentimeter hohe Kante, an der man beim
+## Darueberlaufen haengenbleibt — und sowas sucht man stundenlang.
+static func flat(node_name: String, size: Vector2, pos: Vector3,
+		mat: Material, rotation_deg: float = 0.0) -> MeshInstance3D:
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(size.x, 0.04, size.y)
+
+	var view := MeshInstance3D.new()
+	view.name = node_name
+	view.mesh = mesh
+	view.material_override = mat
+	view.position = pos
+	view.rotation_degrees = Vector3(0.0, rotation_deg, 0.0)
+	return view
+
+
 ## Eine begehbare Rampe.
 ##
 ## `rise` ist der Hoehenunterschied, `run` die Strecke am Boden. Daraus faellt
@@ -115,18 +237,50 @@ static func ramp(node_name: String, rise: float, run: float, width: float,
 const THICKNESS := 0.30
 
 
-## Ein Seecontainer. Masse wie ein 20-Fuss-Container.
+## Ein Seecontainer.
 ##
 ## Als ein Aufruf, weil das Containerfeld aus dutzenden besteht und jeder von
 ## Hand gebaute drei Zeilen kosten wuerde, die alle gleich aussehen.
-const CONTAINER_SIZE := Vector3(6.06, 2.59, 2.44)
-
-
+##
+## KOLLISION BLEIBT EIN QUADER, auch wenn die Mesh Wellblech ist. Zwei Gruende:
+## Ein Quader ist um Groessenordnungen billiger als eine Dreiecksform bei
+## vierhundert Containern — und an jeder Rippe des Wellblechs haengenzubleiben
+## waere im Gefecht das Letzte, was man braucht.
 static func container(node_name: String, pos: Vector3, mat: Material,
 		facing_deg: float = 0.0) -> StaticBody3D:
-	return solid(node_name, CONTAINER_SIZE,
-		pos + Vector3(0.0, CONTAINER_SIZE.y * 0.5, 0.0), mat,
-		Vector3(0.0, facing_deg, 0.0))
+	# Ohne Modell bleibt der Quader. Ein frischer Clone ohne die Modelldateien
+	# soll spielbar sein, nicht rot blinken.
+	if not has_container_model():
+		return solid(node_name, CONTAINER_SIZE,
+			pos + Vector3(0.0, CONTAINER_SIZE.y * 0.5, 0.0), mat,
+			Vector3(0.0, facing_deg, 0.0))
+
+	var body := StaticBody3D.new()
+	body.name = node_name
+	body.position = pos + Vector3(0.0, CONTAINER_SIZE.y * 0.5, 0.0)
+	body.rotation_degrees = Vector3(0.0, facing_deg, 0.0)
+	body.collision_layer = WORLD_LAYER
+	body.collision_mask = 0
+
+	var mesh: Mesh = load(CONTAINER_MESH)
+	var view := MeshInstance3D.new()
+	view.name = "Mesh"
+	view.mesh = mesh
+	view.material_override = mat
+	# Skalieren und mittig ruecken — das Modell kommt mit dem Ursprung in einer
+	# Ecke und in High-Cube-Hoehe aus dem Paket.
+	view.transform = container_mesh_transform(mesh)
+	body.add_child(view)
+
+	var shape := BoxShape3D.new()
+	shape.size = CONTAINER_SIZE
+
+	var collider := CollisionShape3D.new()
+	collider.name = "Kollision"
+	collider.shape = shape
+	body.add_child(collider)
+
+	return body
 
 
 ## Ein Stapel Container uebereinander, von unten nach oben.
@@ -237,3 +391,107 @@ static func _material(colour: Color, metallic: float, roughness: float) -> Stand
 	mat.metallic = metallic
 	mat.roughness = roughness
 	return mat
+
+
+## Wie stark die Rauigkeit vom Rauschen gestreut wird, wenn nichts anderes
+## dabeisteht. 0.22 heisst: zwischen 78 % und 100 % des eingestellten Werts.
+##
+## Bewusst schwach. Eine Oberflaeche, die von matt bis spiegelnd durchschlaegt,
+## sieht nicht nach Material aus, sondern nach Fehler — man will nur, dass das
+## Licht nicht ueberall exakt gleich bricht.
+const ROUGHNESS_SPREAD := 0.22
+
+## Kantenlaenge der erzeugten Rauschbilder. 256 genuegt vollauf: Das Muster
+## wird ueber Meter gestreckt, feiner wuerde man nie sehen — und nahtlos
+## erzeugen kostet mit der Groesse quadratisch.
+const NOISE_SIZE := 256
+
+
+## Eine Oberflaeche mit Struktur.
+##
+## ---------------------------------------------------------------------------
+## WARUM TRIPLANAR, UND ZWAR IN WELTKOORDINATEN
+##
+## Diese Karte besteht aus Quadern voellig verschiedener Groesse: ein Container
+## ist 6 m lang, ein Schiffsrumpf 120 m, die Kaimauer 330 m. Eine Textur nach
+## den UV-Koordinaten des Quaders wuerde auf dem Schiff zu Matsch gezogen und
+## auf dem Container zu Briefmarken gestaucht — dieselbe Oberflaeche saehe an
+## jedem Objekt anders aus.
+##
+## `uv1_world_triplanar` projiziert stattdessen nach der Position in der Welt.
+## Ein Meter Beton sieht ueberall gleich aus, egal wie gross das Teil ist, und
+## keine einzige Mesh braucht UV-Koordinaten. Genau deshalb funktioniert das
+## hier mit blossen BoxMeshes.
+##
+## ---------------------------------------------------------------------------
+## WAS DAS RAUSCHEN TUT
+##
+## Es faerbt NICHT. Die Farbe bleibt, wie sie ist — es streut nur Rauigkeit und
+## legt eine Normalenkarte darueber. Das ist der Unterschied zwischen Plastik
+## und Material: Plastik bricht das Licht ueberall exakt gleich.
+##
+## Echte Fototexturen waeren mehr, aber das hier kostet keine einzige Datei,
+## keine Lizenzfrage und keinen Speicher im Repo.
+static func _surface(colour: Color, metallic: float, roughness: float,
+		profile: Dictionary) -> StandardMaterial3D:
+	var grain: float = profile.get("korn", 0.25)
+	var depth: float = profile.get("tiefe", 1.0)
+	var metres: float = profile.get("meter", 2.0)
+	var cellular: bool = profile.get("zellig", false)
+	var spread: float = profile.get("streuung", ROUGHNESS_SPREAD)
+
+	# Der Sollwert liegt in der Mitte der Streuung, damit die Oberflaeche im
+	# Schnitt so rau bleibt, wie sie gedacht war. Ohne das waere alles mit
+	# Rauschen systematisch glaenzender als ohne.
+	var mat := _material(colour, metallic, minf(1.0, roughness / (1.0 - spread * 0.5)))
+
+	mat.uv1_triplanar = true
+	mat.uv1_world_triplanar = true
+	mat.uv1_scale = Vector3.ONE / maxf(0.01, metres)
+
+	mat.roughness_texture = _noise_texture(grain, cellular, spread)
+	mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
+
+	if depth > 0.01:
+		mat.normal_enabled = true
+		mat.normal_texture = _noise_texture(grain, cellular, 0.0, true)
+		mat.normal_scale = depth
+
+	return mat
+
+
+## Ein nahtloses Rauschbild.
+##
+## `spread` klemmt den Wertebereich ein: 0.22 gibt Grauwerte zwischen 0.78 und
+## 1.0. Fuer Normalenkarten wird nicht geklemmt — dort will man den vollen Hub,
+## sonst bleibt die Oberflaeche flach.
+static func _noise_texture(frequency: float, cellular: bool, spread: float,
+		as_normal: bool = false) -> NoiseTexture2D:
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_CELLULAR if cellular \
+		else FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = frequency
+	noise.fractal_octaves = 4
+	noise.fractal_gain = 0.5
+
+	var texture := NoiseTexture2D.new()
+	texture.noise = noise
+	texture.width = NOISE_SIZE
+	texture.height = NOISE_SIZE
+	# Nahtlos, sonst sieht man ueber die ganze Karte hinweg die Kachelgrenzen —
+	# und bei 330 Metern Kaimauer waeren das viele.
+	texture.seamless = true
+	texture.generate_mipmaps = true
+
+	if as_normal:
+		texture.as_normal_map = true
+		texture.bump_strength = 4.0
+		return texture
+
+	if spread > 0.0:
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(1.0 - spread, 1.0 - spread, 1.0 - spread))
+		ramp.set_color(1, Color.WHITE)
+		texture.color_ramp = ramp
+
+	return texture
