@@ -113,6 +113,16 @@ custom_minimum_size = Vector2(350, 130)
 mouse_filter = 1
 script = ExtResource("2_grid_view")
 
+[node name="RucksackTitel" type="Label" parent="Layout/Inhalt/Mitte/Inventar"]
+text = "Rucksack"
+theme_override_colors/font_color = Color(0.6, 0.63, 0.67, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="RucksackRaster" type="Control" parent="Layout/Inhalt/Mitte/Inventar"]
+custom_minimum_size = Vector2(350, 230)
+mouse_filter = 1
+script = ExtResource("2_grid_view")
+
 [node name="Auswirkung" type="Label" parent="Layout/Inhalt"]
 custom_minimum_size = Vector2(0, 104)
 text = "..."

@@ -56,6 +56,8 @@ var _split_cell: Vector2i = Vector2i(-1, -1)
 
 @onready var _container_view: InventoryGridView = $Layout/Columns/Left/ContainerView
 @onready var _player_view: InventoryGridView = $Layout/Columns/Right/PlayerView
+@onready var _backpack_view: InventoryGridView = $Layout/Columns/Right/BackpackView
+@onready var _backpack_title: Label = $Layout/Columns/Right/RucksackTitel
 @onready var _container_title: Label = $Layout/Columns/Left/ContainerTitle
 @onready var _player_title: Label = $Layout/Columns/Right/PlayerTitle
 @onready var _status: Label = $Layout/Columns/Left/Status
@@ -72,7 +74,7 @@ func _ready() -> void:
 	# immer an das Control, auf dem gedrueckt wurde. Beim Ziehen von der Kiste
 	# ins Inventar kam es also nie beim Inventar an. Das Ziel bestimmt deshalb
 	# das Fenster selbst anhand der Zeigerposition.
-	for view in [_container_view, _player_view]:
+	for view in [_container_view, _player_view, _backpack_view]:
 		view.item_pressed.connect(_on_item_pressed)
 		view.item_double_clicked.connect(_on_item_double_clicked)
 		view.hidden_item_pressed.connect(_on_hidden_item_pressed)
@@ -92,9 +94,10 @@ func open_for(p_container: LootContainer, p_inventory: PlayerInventory) -> void:
 		container.item_revealed.connect(_on_item_revealed)
 
 	_container_view.setup(container.contents, container.display_name, container)
-	_player_view.setup(player_inventory.grid, "Ausruestung")
+	_player_view.setup(player_inventory.grid, "Taschen")
 	_container_title.text = container.display_name
-	_player_title.text = "Ausruestung"
+	_player_title.text = "Taschen"
+	_refresh_backpack_view()
 
 	show()
 	_update_status()
@@ -219,7 +222,7 @@ func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
 	var pixel_offset := local - view.cell_to_position(origin) if origin.x >= 0 else Vector2.ZERO
 
 	_ghost.show_stack(stack, pixel_offset)
-	for v in [_container_view, _player_view]:
+	for v in _views():
 		v.drag_stack = stack
 		v.drag_source = view
 		v.preview_cell = Vector2i(-1, -1)
@@ -268,7 +271,7 @@ func _update_drag_target() -> void:
 	_drag_target_cell = Vector2i(-1, -1)
 
 	var mouse := get_global_mouse_position()
-	for v: InventoryGridView in [_container_view, _player_view]:
+	for v: InventoryGridView in _views():
 		if not v.get_global_rect().has_point(mouse):
 			continue
 		var cell := v.position_to_cell(v.get_local_mouse_position())
@@ -277,7 +280,7 @@ func _update_drag_target() -> void:
 			_drag_target_cell = cell - _drag_offset
 		break
 
-	for v: InventoryGridView in [_container_view, _player_view]:
+	for v: InventoryGridView in _views():
 		v.preview_cell = _drag_target_cell if v == _drag_target else Vector2i(-1, -1)
 		v.queue_redraw()
 
@@ -432,20 +435,33 @@ func _clear_split() -> void:
 
 func _on_item_double_clicked(stack: ItemStack, view: InventoryGridView) -> void:
 	if view == _container_view:
-		if container.take_item(stack.instance_id, player_inventory.grid):
+		if _take_into_player(stack):
 			_notify_changed()
 	else:
-		# Vom Spieler in die Kiste zurücklegen.
+		# Vom Spieler in die Kiste zurücklegen — aus dem Raster, in dem er
+		# wirklich liegt. Sonst waere ein Doppelklick im Rucksack folgenlos.
 		var spot := container.contents.find_free_position(stack)
 		if spot.x < 0:
 			return
-		var removed := player_inventory.grid.remove_item(stack.instance_id)
+		var removed := view.grid.remove_item(stack.instance_id)
 		if removed == null:
 			return
 		if not container.put_item(removed, spot.x, spot.y):
-			player_inventory.grid.add_item(removed)
+			view.grid.add_item(removed)
 			return
 		_notify_changed()
+
+
+## Nimmt einen Gegenstand aus der Kiste: erst in die Taschen, dann in den
+## Rucksack. Ohne den zweiten Versuch waere ein Rucksack beim Looten wertlos —
+## und genau dabei braucht man ihn.
+func _take_into_player(stack: ItemStack) -> bool:
+	if player_inventory == null:
+		return false
+	for target in player_inventory.get_all_grids():
+		if container.take_item(stack.instance_id, target):
+			return true
+	return false
 
 
 func _cancel_drag() -> void:
@@ -462,7 +478,7 @@ func _cancel_drag() -> void:
 	_drag_ctrl = false
 	if _ghost != null:
 		_ghost.clear()
-	for v in [_container_view, _player_view]:
+	for v in _views():
 		if v == null:
 			continue
 		v.drag_stack = null
@@ -474,14 +490,48 @@ func _cancel_drag() -> void:
 func _notify_changed() -> void:
 	if player_inventory != null:
 		player_inventory.changed.emit()
-	_container_view.queue_redraw()
-	_player_view.queue_redraw()
+	_refresh_backpack_view()
+	for v in _views():
+		v.queue_redraw()
+
+
+## Die Raster, zwischen denen gerade gezogen werden darf.
+## Ohne angelegten Rucksack sind es zwei, mit Rucksack drei.
+func _views() -> Array[InventoryGridView]:
+	var views: Array[InventoryGridView] = [_container_view, _player_view]
+	if _backpack_view != null and _backpack_view.visible and _backpack_view.grid != null:
+		views.append(_backpack_view)
+	return views
+
+
+## Zeigt das Innenraster des angelegten Rucksacks — oder blendet es aus.
+func _refresh_backpack_view() -> void:
+	if _backpack_view == null or _backpack_title == null:
+		return
+
+	var backpack: InventoryGrid = null
+	if player_inventory != null:
+		backpack = player_inventory.get_backpack_grid()
+
+	var has_pack := backpack != null
+	_backpack_view.visible = has_pack
+	_backpack_title.visible = has_pack
+
+	if not has_pack:
+		_backpack_view.grid = null
+		return
+
+	if _backpack_view.grid != backpack:
+		_backpack_view.setup(backpack, "Rucksack")
+	_backpack_title.text = "Rucksack  —  %d von %d Feldern frei" % [
+		backpack.get_free_cell_count(), backpack.width * backpack.height]
 
 
 ## Nimmt alles Aufgedeckte mit, was passt.
 func take_all() -> int:
 	if container == null or player_inventory == null:
 		return 0
-	var left := container.take_all(player_inventory.grid)
+	for stack in container.get_revealed_stacks():
+		_take_into_player(stack)
 	_notify_changed()
-	return left
+	return container.contents.get_item_count()

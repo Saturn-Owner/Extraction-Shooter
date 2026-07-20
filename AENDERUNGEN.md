@@ -8,6 +8,71 @@ Begründungen im Einzelnen stehen weiterhin in den Commits.
 
 ---
 
+## 20.07.2026 — Der Rucksack
+
+Merge von `feature/rucksack` nach `main`.
+
+Die Taschen fassen zwölf Felder, und ein Sturmgewehr belegt zehn davon. Es gab
+bis dahin keinen Weg, daran etwas zu ändern — man konnte Ausrüstung finden,
+aber nichts, was mehr Platz schafft.
+
+### Das Item
+
+- **Wanderrucksack** (`assets/data/gear/rucksack_wander.tres`) — reine Daten,
+  kein neuer Item-Code. Innen **6x4 = 24 Felder**, doppelt so viel wie die
+  eigenen Taschen.
+- Zusammengelegt ist er selbst **4x2 gross** und passt damit noch in die
+  Taschen. Das ist Absicht: Ein Fund, den man nicht aufheben kann, weil er
+  nirgends hineinpasst, wäre schlimmer als gar keiner.
+- 1,4 kg leer. Was drin liegt, **wiegt mit** und bremst.
+
+### Die Kiste vor dem Einstieg
+
+- Neue **Ausruestungskiste** 2,5 m vor dem Spawn, eigene Loot-Tabelle
+  (`assets/data/loot/ausruestung.tres`) mit `empty_weight = 0`: Sie enthält
+  **immer genau einen Rucksack**, nie nichts. Der Test würfelt 50 Mal und
+  prüft das.
+- Durchsuchzeit auf 0,6 gekürzt — direkt beim Start soll man nicht drei
+  Sekunden stehen.
+
+### Zweites Raster im Inventar
+
+- Sowohl das **Charakterfenster** als auch das **Loot-Fenster** zeigen unter
+  den Taschen das Innenraster des angelegten Rucksacks. Ziehen funktioniert
+  zwischen allen Rastern, mit Strg auch geteilt.
+- Ohne angelegten Rucksack ist beides **ausgeblendet** — ein leeres Feld mit
+  der Aufschrift "Rucksack" sähe aus wie ein Fehler.
+- Das linke Raster heisst jetzt **"Taschen"** statt "Ausruestung". Es zeigte
+  noch nie die Ausrüstung, und mit dem Rucksack daneben wäre der Name endgültig
+  irreführend.
+
+### Drei stille Verluste, die dabei aufgefallen sind
+
+Ein zweites Raster bricht jede Stelle, die selbstverständlich von einem
+einzigen ausging. Jeder dieser Fehler fällt im Spiel erst auf, wenn schon
+etwas weg ist:
+
+- **Munition im Rucksack war beim Nachladen unsichtbar.** Man hätte mit vollem
+  Rucksack vor einer leeren Waffe gestanden. `count_ammo`, `take_ammo` und
+  `get_compatible_ammo` durchsuchen jetzt beide Raster.
+- **Eine Waffe aus dem Rucksack in die Hand hätte sie verdoppelt.**
+  `equip_weapon` und `assign_weapon` suchten sie nur in den Taschen und
+  entfernten sie dort — also nirgends. Sie hätte danach zweimal existiert.
+- **Der Rucksack hätte in sich selbst wandern können**, samt Inhalt.
+  `PlayerController._contains_grid()` sperrt das, rekursiv — auch über eine
+  Tasche im Rucksack hinweg.
+
+### Verifikation
+
+Neue Suite `tests/verify_backpack.gd`, **25 Prüfungen**. Alle 14 Suiten grün,
+zusammen 1.099 Prüfungen.
+
+**Von einem Menschen zu prüfen:** ob das zweite Raster im Fenster gut
+aussieht, ob 24 Felder die richtige Grösse sind und ob die Kiste an der
+richtigen Stelle steht.
+
+---
+
 ## 20.07.2026 — Schritte im Schnee und Keuchen beim Sprinten
 
 Merge von `feature/schrittgeraeusche` nach `main`. **3 Commits.**

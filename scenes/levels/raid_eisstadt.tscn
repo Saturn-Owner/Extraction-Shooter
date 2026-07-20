@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1_player"]
 [ext_resource type="Script" path="res://scripts/levels/raid_level.gd" id="2_raid_level"]
@@ -10,6 +10,7 @@
 [ext_resource type="Resource" path="res://assets/data/loot/wohnung.tres" id="6_loot_wohnung"]
 [ext_resource type="Resource" path="res://assets/data/loot/werkstatt.tres" id="7_loot_werkstatt"]
 [ext_resource type="Resource" path="res://assets/data/loot/militaer.tres" id="8_loot_militaer"]
+[ext_resource type="Resource" path="res://assets/data/loot/ausruestung.tres" id="12_loot_ausruestung"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_winter"]
 sky_top_color = Color(0.44, 0.5, 0.6, 1)
@@ -127,6 +128,14 @@ mesh = SubResource("Mesh_wall")
 shape = SubResource("Shape_wall")
 
 [node name="Kisten" type="Node3D" parent="."]
+
+[node name="Ausruestung1" parent="Kisten" instance=ExtResource("3_loot")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.5)
+loot_table = ExtResource("12_loot_ausruestung")
+grid_width = 4
+grid_height = 2
+display_name = "Ausruestungskiste"
+search_time_multiplier = 0.6
 
 [node name="Wohnung1" parent="Kisten" instance=ExtResource("3_loot")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -15, 0, -15)
