@@ -29,6 +29,7 @@ func _initialize() -> void:
 	_test_jam_never_loses_ammo()
 	_test_jam_survives_weapon_switch()
 	_test_chamber_only_reload()
+	await _test_viewmodel_arms()
 	_test_aiming_reduces_spread()
 	_test_generated_meshes_are_closed()
 	_test_every_weapon_builds()
@@ -387,6 +388,65 @@ func _test_chamber_only_reload() -> void:
 	_check(not weapon._reload_chamber_only,
 		"ein halbleeres Magazin wird weiterhin gewechselt")
 	_check(not reported[0], "und auch so gemeldet")
+
+
+## Die Haende, die der Spieler an seiner Waffe sieht.
+##
+## ---------------------------------------------------------------------------
+## DIE LAENGE ERGIBT SICH AUS DER WAFFE
+##
+## Erster Versuch waren 0,15 und 0,17 m — "Kameragroesse" hatte ich als
+## kuerzer verstanden. Der Vorderschaft liegt aber 0,59 m von der linken
+## Schulter entfernt; der Arm reichte nicht einmal in die Naehe und blieb auf
+## halbem Weg stehen. Im Bild sah man nur eine dunkle Ecke unten.
+##
+## Geprueft wird deshalb die REICHWEITE gegen den tatsaechlichen Bedarf, nicht
+## eine Zahl gegen sich selbst.
+func _test_viewmodel_arms() -> void:
+	_section("Haende am Kameramodell")
+
+	var reach: float = ViewmodelArms.UPPER_LENGTH + ViewmodelArms.LOWER_LENGTH
+
+	# Wie weit muessen die Haende wirklich? Aus den Griffpunkten der AR-15 in
+	# ihrer Ruhelage, nicht geschaetzt.
+	var data := ItemRegistry.get_item(&"weapon_rifle_ar15") as WeaponData
+	var model := data.create_viewmodel()
+	model.weapon_data = data
+	root.add_child(model)
+	# Erst nach einem Bild laeuft _ready() und damit _collect_parts() — vorher
+	# sind grip_point und support_point noch null. Dieselbe Falle wie bei den
+	# Figuren im Testgelaende.
+	await process_frame
+	model.position = model.hip_position
+	model.rotation_degrees = model.hip_rotation_degrees
+
+	_check(model.grip_point != null and model.support_point != null,
+		"das Waffenmodell nennt Griff und Vorderschaft")
+	if model.grip_point == null or model.support_point == null:
+		model.queue_free()
+		return
+
+	var to_grip := ViewmodelArms.RIGHT_SHOULDER.distance_to(
+		model.grip_point.position + model.position)
+	var to_fore := ViewmodelArms.LEFT_SHOULDER.distance_to(
+		model.support_point.position + model.position)
+
+	_check(reach > to_grip,
+		"der rechte Arm reicht an den Griff (%.3f von %.3f m)" % [to_grip, reach])
+	_check(reach > to_fore,
+		"der linke an den Vorderschaft (%.3f von %.3f m)" % [to_fore, reach])
+
+	# Nicht beliebig lang: Ein Arm, der immer gestreckt ist, sieht steif aus.
+	_check(reach < to_fore + 0.20,
+		"und nicht unnoetig weit darueber (%.3f gegen %.3f m)" % [reach, to_fore])
+
+	# Duenner als ein Weltglied — das war der eigentliche Punkt an
+	# "Kameragroesse".
+	_check(ViewmodelArms.UPPER_THICK < 0.10,
+		"die Glieder sind schlank genug fuer 30 cm vor dem Auge (%.3f m)"
+			% ViewmodelArms.UPPER_THICK)
+
+	model.queue_free()
 
 
 func _test_aiming_reduces_spread() -> void:

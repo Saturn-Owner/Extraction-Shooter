@@ -91,6 +91,9 @@ var _pose: Node3D
 var _sway: Node3D
 var _recoil: Node3D
 
+## Die eigenen Haende an der Waffe. Siehe ViewmodelArms.
+var _arms: ViewmodelArms
+
 ## Das Modell der Waffe, die gerade in der Hand liegt.
 var _viewmodel: WeaponViewmodel
 
@@ -136,6 +139,21 @@ func _build_hierarchy() -> void:
 	_recoil = Node3D.new()
 	_recoil.name = "Recoil"
 	_sway.add_child(_recoil)
+
+	# ---------------------------------------------------------------------
+	# DIE ARME HAENGEN NEBEN DER WAFFE, NICHT AN IHR
+	#
+	# Sie kommen an WeaponView selbst und damit ins feste Kameraraster — die
+	# Schultern bleiben stehen, wo Schultern hingehoeren, waehrend die Waffe
+	# darueber schwankt, zurueckstoesst und sich beim Nachladen anhebt.
+	#
+	# Haengte man sie unter `_recoil`, wuerden sie jede Waffenbewegung
+	# mitmachen und dabei genau das verlieren, was sie zeigen sollen: dass
+	# HAENDE die Waffe fuehren. Die Verbindung entsteht stattdessen ueber die
+	# Kinematik in `_update_arms()`.
+	_arms = ViewmodelArms.new()
+	_arms.name = "Arme"
+	add_child(_arms)
 
 
 ## Waffe anmelden. Ab hier reagiert die Darstellung auf ihre Signale.
@@ -249,6 +267,12 @@ func _process(delta: float) -> void:
 	# Die beweglichen Teile bewegt die Waffe selbst.
 	if _viewmodel != null:
 		_viewmodel.update_mechanics(delta)
+
+	# GANZ ZUM SCHLUSS: Die Arme greifen dorthin, wo die Waffe nach allen
+	# Bewegungen dieses Bildes wirklich steht. Stuenden sie weiter oben,
+	# griffen sie um einen Frame versetzt — bei Rueckstoss sichtbar als
+	# Zittern zwischen Hand und Griff.
+	_update_arms()
 
 
 ## Zielen ist eine reine Zeitinterpolation. Die Ergonomie der Waffe bestimmt
@@ -366,6 +390,56 @@ func _update_recoil(delta: float) -> void:
 
 	_recoil.position = _recoil_offset
 	_recoil.rotation_degrees.x = _recoil_angle
+
+
+## Legt die Haende an die Waffe.
+##
+## ---------------------------------------------------------------------------
+## DIE LINKE HAND VERLAESST DIE WAFFE BEIM NACHLADEN
+##
+## Die rechte bleibt am Griff — die Waffe haelt man dabei fest. Die linke
+## macht den Wechsel: zum Schacht, das leere Magazin heraus, ein neues holen,
+## einschieben, Ladehebel durchziehen.
+##
+## Die Wegmarken kommen aus `CharacterAnimation`, wo derselbe Ablauf fuer die
+## Figuren steht. Sie hier abzuschreiben hiesse, dass beide beim naechsten
+## Abstimmen auseinanderlaufen — dieselbe Ueberlegung wie bei der
+## Nachladedrehung, die aus dem Waffenmodell kommt.
+func _update_arms() -> void:
+	if _arms == null or _viewmodel == null:
+		return
+
+	var grip: Node3D = _viewmodel.grip_point
+	var support: Node3D = _viewmodel.support_point
+	if _sequence_kind == &"reload" and _sequence_duration > 0.0:
+		var progress := 1.0 - _sequence_time_left / _sequence_duration
+		support = _support_target_while_reloading(progress)
+
+	_arms.aim_at(grip, support)
+
+
+## Wohin die linke Hand im jeweiligen Abschnitt des Nachladens greift.
+func _support_target_while_reloading(progress: float) -> Node3D:
+	# Beim blossen Durchladen bleibt die Hand am Schaft und zieht nur zum
+	# Schluss den Ladehebel — es wird ja kein Magazin gewechselt.
+	if _sequence_chamber_only:
+		if progress >= CharacterAnimation.RELOAD_CHARGE:
+			return _viewmodel.charging_handle
+		return _viewmodel.support_point
+
+	if progress < CharacterAnimation.RELOAD_REACH:
+		return _viewmodel.support_point
+	if progress < CharacterAnimation.RELOAD_FETCH:
+		# Am Schacht: greifen und das leere Magazin herausziehen.
+		return _viewmodel.magwell_point
+	if progress < CharacterAnimation.RELOAD_CARRY:
+		# Unterwegs zur Tasche und zurueck. Es gibt im Kameraraum keine
+		# Weste, also greift die Hand nach unten aus dem Bild — genau das
+		# tut sie auch in Wirklichkeit.
+		return null
+	if progress < CharacterAnimation.RELOAD_CHARGE:
+		return _viewmodel.magwell_point
+	return _viewmodel.charging_handle
 
 
 ## Zeitleiste fuer Nachladen und Ladehemmung.
