@@ -382,25 +382,34 @@ const OWN_BODY_LAYER := 2
 ## sieht seinen Koerper.
 ##
 ## ---------------------------------------------------------------------------
-## ECHTE ERSTE PERSON: DU SIEHST DEINEN EIGENEN KOERPER
+## WARUM DER EIGENE KOERPER NICHT IN DER ERSTEN PERSON TAUGT
 ##
-## Der Spieler soll seine Arme sehen, wie sie die Waffe halten und nachladen —
-## nicht ein zweites Modell vor der Kamera. Deshalb sind Arme, Bauch, Beine
-## UND die Waffe des Koerpers sichtbar, und das `WeaponView` im Kameraraum ist
-## ausgeblendet.
+## Der Versuch stand hier schon: Arme, Bauch, Beine und die Waffe des Koerpers
+## sichtbar, das Modell im Kameraraum aus. Es sah im Standbild sogar richtig
+## aus — und war unspielbar.
 ##
-## Versteckt bleiben nur Kopf und Brust, und dafuer gibt es einen gemessenen
-## Grund: Bei einer Augenhoehe von 1,65 m reicht der Kopf von 1,56 bis 1,80 —
-## die Kamera steckt darin. Die Brust endet bei 1,52, also 13 cm darunter, und
-## fuellte beim Blick nach unten den ganzen Schirm.
+## ZIELEN BRAUCHT DIE WAFFE AUF DER KAMERAACHSE. Die Waffe des Koerpers sitzt
+## 18 cm rechts der Mitte und 12 Grad eingedreht (WEAPON_MOUNT), weil das die
+## Haltung fuer die Aussenansicht ist. In der ersten Person zeigte sie damit
+## am Fadenkreuz vorbei, und beim Hoch- und Runterschauen schwang sie im
+## Bogen, weil der Rumpf sich um die Huefte dreht und nicht um das Auge.
 ##
-## Was dabei zusammenpassen muss: Die Waffe haengt jetzt auf Schulterhoehe
-## (WEAPON_MOUNT), und der Oberkoerper dreht sich mit dem Blick
-## (`look_pitch`). Ohne beides zeigte die Waffe unter dem Bildrand hindurch
-## und stur waagerecht.
+## Genau dafuer gibt es in Shootern ein eigenes Modell im Kameraraum: Es ist
+## an der Kamera festgemacht und zeigt immer dorthin, wo man hinsieht.
+##
+## Der Koerper bleibt deshalb fuer den Traeger unsichtbar — aber vollstaendig
+## vorhanden: Trefferzonen, Waffe, Bewegung, Schatten. F5 zeigt ihn.
+##
+## Wer die eigenen Arme wirklich sehen will, braucht sie AM KAMERAMODELL,
+## nicht am Weltkoerper. Das ist Modellierarbeit, keine Sichtbarkeitsfrage.
 const HIDDEN_FROM_SELF := [
 	HealthSystem.Part.HEAD,
 	HealthSystem.Part.CHEST,
+	HealthSystem.Part.STOMACH,
+	HealthSystem.Part.LEFT_ARM,
+	HealthSystem.Part.RIGHT_ARM,
+	HealthSystem.Part.LEFT_LEG,
+	HealthSystem.Part.RIGHT_LEG,
 ]
 
 ## Schulterkamera zum Nachsehen.
@@ -554,11 +563,13 @@ func _hide_own_body_from_camera() -> void:
 		for mesh: MeshInstance3D in body.meshes_of(part):
 			mesh.layers = own_bit
 
-	# Die Waffe des Koerpers bleibt SICHTBAR — sie ist die, die der Spieler
-	# sieht. Dafuer verschwindet das Modell im Kameraraum: Zwei Gewehre dicht
-	# nebeneinander waeren schlimmer als eines an der falschen Stelle.
-	if weapon_view != null:
-		weapon_view.visible = false
+	# Die Waffe am Koerper ebenfalls verstecken: Sichtbar ist das Modell im
+	# Kameraraum, weil nur das zum Zielen taugt. Zwei Gewehre gleichzeitig
+	# waeren ohnehin eines zuviel.
+	if body_weapon != null:
+		for node in _all_children(body_weapon):
+			if node is VisualInstance3D:
+				(node as VisualInstance3D).layers = own_bit
 
 	if _camera != null:
 		_camera.cull_mask &= ~own_bit
@@ -575,19 +586,18 @@ func _toggle_third_person() -> void:
 		return
 
 	var own_bit := 1 << (OWN_BODY_LAYER - 1)
-	# Das Modell im Kameraraum bleibt in BEIDEN Ansichten aus: Gesehen wird
-	# die Waffe am Koerper. Frueher wurde es hier wieder eingeschaltet, als
-	# der Spieler noch keinen sichtbaren Arm hatte.
-	if weapon_view != null:
-		weapon_view.visible = false
-
 	if _third_person:
 		_first_person_camera_position = _camera.position
 		_camera.position = THIRD_PERSON_OFFSET
 		_camera.cull_mask |= own_bit
+		# Das Kameramodell schwebte sonst mitten im Bild, weit vor der Figur.
+		if weapon_view != null:
+			weapon_view.visible = false
 	else:
 		_camera.position = _first_person_camera_position
 		_camera.cull_mask &= ~own_bit
+		if weapon_view != null:
+			weapon_view.visible = true
 
 	# Dem Muendungsknall die neue Ruhelage mitteilen. Er setzt die
 	# Kameraposition beim Ruetteln absolut und zoege die Schulterkamera sonst
