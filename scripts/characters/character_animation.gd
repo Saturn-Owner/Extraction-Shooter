@@ -50,6 +50,30 @@ const STRIDE_LENGTH := 1.4
 const SWING_LEG := 26.0
 const SWING_ARM := 18.0
 
+## Wie weit sich das Knie beim Vorschwingen anwinkelt.
+##
+## ---------------------------------------------------------------------------
+## EIN KNIE BEUGT SICH NUR IN EINE RICHTUNG
+##
+## Deshalb ist das hier keine Schwingung um null, sondern eine Beugung, die
+## zwischen null und dem Höchstwert pendelt. Ein Knie, das nach vorn
+## durchknickt, sieht nicht nach Fehler aus, sondern nach gebrochenem Bein —
+## und genau das würde ein einfaches sin() erzeugen.
+##
+## Gebeugt wird in der SCHWUNGPHASE, also wenn das Bein von hinten nach vorn
+## kommt und der Fuss vom Boden ab ist. In der Standphase bleibt es fast
+## gerade, sonst würde die Figur einsinken.
+const BEND_KNEE := 34.0
+
+## Grundbeugung der Ellenbogen, auch im Stand.
+##
+## Ein Mensch lässt die Arme nicht kerzengerade hängen. Ohne diesen Winkel
+## wirkt die Figur wie eine Puppe, die man an den Schultern aufgehängt hat.
+const BEND_ELBOW_REST := 12.0
+
+## Wieviel Beugung beim Laufen dazukommt. Wer rennt, winkelt die Arme an.
+const BEND_ELBOW_MOVING := 38.0
+
 ## Wie hoch der Oberkörper beim Gehen wippt, in Metern.
 ##
 ## NUR DER OBERKÖRPER. Die Beine bleiben, wo sie sind — hübe man die ganze
@@ -154,6 +178,11 @@ func _process(delta: float) -> void:
 		# heraus und der Kanal räumt sich von selbst auf.
 		joint.rotation_degrees.x = swing * entry.amount * entry.sign * _intensity
 
+		var hinge := character.hinge_of(part)
+		if hinge == null:
+			continue
+		hinge.rotation_degrees.x = _hinge_angle(part, entry.sign)
+
 	# Das Wippen läuft mit der doppelten Schrittfrequenz — bei jedem Auftritt
 	# einmal, nicht bei jedem Doppelschritt.
 	var bob := absf(sin(_phase)) * BOB_HEIGHT * _intensity
@@ -166,6 +195,28 @@ func _process(delta: float) -> void:
 		if joint == null:
 			continue
 		joint.position = _rest[part] + Vector3(0.0, bob + breath, 0.0)
+
+
+## Winkel eines Zwischengelenks — Knie oder Ellenbogen.
+##
+## Beide beugen sich nur in EINE Richtung, deshalb kommt hier nie ein
+## Vorzeichenwechsel heraus. Ein Knie zeigt nach hinten (negativ), ein
+## Ellenbogen nach vorn (positiv) — die Figur schaut nach -Z, ein positiver
+## Ausschlag führt das untere Ende also nach vorn.
+func _hinge_angle(part: HealthSystem.Part, swing_sign: float) -> float:
+	var is_leg := part == HealthSystem.Part.LEFT_LEG or part == HealthSystem.Part.RIGHT_LEG
+
+	if is_leg:
+		# Gebeugt wird, solange das Bein nach VORN unterwegs ist. Das ist
+		# genau dann, wenn die Ableitung des Ausschlags positiv ist — und die
+		# Ableitung von sin ist cos. Ohne diese Kopplung an die Phase beugte
+		# sich das Knie auch im Stand auf dem Standbein, und die Figur würde
+		# bei jedem Schritt einknicken.
+		var lifting := maxf(0.0, cos(_phase) * swing_sign)
+		return -BEND_KNEE * lifting * _intensity
+
+	# Der Ellenbogen hält einen Grundwinkel und winkelt beim Laufen weiter an.
+	return BEND_ELBOW_REST + BEND_ELBOW_MOVING * _intensity
 
 
 ## Stellt die Ruhelage wieder her.
@@ -181,3 +232,9 @@ func reset() -> void:
 			continue
 		joint.position = _rest[part]
 		joint.rotation_degrees.x = 0.0
+
+		var hinge := character.hinge_of(part)
+		if hinge != null:
+			# Nicht auf null: Der Ellenbogen hat auch im Stand seinen
+			# Grundwinkel, sonst hängen die Arme kerzengerade herunter.
+			hinge.rotation_degrees.x = _hinge_angle(part, 1.0)

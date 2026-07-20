@@ -26,6 +26,7 @@ func _initialize() -> void:
 	await _test_the_plate_covers_only_the_chest()
 	await _test_the_target_can_be_reset()
 	await _test_movement()
+	await _test_hinges()
 	_test_colours()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
@@ -427,6 +428,94 @@ func _test_movement() -> void:
 
 	character.queue_free()
 	dead.queue_free()
+
+
+## Ellenbogen und Knie.
+func _test_hinges() -> void:
+	_section("Ellenbogen und Knie")
+
+	var character := _make()
+	var animation := CharacterAnimation.new()
+	character.add_child(animation)
+	animation.attach(character)
+	await process_frame
+
+	# Vier Zwischengelenke, und nur an Armen und Beinen.
+	for part: HealthSystem.Part in [HealthSystem.Part.LEFT_ARM,
+			HealthSystem.Part.RIGHT_ARM, HealthSystem.Part.LEFT_LEG,
+			HealthSystem.Part.RIGHT_LEG]:
+		_check(character.hinge_of(part) != null,
+			"%s hat ein Zwischengelenk" % BlockyCharacter.part_name(part))
+	for part: HealthSystem.Part in [HealthSystem.Part.HEAD,
+			HealthSystem.Part.CHEST, HealthSystem.Part.STOMACH]:
+		_check(character.hinge_of(part) == null,
+			"%s hat keines — ein Rumpf knickt nicht" % BlockyCharacter.part_name(part))
+
+	# ZWEI TREFFERZONEN JE GLIED, ABER DASSELBE KÖRPERTEIL.
+	#
+	# Das ist der Kern der Sache: Die Geometrie wird feiner, Lucas'
+	# Datenmodell bleibt unberührt. Ein Treffer in den Unterarm ist ein
+	# Armtreffer.
+	var arm_boxes := character.hitboxes_of(HealthSystem.Part.LEFT_ARM)
+	_check(arm_boxes.size() == 2, "der Arm hat zwei Trefferzonen (%d)" % arm_boxes.size())
+	var wrong := 0
+	for box in arm_boxes:
+		if (box as CharacterHitbox).part != HealthSystem.Part.LEFT_ARM:
+			wrong += 1
+	_check(wrong == 0, "und beide melden LEFT_ARM (%d falsch)" % wrong)
+
+	var chest_boxes := character.hitboxes_of(HealthSystem.Part.CHEST)
+	_check(chest_boxes.size() == 1, "die Brust hat eine (%d)" % chest_boxes.size())
+
+	# EIN KNIE KNICKT NUR IN EINE RICHTUNG.
+	#
+	# Ein sin() um null wäre die naheliegende Lösung und sähe bei jedem
+	# zweiten Schritt aus wie ein gebrochenes Bein. Über einen vollen Zyklus
+	# darf deshalb nie ein positiver Winkel herauskommen.
+	var knee := character.hinge_of(HealthSystem.Part.LEFT_LEG)
+	animation.speed = 4.0
+	var worst_forward := -999.0
+	var deepest := 0.0
+	for i in range(400):
+		animation._process(1.0 / 60.0)
+		worst_forward = maxf(worst_forward, knee.rotation_degrees.x)
+		deepest = minf(deepest, knee.rotation_degrees.x)
+
+	_check(worst_forward <= 0.001,
+		"das Knie knickt nie nach vorn (schlimmster Wert %.3f Grad)" % worst_forward)
+	_check(deepest < -CharacterAnimation.BEND_KNEE * 0.4,
+		"beugt sich beim Laufen aber deutlich (%.1f Grad)" % deepest)
+
+	# Der Ellenbogen hält auch im Stand einen Winkel — sonst hängen die Arme
+	# wie an einer Puppe.
+	animation.reset()
+	animation._process(0.0)
+	var elbow := character.hinge_of(HealthSystem.Part.LEFT_ARM)
+	_check(elbow.rotation_degrees.x > 1.0,
+		"der Ellenbogen bleibt auch im Stand gebeugt (%.1f Grad)"
+			% elbow.rotation_degrees.x)
+
+	# Und beim Rennen mehr als beim Stehen.
+	var standing := elbow.rotation_degrees.x
+	animation.speed = 4.5
+	for i in range(120):
+		animation._process(1.0 / 60.0)
+	_check(elbow.rotation_degrees.x > standing + 5.0,
+		"beim Rennen winkelt er weiter an (%.1f gegen %.1f Grad)"
+			% [elbow.rotation_degrees.x, standing])
+
+	# DIE TREFFERZONE DES UNTERARMS MUSS DEM ELLENBOGEN FOLGEN.
+	# Sonst zielt man auf einen angewinkelten Unterarm und trifft die Luft,
+	# wo er im Stand gewesen wäre.
+	var forearm := character.hitboxes_of(HealthSystem.Part.LEFT_ARM)[1] as CharacterHitbox
+	var bent := forearm.global_position
+	animation.reset()
+	animation._process(0.0)
+	_check(bent.distance_to(forearm.global_position) > 0.02,
+		"die Trefferzone des Unterarms folgt dem Ellenbogen (%.3f m)"
+			% bent.distance_to(forearm.global_position))
+
+	character.queue_free()
 
 
 func _test_colours() -> void:

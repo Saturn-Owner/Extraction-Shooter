@@ -134,18 +134,52 @@ func _ready() -> void:
 	refresh_colors()
 
 
-## Baut die sieben Kästen samt Trefferzonen auf. Mehrfach aufrufbar.
+## Welche Glieder ein Zwischengelenk bekommen, und wo es sitzt.
+##
+## ---------------------------------------------------------------------------
+## SIEBEN KÖRPERTEILE, ABER MEHR ALS SIEBEN KÄSTEN
+##
+## Ein Arm aus einem Stück kann nur pendeln. Für alles, was darüber hinausgeht
+## — greifen, eine Waffe anlegen, sich abstützen — braucht es den Ellenbogen.
+##
+## `HealthSystem` bleibt davon UNBERÜHRT: Ober- und Unterarm melden beide
+## `LEFT_ARM`. Ein Treffer in den Unterarm ist ein Armtreffer, und das ist auch
+## richtig so — ein eigenes Trefferziel „Unterarm" hiesse, Lucas' Datenmodell
+## anzufassen, und dafür gibt es keinen Grund. Die Geometrie wird feiner, die
+## Spielregel bleibt gleich.
+##
+## `at` ist der Anteil des Glieds, der ÜBER dem Gelenk liegt. Beim Arm sitzt
+## der Ellenbogen etwas oberhalb der Mitte, weil Unterarm plus Hand länger sind
+## als der Oberarm; beim Bein liegt das Knie fast mittig.
+const HINGES := {
+	HealthSystem.Part.LEFT_ARM: {name = "LeftElbow", at = 0.44},
+	HealthSystem.Part.RIGHT_ARM: {name = "RightElbow", at = 0.44},
+	HealthSystem.Part.LEFT_LEG: {name = "LeftKnee", at = 0.48},
+	HealthSystem.Part.RIGHT_LEG: {name = "RightKnee", at = 0.48},
+}
+
+## Wie stark sich das untere Segment verjüngt. Ein Unterarm ist schmaler als
+## ein Oberarm, ein Unterschenkel schmaler als ein Oberschenkel.
+const TAPER := 0.85
+
+
+## Baut die Figur samt Trefferzonen auf. Mehrfach aufrufbar.
 func build() -> void:
-	for node in _meshes.values():
-		(node as Node).queue_free()
-	for node in _hitboxes.values():
-		(node as Node).queue_free()
+	for part in _meshes:
+		for node in _meshes[part]:
+			(node as Node).queue_free()
+	for part in _hitboxes:
+		for node in _hitboxes[part]:
+			(node as Node).queue_free()
 	_meshes.clear()
 	_hitboxes.clear()
 
 	for part: HealthSystem.Part in VERTICAL:
 		var size := size_of(part)
 		var centre := centre_of(part)
+
+		_meshes[part] = []
+		_hitboxes[part] = []
 
 		# Der Gelenkpunkt sitzt OBEN am Teil, nicht in seiner Mitte: Ein Arm
 		# dreht sich um die Schulter, ein Bein um die Hüfte. Läge der Punkt in
@@ -156,48 +190,77 @@ func build() -> void:
 		joint.position = Vector3(centre.x, centre.y + size.y * 0.5, centre.z)
 		add_child(joint)
 
-		var mesh := MeshInstance3D.new()
-		mesh.name = "Mesh"
-		var box := BoxMesh.new()
-		box.size = size
-		mesh.mesh = box
-		mesh.position = Vector3(0.0, -size.y * 0.5, 0.0)
-		mesh.material_override = _make_material(COLOR_HEALTHY)
-		joint.add_child(mesh)
+		if not HINGES.has(part):
+			_add_segment(joint, part, size)
+			continue
 
-		var hitbox := CharacterHitbox.new()
-		hitbox.name = "Trefferzone"
-		hitbox.part = part
-		hitbox.character = self
+		# Zweiteilig: oberes Segment am Hauptgelenk, unteres an einem
+		# Zwischengelenk genau an ihrer Nahtstelle.
+		var hinge_data: Dictionary = HINGES[part]
+		var upper_height: float = size.y * float(hinge_data.at)
+		var lower_height: float = size.y - upper_height
 
-		# OHNE DIESE ZEILE BLEIBEN ALLE TREFFERZONEN IM WELTURSPRUNG STEHEN.
-		#
-		# AnimatableBody3D übernimmt mit `sync_to_physics` die Hoheit über
-		# seine eigene Welttransformation und folgt seinem Elternknoten nicht
-		# mehr — gedacht ist das für bewegliche Plattformen, die man direkt
-		# verschiebt. Hier hängen die Kästen aber unter der Figur und sollen
-		# mit ihr wandern.
-		#
-		# Die Figur sah dadurch völlig richtig aus (die Meshes folgen ja),
-		# während die Trefferzonen aller Figuren übereinander im Ursprung
-		# lagen. Ein Schuss ins Nichts hätte getroffen, ein Schuss auf die
-		# Figur nichts.
-		hitbox.sync_to_physics = false
+		_add_segment(joint, part, Vector3(size.x, upper_height, size.z))
 
-		hitbox.collision_layer = hit_layer
-		# Die Trefferzone selbst sucht nichts — sie wird nur gefunden.
-		hitbox.collision_mask = 0
-		hitbox.position = mesh.position
+		var hinge := Node3D.new()
+		hinge.name = hinge_data.name
+		hinge.position = Vector3(0.0, -upper_height, 0.0)
+		joint.add_child(hinge)
 
-		var shape := CollisionShape3D.new()
-		var box_shape := BoxShape3D.new()
-		box_shape.size = size
-		shape.shape = box_shape
-		hitbox.add_child(shape)
-		joint.add_child(hitbox)
+		_add_segment(hinge, part, Vector3(size.x * TAPER, lower_height, size.z * TAPER))
 
-		_meshes[part] = mesh
-		_hitboxes[part] = hitbox
+
+## Legt einen Kasten samt Trefferzone unter einem Gelenk an.
+##
+## Der Kasten hängt vom Gelenk nach unten, sein Mittelpunkt liegt also eine
+## halbe Höhe darunter. Trefferzone und Mesh bekommen dieselbe Position und
+## dieselbe Grösse — sie sind dasselbe Ding, nur einmal sichtbar und einmal
+## fühlbar.
+func _add_segment(joint: Node3D, part: HealthSystem.Part, size: Vector3) -> void:
+	var drop := Vector3(0.0, -size.y * 0.5, 0.0)
+
+	var mesh := MeshInstance3D.new()
+	mesh.name = "Mesh"
+	var box := BoxMesh.new()
+	box.size = size
+	mesh.mesh = box
+	mesh.position = drop
+	mesh.material_override = _make_material(COLOR_HEALTHY)
+	joint.add_child(mesh)
+
+	var hitbox := CharacterHitbox.new()
+	hitbox.name = "Trefferzone"
+	hitbox.part = part
+	hitbox.character = self
+
+	# OHNE DIESE ZEILE BLEIBEN ALLE TREFFERZONEN IM WELTURSPRUNG STEHEN.
+	#
+	# AnimatableBody3D übernimmt mit `sync_to_physics` die Hoheit über
+	# seine eigene Welttransformation und folgt seinem Elternknoten nicht
+	# mehr — gedacht ist das für bewegliche Plattformen, die man direkt
+	# verschiebt. Hier hängen die Kästen aber unter der Figur und sollen
+	# mit ihr wandern.
+	#
+	# Die Figur sah dadurch völlig richtig aus (die Meshes folgen ja),
+	# während die Trefferzonen aller Figuren übereinander im Ursprung
+	# lagen. Ein Schuss ins Nichts hätte getroffen, ein Schuss auf die
+	# Figur nichts.
+	hitbox.sync_to_physics = false
+
+	hitbox.collision_layer = hit_layer
+	# Die Trefferzone selbst sucht nichts — sie wird nur gefunden.
+	hitbox.collision_mask = 0
+	hitbox.position = drop
+
+	var shape := CollisionShape3D.new()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = size
+	shape.shape = box_shape
+	hitbox.add_child(shape)
+	joint.add_child(hitbox)
+
+	_meshes[part].append(mesh)
+	_hitboxes[part].append(hitbox)
 
 
 ## Grösse eines Körperteils in Metern.
@@ -216,14 +279,32 @@ func centre_of(part: HealthSystem.Part) -> Vector3:
 	return Vector3(HORIZONTAL[part].offset, centre_y, 0.0)
 
 
-## Der bewegliche Knoten eines Körperteils — hier setzen später Animationen an.
+## Das obere Gelenk eines Körperteils: Schulter, Hüfte, Hals.
+## Hier setzt die Animation an.
 func joint_of(part: HealthSystem.Part) -> Node3D:
-	var mesh: Node = _meshes.get(part)
-	return mesh.get_parent() as Node3D if mesh != null else null
+	return get_node_or_null(NodePath(part_name(part)))
 
 
+## Das Zwischengelenk — Ellenbogen oder Knie. Null bei Rumpf und Kopf.
+func hinge_of(part: HealthSystem.Part) -> Node3D:
+	if not HINGES.has(part):
+		return null
+	var joint := joint_of(part)
+	if joint == null:
+		return null
+	return joint.get_node_or_null(NodePath(HINGES[part].name))
+
+
+## Die vordere Trefferzone eines Körperteils. Bei zweiteiligen Gliedern das
+## obere Segment — für Messungen und Tests, wo eine genügt.
 func hitbox_of(part: HealthSystem.Part) -> CharacterHitbox:
-	return _hitboxes.get(part)
+	var boxes: Array = _hitboxes.get(part, [])
+	return boxes[0] if not boxes.is_empty() else null
+
+
+## Alle Trefferzonen eines Körperteils. Ein Arm hat zwei.
+func hitboxes_of(part: HealthSystem.Part) -> Array:
+	return _hitboxes.get(part, [])
 
 
 ## Wertet einen Treffer aus. Gerufen von CharacterHitbox.
@@ -264,10 +345,11 @@ func refresh_colors() -> void:
 	if health == null:
 		return
 	for part: HealthSystem.Part in _meshes:
-		var mesh: MeshInstance3D = _meshes[part]
-		var material := mesh.material_override as StandardMaterial3D
-		if material != null:
-			material.albedo_color = color_for(health.get_ratio(part))
+		var colour := color_for(health.get_ratio(part))
+		for mesh: MeshInstance3D in _meshes[part]:
+			var material := mesh.material_override as StandardMaterial3D
+			if material != null:
+				material.albedo_color = colour
 
 
 static func color_for(ratio: float) -> Color:

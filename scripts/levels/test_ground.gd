@@ -116,9 +116,10 @@ func _toggle_character_window() -> void:
 ## wie die anderen bei x = 3, liefe seine Bahn von -1 bis 7 — mitten durch
 ## die gepanzerte Scheibe bei x = 0.
 const HUMANOID_PLACES := [
-	{distance = 25.0, x = 3.0, patrol = 0.0},
-	{distance = 100.0, x = 8.0, patrol = 8.0},
-	{distance = 300.0, x = 3.0, patrol = 0.0},
+	{distance = 25.0, x = 3.0, patrol = 0.0, speed = 0.0, label = "steht"},
+	{distance = 50.0, x = 9.0, patrol = 14.0, speed = 4.4, label = "rennt"},
+	{distance = 100.0, x = 8.0, patrol = 8.0, speed = 1.6, label = "geht"},
+	{distance = 300.0, x = 3.0, patrol = 0.0, speed = 0.0, label = "steht"},
 ]
 
 
@@ -141,9 +142,9 @@ func _place_humanoids() -> void:
 		var distance: float = place.distance
 		var figure := HumanoidTarget.new()
 		figure.name = "Figur%dm" % int(distance)
-		figure.label_text = "%d m  Figur" % int(distance)
+		figure.label_text = "%d m  %s" % [int(distance), place.label]
 		figure.patrol_width = place.patrol
-		figure.patrol_speed = 1.6
+		figure.patrol_speed = place.speed
 
 		container.add_child(figure)
 		# Nach dem Einhängen setzen: global_position braucht den Baum.
