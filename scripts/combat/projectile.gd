@@ -198,14 +198,24 @@ func _physics_process(delta: float) -> void:
 ## Die Warnung dazu stand seit dem Bau der Figur in blocky_character.gd. Hier
 ## wird sie eingeloest.
 func _shooter_bodies() -> Array[RID]:
+	return bodies_of(shooter)
+
+
+## Alle Kollisionskoerper eines Knotens samt seiner Kinder.
+##
+## Statisch, weil `Weapon.get_aim_point()` dasselbe braucht: Auch der
+## Zielstrahl darf nicht am eigenen Koerper haengenbleiben. Gemessen tat er
+## das — beim Blick nach unten landete der Zielpunkt auf der eigenen Brust,
+## 1,52 m vom Spieler entfernt, statt auf dem Boden dahinter.
+static func bodies_of(node: Node) -> Array[RID]:
 	var bodies: Array[RID] = []
-	if shooter == null:
+	if node == null:
 		return bodies
-	if shooter is CollisionObject3D:
-		bodies.append((shooter as CollisionObject3D).get_rid())
-	for node in _descendants(shooter):
-		if node is CollisionObject3D:
-			bodies.append((node as CollisionObject3D).get_rid())
+	if node is CollisionObject3D:
+		bodies.append((node as CollisionObject3D).get_rid())
+	for child in _descendants(node):
+		if child is CollisionObject3D:
+			bodies.append((child as CollisionObject3D).get_rid())
 	return bodies
 
 

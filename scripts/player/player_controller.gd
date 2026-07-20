@@ -203,6 +203,7 @@ func _ready() -> void:
 			weapon_view.attach_weapon(weapon)
 			weapon.set_visual_muzzle(weapon_view.get_muzzle_point())
 	_build_body()
+	_build_crosshair()
 
 	# Schritte und Atmen. Ebenfalls im Code erzeugt, aus demselben Grund wie
 	# der Muendungsknall: kein Eingriff in player.tscn.
@@ -348,6 +349,9 @@ var _body_animation: CharacterAnimation
 
 ## Die Waffe in der Hand des Koerpers — die, die andere sehen wuerden.
 var body_weapon: CharacterWeapon
+
+## Das Fadenkreuz in der Bildmitte.
+var crosshair: Crosshair
 
 var _body_reload_left: float = 0.0
 var _body_reload_total: float = 0.0
@@ -683,6 +687,24 @@ static func _all_children(node: Node) -> Array[Node]:
 		found.append(child)
 		found.append_array(_all_children(child))
 	return found
+
+
+## Das Fadenkreuz.
+##
+## Wie Muendungsknall, Schrittgeraeusche und Koerper im Code erzeugt, nicht in
+## player.tscn: Szenen lassen sich bei Konflikten nicht mergen, und an dieser
+## arbeitet der Kollege.
+##
+## Eine eigene CanvasLayer, damit es ueber allem liegt und von der 3D-Kamera
+## unabhaengig ist.
+func _build_crosshair() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "Fadenkreuz"
+	add_child(layer)
+
+	crosshair = Crosshair.new()
+	crosshair.name = "Kreuz"
+	layer.add_child(crosshair)
 
 
 ## Reicht die Haltung an den sichtbaren Koerper weiter.
@@ -1024,6 +1046,11 @@ func set_ui_open(open: bool) -> void:
 		is_sprinting = false
 		if weapon != null:
 			weapon.release_trigger()
+
+	# Bei offenem Fenster gehoert kein Fadenkreuz ins Bild: Man zielt nicht,
+	# man packt um — und mitten im Inventar sieht es aus wie ein Fehler.
+	if crosshair != null:
+		crosshair.visible = not open
 
 	_capture_mouse(not open)
 

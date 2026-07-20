@@ -315,6 +315,52 @@ func _test_visible_body() -> void:
 		_check(player.weapon_view.visible,
 			"und das Kameramodell ist dort wieder da")
 
+	# --- DAS FADENKREUZ ZEIGT DORTHIN, WO DIE KUGEL EINSCHLAEGT ---
+	#
+	# Nicht "es sitzt in der Mitte" — das waere eine Pruefung gegen sich
+	# selbst. Geprueft wird die Kette: Der Zielpunkt der Waffe muss sich auf
+	# die Bildmitte ZURUECKRECHNEN lassen. Stimmt das, stimmt auch das Kreuz.
+	_check(player.crosshair != null, "es gibt ein Fadenkreuz")
+
+	# Auf ein Ziel schauen, damit der Zielstrahl wirklich etwas trifft und
+	# nicht ins Leere auf 2000 m zeigt.
+	var wall := StaticBody3D.new()
+	wall.collision_layer = 1
+	var wall_shape := CollisionShape3D.new()
+	var wall_box := BoxShape3D.new()
+	wall_box.size = Vector3(8.0, 4.0, 0.4)
+	wall_shape.shape = wall_box
+	wall.add_child(wall_shape)
+	root.add_child(wall)
+	await process_frame
+	wall.global_position = Vector3(0.0, 2.0, -12.0)
+	for i in range(10):
+		await process_frame
+
+	var aim_point := player.weapon.get_aim_point()
+	var on_screen := camera.unproject_position(aim_point)
+	var screen_centre := camera.get_viewport().get_visible_rect().size * 0.5
+	_check(on_screen.distance_to(screen_centre) < 2.0,
+		"der Zielpunkt der Waffe liegt in der Bildmitte (%.1f Pixel daneben)"
+			% on_screen.distance_to(screen_centre))
+
+	# --- UND DER EIGENE KOERPER STEHT NICHT IM WEG ---
+	#
+	# Der Zielstrahl schloss nur den Spieler aus, nicht seine Trefferzonen.
+	# Beim Blick nach unten blieb er bei 1,52 m an der eigenen Brust haengen —
+	# genau deren Oberkante — statt den Boden dahinter zu finden. Die Kugel
+	# waere auf den eigenen Leib zugeflogen.
+	var pivot := player.get_node("CameraPivot") as Node3D
+	pivot.rotation_degrees.x = -75.0
+	for i in range(10):
+		await process_frame
+	var down_point := player.weapon.get_aim_point()
+	_check(down_point.y < 0.5,
+		"beim Blick nach unten zielt man auf den Boden, nicht auf sich selbst "
+			+ "(Zielpunkt auf %.2f m Hoehe)" % down_point.y)
+	pivot.rotation_degrees.x = 0.0
+
+	wall.queue_free()
 	player.queue_free()
 	floor_body.queue_free()
 	await process_frame

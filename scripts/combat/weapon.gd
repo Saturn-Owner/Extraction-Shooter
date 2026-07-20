@@ -573,8 +573,13 @@ func get_aim_point() -> Vector3:
 	var query := PhysicsRayQueryParameters3D.create(from, to)
 	query.collision_mask = projectile_mask
 	query.collide_with_areas = false
-	if owner is CollisionObject3D:
-		query.exclude = [(owner as CollisionObject3D).get_rid()]
+	# Nicht nur den Schuetzen ausschliessen, sondern auch seine Trefferzonen.
+	#
+	# Seit der Spieler einen sichtbaren Koerper hat, liegt seine Brust im Weg:
+	# Beim Blick nach unten blieb der Zielstrahl bei 1,52 m an ihr haengen —
+	# genau die Oberkante der eigenen Brust — statt den Boden dahinter zu
+	# finden. Die Kugel flog dann auf den eigenen Leib zu.
+	query.exclude = Projectile.bodies_of(owner)
 
 	var hit := world.direct_space_state.intersect_ray(query)
 	# Trifft der Strahl nichts, wird auf einen fernen Punkt gezielt. Das ist
