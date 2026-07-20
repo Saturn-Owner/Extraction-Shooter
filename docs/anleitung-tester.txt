@@ -1,0 +1,49 @@
+EXTRACTION SHOOTER — MULTIPLAYER-BETA
+=====================================
+
+Danke fuers Mittesten! So einfach geht's:
+
+SPIEL STARTEN
+-------------
+1. Die Datei  extraction_shooter.exe  per Doppelklick starten.
+   (Windows zeigt beim ersten Mal evtl. eine blaue Warnung
+   "Der Computer wurde geschuetzt" — das liegt nur daran, dass das
+   Spiel nicht signiert ist. Auf "Weitere Informationen" und dann
+   "Trotzdem ausfuehren" klicken.)
+2. Oben deinen Spielernamen eintippen.
+3. Auf  "Mit Server verbinden"  klicken — die Adresse ist schon
+   eingetragen. Fertig, du stehst in der Arena!
+
+STEUERUNG
+---------
+  WASD          laufen
+  Umschalt      sprinten
+  Strg          ducken
+  Leertaste     springen
+  Linke Maus    schiessen
+  Rechte Maus   zielen
+  R             nachladen
+  B             Feuermodus
+  1 / 2         Waffe wechseln
+  Tab           Werkbank (an deiner Start-Ecke): andere Waffe
+                nehmen, Aufsaetze montieren, Munition auffuellen
+  F9            Konsole (fuer Neugierige: "help" zeigt Befehle)
+  Esc           Maus freigeben
+
+SO LAEUFT DAS SPIEL
+-------------------
+Jeder gegen jeden, ohne Runden. Wirst du toedlich getroffen, bist du
+5 Sekunden raus und startest dann frisch an deiner Ecke. Oben links
+siehst du, wer online ist und wer wie viele Kills hat.
+
+Treffer zaehlen echt: Ein Kopftreffer ist toedlicher als ein
+Beintreffer, und die Kugeln brauchen echte Flugzeit — auf Entfernung
+musst du vorhalten.
+
+WENN ETWAS NICHT GEHT
+---------------------
+- "Verbindung fehlgeschlagen": Kurz nochmal probieren. Klappt es
+  gar nicht, sag Tim Bescheid — vielleicht ist der Server gerade aus.
+- Spiel haengt/abgestuerzt: Einfach neu starten und wieder verbinden.
+- Alles andere: Schreib auf, WAS du getan hast, als es passierte,
+  und schick es Tim. Genau dafuer ist die Beta da!

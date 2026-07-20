@@ -60,7 +60,9 @@ func _build_layout() -> void:
 	column.add_child(_name_line)
 
 	_address_line = LineEdit.new()
-	_address_line.text = "127.0.0.1"
+	# Der Beta-Server ist vorbelegt: Tester sollen nur Name eingeben und auf
+	# Verbinden klicken. Für lokale Tests 127.0.0.1 eintippen oder F9 -> host.
+	_address_line.text = "193.23.160.41"
 	_address_line.placeholder_text = "Server-Adresse (ip[:port])"
 	_address_line.text_submitted.connect(func(_text: String) -> void: _on_connect_pressed())
 	column.add_child(_address_line)
