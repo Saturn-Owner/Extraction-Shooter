@@ -104,7 +104,20 @@ func _process(delta: float) -> void:
 	var velocity := -sin(_patrol_time * omega) * half * omega
 
 	position = _patrol_origin + Vector3(offset, 0.0, 0.0)
-	rotation_degrees.y = 90.0 if velocity >= 0.0 else -90.0
+
+	# BLICKRICHTUNG = LAUFRICHTUNG, über look_at statt über einen Winkel.
+	#
+	# Vorher stand hier `rotation_degrees.y = 90.0 if velocity >= 0.0 else
+	# -90.0`, und das war genau falsch herum: Bei +90 Grad zeigt die
+	# Blickachse -Z auf -X, die Figur schaute also nach links, während sie
+	# nach rechts lief. Sie ging rückwärts — im Spiel sah das aus, als liefe
+	# die Animation spiegelverkehrt.
+	#
+	# look_at kann das nicht: Die Funktion dreht die -Z-Achse auf den
+	# Zielpunkt, und ein Vorzeichenfehler ist damit nicht mehr möglich.
+	if absf(velocity) > 0.01:
+		look_at(global_position + Vector3(signf(velocity), 0.0, 0.0), Vector3.UP)
+
 	_animation.speed = absf(velocity)
 
 

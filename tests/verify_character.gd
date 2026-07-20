@@ -337,6 +337,43 @@ func _test_the_target_can_be_reset() -> void:
 
 	figure.queue_free()
 
+	# --- DIE FIGUR MUSS IN IHRE LAUFRICHTUNG SCHAUEN ---
+	#
+	# Hier lag ein Fehler, den nur ein Mensch im Spiel bemerkt hat: Die
+	# Drehung war von Hand gesetzt und das Vorzeichen verdreht, die Figur
+	# lief also rückwärts. Sichtbar war das als "die Animation ist
+	# spiegelverkehrt" — die Beine schwangen richtig, nur eben in die
+	# falsche Richtung.
+	#
+	# Gemessen wird deshalb nicht der Winkel, sondern das, worauf es
+	# ankommt: Zeigt die Blickachse dorthin, wo die Figur hinwandert?
+	var walker := HumanoidTarget.new()
+	walker.patrol_width = 6.0
+	walker.patrol_speed = 2.0
+	root.add_child(walker)
+	walker.global_position = Vector3(0.0, 0.0, -10.0)
+	await process_frame
+
+	var backwards := 0
+	var samples := 0
+	var previous := walker.global_position
+	for i in range(200):
+		walker._process(1.0 / 60.0)
+		var movement := walker.global_position - previous
+		previous = walker.global_position
+		if movement.length() < 0.005:
+			continue  # Umkehrpunkt, dort gibt es keine Richtung.
+		samples += 1
+		# -Z ist vorn. Zeigt sie dorthin, wo sie hingeht?
+		if (-walker.global_basis.z).dot(movement.normalized()) < 0.0:
+			backwards += 1
+
+	_check(samples > 50, "genug Messpunkte (%d)" % samples)
+	_check(backwards == 0,
+		"sie läuft nie rückwärts (%d von %d Bildern)" % [backwards, samples])
+
+	walker.queue_free()
+
 
 func _test_movement() -> void:
 	_section("Bewegung")
