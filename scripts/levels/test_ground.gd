@@ -167,6 +167,8 @@ func _place_humanoids() -> void:
 			figure.weapon_id = &"weapon_rifle_ar15"
 			figure.weapon_attachments = [&"ar15_muzzle_suppressor"] as Array[StringName]
 			figure.weapon_behaviour = place.behaviour
+			# Wer nachlaedt, braucht Magazine am Koerper.
+			figure.wears_vest = true
 
 		container.add_child(figure)
 		# Nach dem Einhängen setzen: global_position braucht den Baum.

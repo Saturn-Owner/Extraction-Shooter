@@ -43,7 +43,14 @@ const LABEL_HEIGHT := 0.32
 
 @export var weapon_behaviour: CharacterWeapon.Behaviour = CharacterWeapon.Behaviour.HOLD
 
+## Ob die Figur eine taktische Weste traegt. Aus ihr holt sie beim Nachladen
+## die Magazine.
+@export var wears_vest: bool = false
+
 var weapon: CharacterWeapon
+var vest: CharacterVest
+
+var _spare_magazine: Node3D
 
 var _label: Label3D
 var _hits: int = 0
@@ -76,11 +83,69 @@ func _ready() -> void:
 	_label.outline_size = 18
 	add_child(_label)
 
+	# Die Weste zuerst: Sie bringt die Magazintaschen mit, und die braucht die
+	# Waffe gleich fuer den Griffpunkt.
+	if wears_vest:
+		_put_on_vest()
+
 	if weapon_id != &"":
 		_arm_with_weapon()
 
 	part_hit.connect(_on_part_hit)
 	_update_label()
+
+
+## Zieht der Figur die Weste an.
+##
+## Aufgehaengt am Brustgelenk: Dort sitzt der Punkt, auf den das Modell
+## ausgelegt ist — mittig auf Hoehe der Brust-Oberkante, die Geometrie haengt
+## von dort nach unten. Und wenn der Oberkoerper sich spaeter bewegt, geht die
+## Weste von selbst mit.
+func _put_on_vest() -> void:
+	var chest := joint_of(HealthSystem.Part.CHEST)
+	if chest == null:
+		push_warning("[HumanoidTarget] Kein Brustgelenk — Weste entfaellt")
+		return
+
+	vest = CharacterVest.new()
+	vest.name = "Weste"
+	chest.add_child(vest)
+
+	# Der Griffpunkt kommt jetzt aus dem Modell statt aus einer Konstante.
+	# Wer eine Tasche in Blender verschiebt, verschiebt damit auch, wohin die
+	# Hand greift.
+	if _animation != null:
+		_animation.pouch_target = vest.front_pouch()
+
+	_add_spare_magazine()
+
+
+## Ein sichtbares Ersatzmagazin, das in der Tasche steckt und beim Nachladen
+## mitwandert.
+##
+## ---------------------------------------------------------------------------
+## OHNE DAS ERSCHEINT DAS MAGAZIN AUS DEM NICHTS
+##
+## Die Hand ging bisher zur Tasche und zurueck, trug aber nichts. An der Waffe
+## tauchte dann ein neues Magazin auf. Man sah die Geste, aber nicht den
+## Gegenstand — und damit sah es aus, als griffe die Figur ins Leere.
+##
+## Es ist DASSELBE Modell, das auch in der Waffe steckt: AR15_Magazin.glb.
+## Ein zweites, aehnliches waere eine Kopie, die beim naechsten Aendern
+## zurueckbleibt.
+func _add_spare_magazine() -> void:
+	const MAGAZINE := "res://assets/models/weapons/ar15/AR15_Magazin.glb"
+	if not ResourceLoader.exists(MAGAZINE):
+		return
+
+	_spare_magazine = Node3D.new()
+	_spare_magazine.name = "Ersatzmagazin"
+	add_child(_spare_magazine)
+
+	var model := (load(MAGAZINE) as PackedScene).instantiate()
+	_spare_magazine.add_child(model)
+	# Wie bei der Weste: Das Modell schaut entlang +X, das Spiel erwartet -Z.
+	_spare_magazine.rotation_degrees = CharacterVest.TURN
 
 
 ## Gibt der Figur eine Waffe.
@@ -113,6 +178,33 @@ func _arm_with_weapon() -> void:
 		_animation.charge_target = weapon.viewmodel.charging_handle
 
 
+## Setzt das Ersatzmagazin dorthin, wo es gerade sein muss.
+##
+## In der Tasche, solange nicht nachgeladen wird — beim Tragen an der Hand,
+## und sobald es in der Waffe sitzt, verschwindet es hier und die Waffe zeigt
+## ihr eigenes.
+func _update_spare_magazine() -> void:
+	if _spare_magazine == null or vest == null:
+		return
+
+	var pouch := vest.front_pouch()
+	if pouch == null:
+		return
+
+	if _animation.carries_spare_magazine():
+		var hand := hand_of(HealthSystem.Part.LEFT_ARM)
+		if hand != null:
+			_spare_magazine.visible = true
+			_spare_magazine.global_position = hand.global_position
+			return
+
+	# Waehrend das Magazin in die Waffe geht, zeigt die Waffe es selbst —
+	# zwei gleichzeitig sichtbare waeren einer zu viel.
+	var in_weapon := _animation.reload_progress >= CharacterAnimation.RELOAD_SEAT
+	_spare_magazine.visible = not in_weapon
+	_spare_magazine.global_position = pouch.global_position
+
+
 ## Läuft hin und her, falls patrol_width gesetzt ist.
 ##
 ## Die Figur dreht sich in ihre Laufrichtung, statt seitwärts zu schieben.
@@ -129,6 +221,8 @@ func _process(delta: float) -> void:
 	# Funktion steigt gleich darunter aus.
 	if weapon != null:
 		_animation.reload_progress = weapon.reload_progress()
+
+	_update_spare_magazine()
 
 	# DIE AUSGANGSPOSITION ERST HIER MERKEN, NICHT IN _ready().
 	#

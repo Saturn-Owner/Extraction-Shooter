@@ -56,6 +56,11 @@ var magwell_target: Node3D
 ## Der Ladehebel. Zum Schluss des Nachladens zieht die Hand ihn durch.
 var charge_target: Node3D
 
+## Die Magazintasche der Weste. Ist sie gesetzt, greift die Hand dorthin
+## statt an den festen Punkt POUCH — das Modell bestimmt dann, wo die
+## Taschen sitzen.
+var pouch_target: Node3D
+
 ## Fortschritt des Nachladens, 0 bis 1. Negativ heisst: wird nicht nachgeladen.
 var reload_progress: float = -1.0
 
@@ -347,6 +352,25 @@ func _pose_weapon_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 		hinge.rotation_degrees = elbow
 
 
+## Ob das Ersatzmagazin gerade in der Hand liegt statt in der Tasche.
+##
+## Von RELOAD_FETCH an hat die Hand es gegriffen; ab RELOAD_SEAT sitzt es in
+## der Waffe und das Modell der Waffe zeigt es selbst.
+func carries_spare_magazine() -> bool:
+	return reload_progress >= RELOAD_FETCH and reload_progress < RELOAD_SEAT
+
+
+## Wo die Magazintasche liegt, aus der gezogen wird.
+##
+## Trägt die Figur eine Weste, kommt der Punkt aus deren Modell. Ohne Weste
+## bleibt der feste Punkt am Bauch — sonst könnte eine unbewestete Figur gar
+## nicht nachladen.
+func pouch_position() -> Vector3:
+	if pouch_target != null:
+		return pouch_target.global_position
+	return character.global_transform * POUCH
+
+
 ## Wohin die Stützhand gerade greift.
 ##
 ## Ausserhalb des Nachladens ist das schlicht der Vorderschaft. Während des
@@ -357,7 +381,7 @@ func _support_hand_goal() -> Vector3:
 		return handguard
 
 	var magwell := magwell_target.global_position
-	var pouch := character.global_transform * POUCH
+	var pouch := pouch_position()
 	var p := reload_progress
 
 	# Herausgezogen wird nach unten aus der Waffe heraus, nicht nach

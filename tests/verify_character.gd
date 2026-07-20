@@ -28,6 +28,7 @@ func _initialize() -> void:
 	await _test_movement()
 	await _test_hinges()
 	await _test_weapon_in_hand()
+	await _test_vest()
 	_test_colours()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
@@ -799,6 +800,103 @@ func _test_weapon_in_hand() -> void:
 	await process_frame
 	_check(bare.weapon == null, "ohne weapon_id bleibt die Figur unbewaffnet")
 	_check(not bare._animation.holding_weapon, "und ihre Arme schwingen frei")
+	bare.queue_free()
+
+
+## Die taktische Weste und das Magazin, das aus ihr gezogen wird.
+func _test_vest() -> void:
+	_section("Weste")
+
+	var figure := HumanoidTarget.new()
+	figure.wears_vest = true
+	figure.weapon_id = &"weapon_rifle_ar15"
+	figure.weapon_attachments = [&"ar15_muzzle_suppressor"] as Array[StringName]
+	figure.weapon_behaviour = CharacterWeapon.Behaviour.RELOAD
+	root.add_child(figure)
+	await process_frame
+
+	_check(figure.vest != null, "die Figur trägt eine Weste")
+	if figure.vest == null:
+		figure.queue_free()
+		return
+
+	_check(figure.vest.pouch_count() == CharacterVest.POUCH_COUNT,
+		"alle %d Magazintaschen sind im Modell gefunden (%d)"
+			% [CharacterVest.POUCH_COUNT, figure.vest.pouch_count()])
+
+	# DIE VORDERSTE TASCHE MUSS LINKS SITZEN.
+	#
+	# Danach greift die linke Hand. Läge sie rechts, müsste der Arm quer über
+	# den Körper — erreichbar wäre sie vielleicht noch, aussehen würde es
+	# falsch.
+	var front := figure.vest.front_pouch()
+	var local := figure.global_transform.affine_inverse() * front.global_position
+	_check(local.x < 0.0, "die vorderste Tasche sitzt links (%.3f)" % local.x)
+	_check(local.z < 0.0, "und vorn am Körper (%.3f)" % local.z)
+
+	# DER GRIFFPUNKT KOMMT AUS DEM MODELL, NICHT AUS DER KONSTANTEN.
+	#
+	# Das ist die Zusage, die das Ganze wartbar macht: Wer eine Tasche in
+	# Blender verschiebt, verschiebt damit auch, wohin die Hand greift.
+	_check(figure._animation.pouch_target == front,
+		"die Animation greift an die Tasche aus dem Modell")
+	_check(figure._animation.pouch_position().is_equal_approx(front.global_position),
+		"und nicht mehr an den festen Punkt")
+
+	# Und die Hand kommt hin.
+	var worst := 0.0
+	for step in range(41):
+		_advance_reload_frame(figure, float(step) / 40.0)
+		var goal := figure._animation._support_hand_goal()
+		var hand := figure.hand_of(HealthSystem.Part.LEFT_ARM)
+		worst = maxf(worst, hand.global_position.distance_to(goal))
+	_check(worst < 0.03,
+		"die Hand erreicht auch die Tasche der Weste (%.0f mm)" % (worst * 1000.0))
+
+	# --- Das Ersatzmagazin wandert wirklich mit ---
+	#
+	# Vorher tauchte an der Waffe eines auf, ohne dass je eines getragen
+	# wurde. Man sah die Geste, aber nicht den Gegenstand.
+	_advance_reload_frame(figure, -1.0)
+	figure._update_spare_magazine()
+	_check(figure._spare_magazine != null, "es gibt ein Ersatzmagazin")
+	if figure._spare_magazine == null:
+		figure.queue_free()
+		return
+
+	_check(figure._spare_magazine.visible, "im Ruhezustand steckt es in der Tasche")
+	_check(figure._spare_magazine.global_position.distance_to(front.global_position) < 0.01,
+		"und zwar genau dort (%.0f mm)"
+			% (figure._spare_magazine.global_position.distance_to(front.global_position) * 1000.0))
+
+	# Beim Tragen haengt es an der Hand.
+	_advance_reload_frame(figure, 0.55)
+	figure._update_spare_magazine()
+	var hand_now := figure.hand_of(HealthSystem.Part.LEFT_ARM)
+	_check(figure._spare_magazine.visible, "beim Tragen ist es sichtbar")
+	_check(figure._spare_magazine.global_position.distance_to(hand_now.global_position) < 0.01,
+		"und liegt in der Hand")
+
+	# Sobald es in der Waffe sitzt, zeigt die Waffe ihr eigenes — zwei
+	# gleichzeitig waeren eines zu viel.
+	_advance_reload_frame(figure, 0.92)
+	figure._update_spare_magazine()
+	_check(not figure._spare_magazine.visible,
+		"sobald es in der Waffe sitzt, verschwindet das getragene")
+
+	figure.queue_free()
+
+	# Eine Figur OHNE Weste muss weiter nachladen koennen.
+	var bare := HumanoidTarget.new()
+	bare.weapon_id = &"weapon_rifle_ar15"
+	bare.weapon_behaviour = CharacterWeapon.Behaviour.RELOAD
+	root.add_child(bare)
+	await process_frame
+	_check(bare.vest == null, "ohne wears_vest bleibt sie ohne Weste")
+	_check(bare._animation.pouch_target == null,
+		"und greift an den festen Punkt am Bauch")
+	bare._process(1.0 / 60.0)
+	_check(true, "das Nachladen laeuft trotzdem ohne Fehler")
 	bare.queue_free()
 
 
