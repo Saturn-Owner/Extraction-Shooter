@@ -353,6 +353,10 @@ var body_weapon: CharacterWeapon
 ## Das Fadenkreuz in der Bildmitte.
 var crosshair: Crosshair
 
+## Die taktische Weste am Koerper und das Magazin, das darin steckt.
+var vest: CharacterVest
+var _spare_magazine: Node3D
+
 var _body_reload_left: float = 0.0
 var _body_reload_total: float = 0.0
 var _body_reload_from_empty: bool = false
@@ -481,7 +485,72 @@ func _build_body() -> void:
 	_body_animation.attach(body)
 
 	_arm_body()
+	_put_on_vest()
 	_hide_own_body_from_camera()
+
+
+## Zieht dem Koerper die taktische Weste an — dieselbe wie die Figuren tragen.
+##
+## ---------------------------------------------------------------------------
+## WOFUER, WENN MAN SIE SELBST NICHT SIEHT
+##
+## Der eigene Koerper ist fuer den Traeger unsichtbar, die Weste also auch. Sie
+## macht trotzdem die Nachladeanimation des Koerpers vollstaendig: Die linke
+## Hand greift beim Wechsel an eine ECHTE Tasche, und ein sichtbares
+## Ersatzmagazin kommt daraus hervor, statt aus dem Nichts an der Waffe
+## aufzutauchen. Zu sehen ist das in der dritten Person (F5) und spaeter fuer
+## Mitspieler.
+##
+## Der Griffpunkt kommt aus dem Westenmodell, nicht aus einer Konstante — wer
+## eine Tasche in Blender verschiebt, verschiebt damit, wohin die Hand greift.
+## Dieselbe Mechanik wie bei HumanoidTarget._put_on_vest().
+func _put_on_vest() -> void:
+	if body == null:
+		return
+	var chest := body.joint_of(HealthSystem.Part.CHEST)
+	if chest == null:
+		return
+
+	vest = CharacterVest.new()
+	vest.name = "Weste"
+	chest.add_child(vest)
+	if _body_animation != null:
+		_body_animation.pouch_target = vest.front_pouch()
+
+	# Ein sichtbares Ersatzmagazin, das in der Tasche steckt und beim Nachladen
+	# mitwandert. DASSELBE Modell wie in der Waffe, kein zweites.
+	const MAGAZINE := "res://assets/models/weapons/ar15/AR15_Magazin.glb"
+	if not ResourceLoader.exists(MAGAZINE):
+		return
+	_spare_magazine = Node3D.new()
+	_spare_magazine.name = "Ersatzmagazin"
+	add_child(_spare_magazine)
+	_spare_magazine.add_child((load(MAGAZINE) as PackedScene).instantiate())
+	# Waffenteil: schaut entlang +X, das Spiel erwartet -Z.
+	_spare_magazine.rotation_degrees = GlbParts.TURN
+
+
+## Setzt das Ersatzmagazin dorthin, wo es gerade sein muss: in der Tasche,
+## an der Hand waehrend des Tragens, unsichtbar sobald es in der Waffe sitzt.
+## Wortgleich zu HumanoidTarget — die Figuren tun genau dasselbe.
+func _update_spare_magazine() -> void:
+	if _spare_magazine == null or vest == null or _body_animation == null:
+		return
+	var pouch := vest.front_pouch()
+	if pouch == null:
+		return
+
+	if _body_animation.carries_spare_magazine():
+		var hand := body.hand_of(HealthSystem.Part.LEFT_ARM)
+		if hand != null:
+			_spare_magazine.visible = true
+			_spare_magazine.global_position = hand.global_position
+			return
+
+	# Waehrend es in die Waffe geht, zeigt die Waffe es selbst.
+	var in_weapon := _body_animation.reload_progress >= CharacterAnimation.RELOAD_SEAT
+	_spare_magazine.visible = not in_weapon
+	_spare_magazine.global_position = pouch.global_position
 
 
 ## Gibt dem Koerper dieselbe Waffe in die Hand, die der Spieler traegt.
@@ -645,6 +714,14 @@ func _hide_own_body_from_camera() -> void:
 			if node is VisualInstance3D:
 				(node as VisualInstance3D).layers = own_bit
 
+	# Weste und Ersatzmagazin ebenso: Sie haengen am Koerper und wuerden dem
+	# Traeger sonst auf der Brust schweben.
+	for owner_node in [vest, _spare_magazine]:
+		if owner_node != null:
+			for node in _all_children(owner_node):
+				if node is VisualInstance3D:
+					(node as VisualInstance3D).layers = own_bit
+
 	if _camera != null:
 		_camera.cull_mask &= ~own_bit
 
@@ -720,6 +797,7 @@ func _update_body(_delta: float) -> void:
 	# gebaut, die gemerkten Griffpunkte waeren danach geloescht.
 	_refresh_grip_targets()
 	_update_body_reload(_delta)
+	_update_spare_magazine()
 	_body_animation.speed = Vector2(velocity.x, velocity.z).length()
 	_body_animation.stance = (CharacterAnimation.Stance.CROUCH if is_crouching
 		else CharacterAnimation.Stance.STAND)

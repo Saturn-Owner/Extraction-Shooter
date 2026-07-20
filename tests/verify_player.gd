@@ -315,6 +315,36 @@ func _test_visible_body() -> void:
 		_check(player.weapon_view.visible,
 			"und das Kameramodell ist dort wieder da")
 
+	# --- DIE WESTE MACHT DAS NACHLADEN DES KOERPERS VOLLSTAENDIG ---
+	#
+	# Der Koerper ist fuer den Traeger unsichtbar, die Weste also auch — aber
+	# sie ist da: Beim Nachladen greift die Hand an eine ECHTE Tasche, und ein
+	# sichtbares Ersatzmagazin kommt daraus, statt aus dem Nichts an der Waffe
+	# aufzutauchen. Zu sehen in der dritten Person und spaeter fuer Mitspieler.
+	_check(player.vest != null, "der Koerper traegt eine Weste")
+	_check(player._spare_magazine != null, "und ein Ersatzmagazin steckt darin")
+	_check(player._body_animation.pouch_target != null,
+		"der Griffpunkt kommt aus dem Westenmodell, nicht aus einer Konstante")
+
+	if player.vest != null and player._spare_magazine != null:
+		# Auch die Weste gehoert vor der eigenen Kamera versteckt — sonst
+		# schwebte sie dem Traeger auf der Brust.
+		var vest_seen := 0
+		for node in PlayerController._all_children(player.vest):
+			if node is VisualInstance3D:
+				if ((node as VisualInstance3D).layers & camera.cull_mask) != 0:
+					vest_seen += 1
+		_check(vest_seen == 0,
+			"die Weste ist fuer einen selbst unsichtbar (%d Teile)" % vest_seen)
+
+		# Ausserhalb des Nachladens sitzt das Magazin in der Tasche.
+		var pouch := player.vest.front_pouch()
+		if pouch != null:
+			var gap := player._spare_magazine.global_position.distance_to(
+				pouch.global_position)
+			_check(gap < 0.01,
+				"das Ersatzmagazin steckt in der Tasche (%.0f mm)" % (gap * 1000.0))
+
 	# --- DAS FADENKREUZ ZEIGT DORTHIN, WO DIE KUGEL EINSCHLAEGT ---
 	#
 	# Nicht "es sitzt in der Mitte" — das waere eine Pruefung gegen sich
