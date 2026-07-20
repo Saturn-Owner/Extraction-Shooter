@@ -447,8 +447,8 @@ func _test_in_level() -> void:
 	player.queue_free()
 
 
-## RAUCH KOMMT NUR MIT SCHALLDÄMPFER — und das ist die Umkehrung von allem
-## anderen hier.
+## RAUCH KOMMT VOR ALLEM VOM SCHALLDÄMPFER — und das ist die Umkehrung von
+## allem anderen hier.
 ##
 ## Blendung, Wackeln und Pfeifen kommen vom KNALL, der Dämpfer schützt davor.
 ## Rauch entsteht dagegen, WEIL ein Dämpfer dran ist: Er fängt die Pulvergase
@@ -459,7 +459,7 @@ func _test_in_level() -> void:
 ## festhalten. Fällt er weg, verschwindet der Nachteil des Dämpfers still, und
 ## er wäre wieder eine Entscheidung ohne Preis.
 func _test_only_the_suppressor_smokes() -> void:
-	_section("Nur der Dämpfer qualmt")
+	_section("Der Dämpfer qualmt deutlich mehr")
 
 	var loud := _weapon(&"weapon_rifle_ar15")
 	var quiet := _weapon(&"weapon_rifle_ar15", &"ar15_muzzle_suppressor")
@@ -467,12 +467,13 @@ func _test_only_the_suppressor_smokes() -> void:
 	_check(not MuzzleBlast.is_suppressed(loud), "die nackte AR-15 gilt als ungedämpft")
 	_check(MuzzleBlast.is_suppressed(quiet), "mit Dämpfer gilt sie als gedämpft")
 
-	# Ungedämpft: viel Belastung, KEIN Rauch.
+	# Ungedämpft: viel Belastung, wenig Rauch.
 	var bare := _make()
 	_fire_burst(bare, loud, 30)
 	_check(bare.intensity() > 0.9, "ungedämpft blendet und wackelt es (%.2f)" % bare.intensity())
-	_check(is_zero_approx(bare.smoke_intensity()),
-		"aber es qualmt EXAKT nicht (%.6f)" % bare.smoke_intensity())
+	_check(bare.smoke_intensity() > 0.0,
+		"es qualmt auch ungedämpft — ein offener Lauf raucht ja (%.2f)"
+			% bare.smoke_intensity())
 
 	# Gedämpft: kein Knall, dafür Rauch.
 	var suppressed := _make()
@@ -482,11 +483,28 @@ func _test_only_the_suppressor_smokes() -> void:
 	_check(suppressed.smoke_intensity() > 0.9,
 		"dafür qualmt es kräftig (%.2f)" % suppressed.smoke_intensity())
 
-	# Ein einzelner gedämpfter Schuss darf noch nicht vernebeln.
-	var single := _make()
-	single.add(quiet)
-	_check(is_zero_approx(single.smoke_intensity()),
-		"ein Einzelschuss qualmt nicht (%.6f)" % single.smoke_intensity())
+	# DER UNTERSCHIED IST DER PUNKT, nicht das blosse Vorhandensein. Ohne diese
+	# Zusicherung könnte jemand die Abstufung auf 0,95 hochdrehen, beide Tests
+	# oben blieben grün, und der Nachteil des Dämpfers wäre still verschwunden.
+	_check(suppressed.smoke_intensity() > bare.smoke_intensity() * 1.5,
+		"gedämpft qualmt deutlich mehr (%.2f gegen %.2f)"
+			% [suppressed.smoke_intensity(), bare.smoke_intensity()])
+
+	# Und ungedämpft erreicht es nie die volle Dichte, egal wie lange man hält.
+	var endless := _make()
+	_fire_burst(endless, loud, 200)
+	_check(endless.smoke_intensity() < 0.9,
+		"ungedämpft wird es auch nach 200 Schuss nicht so dicht (%.2f)"
+			% endless.smoke_intensity())
+
+	# Ein einzelner Schuss darf noch nicht vernebeln — gedämpft so wenig wie
+	# ungedämpft.
+	for entry in [{label = "gedämpft", weapon = quiet}, {label = "ungedämpft", weapon = loud}]:
+		var single := _make()
+		single.add(entry.weapon)
+		_check(is_zero_approx(single.smoke_intensity()),
+			"ein einzelner Schuss qualmt nicht (%s, %.6f)"
+				% [entry.label, single.smoke_intensity()])
 
 	# Und der Rauch verzieht sich wieder.
 	_advance(suppressed, 12.0)

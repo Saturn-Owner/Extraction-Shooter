@@ -35,10 +35,13 @@ var strain: float = 0.0
 ## Der Rauch hat eine EIGENE Quelle, und zwar mit umgekehrtem Vorzeichen.
 ##
 ## Blendung, Wackeln und Tinnitus kommen vom KNALL — je lauter, desto
-## schlimmer, und der Schalldämpfer schützt davor. Rauch entsteht dagegen,
-## WEIL ein Dämpfer dran ist: Er fängt die Pulvergase ab und kühlt sie, statt
-## sie frei ausblasen zu lassen. Deshalb qualmt eine gedämpfte Waffe sichtbar,
-## eine ungedämpfte kaum.
+## schlimmer, und der Schalldämpfer schützt davor. Rauch entsteht dagegen vor
+## allem, WEIL ein Dämpfer dran ist: Er fängt die Pulvergase ab und lässt sie
+## langsam und gekühlt austreten, statt sie in einem Schlag frei auszublasen.
+##
+## Ungedämpft qualmt es trotzdem, nur deutlich dünner und mit einer
+## Obergrenze — ein offener Lauf raucht ja auch. Es ist eine Abstufung, kein
+## Schalter.
 ##
 ## Das ist bewusst keine gemeinsame Quelle mehr. Beides an `strain` zu hängen
 ## hiesse, zwei gegenläufige Vorgänge in eine Zahl zu pressen — dann müsste
@@ -157,9 +160,13 @@ func add(weapon_data: WeaponData) -> void:
 
 	strain = minf(1.0, strain + rise_for(weapon_data))
 
-	# Gedämpft qualmt es, ungedämpft nicht.
-	if is_suppressed(weapon_data):
-		smoke_strain = minf(1.0, smoke_strain + config.smoke_rise_per_shot)
+	# Gedämpft qualmt es kräftig, ungedämpft deutlich weniger — aber nicht gar
+	# nicht. Ein offener Lauf raucht auch, die Gase reissen nur ab, statt
+	# langsam und gekühlt auszutreten.
+	var suppressed := is_suppressed(weapon_data)
+	var factor := 1.0 if suppressed else config.smoke_unsuppressed_factor
+	var ceiling := 1.0 if suppressed else config.smoke_unsuppressed_max
+	smoke_strain = minf(ceiling, smoke_strain + config.smoke_rise_per_shot * factor)
 
 	_time_since_shot = 0.0
 

@@ -54,6 +54,21 @@ extends Resource
 ## ausblasen zu lassen. Ohne Dämpfer qualmt es gar nicht.
 @export_range(0.01, 1.0) var smoke_rise_per_shot: float = 0.13
 
+## Wieviel davon eine UNGEDÄMPFTE Waffe schafft.
+##
+## Nicht null: Ein offener Lauf qualmt auch, nur weit weniger — die Gase
+## blasen in einem Schlag ab und reissen dabei ab, statt langsam und gekühlt
+## auszutreten. Der Unterschied soll deutlich sein, aber kein Ein/Aus.
+@export_range(0.0, 1.0) var smoke_unsuppressed_factor: float = 0.4
+
+## Und wie dicht es ungedämpft höchstens werden kann.
+##
+## ZWEI WERTE, NICHT EINER: Nur langsamer aufzubauen würde bedeuten, dass ein
+## volles Magazin am Ende trotzdem dieselbe Wand aus Rauch erzeugt — nur
+## später. Mit der Obergrenze bleibt ungedämpft dauerhaft dünner, egal wie
+## lange man draufhält.
+@export_range(0.0, 1.0) var smoke_unsuppressed_max: float = 0.7
+
 ## Wie lange es dauert, bis kein Rauch mehr NACHKOMMT.
 ##
 ## Nicht zu verwechseln mit `smoke_fall` — das ist, wie lange die vorhandenen
