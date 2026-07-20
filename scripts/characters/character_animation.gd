@@ -97,6 +97,21 @@ var is_sprinting: bool = false
 ## Hat die Figur die Waffe im Anschlag am Auge?
 var is_aiming: bool = false
 
+## Wohin die Figur schaut, in Grad. Negativ ist nach oben.
+##
+## ---------------------------------------------------------------------------
+## DER OBERKÖRPER DREHT SICH MIT DEM BLICK
+##
+## Beim Dummy bleibt das null — der schaut geradeaus. Beim Spieler ist es
+## seine Blickrichtung, und ohne das zeigte die Waffe stur waagerecht, während
+## er nach oben oder unten sieht. In der ersten Person, wo er seine eigene
+## Waffe sieht, fällt das sofort auf.
+##
+## Es geht auf den RUMPF, nicht auf den Kopf: Wer ein Gewehr im Anschlag hat,
+## dreht den ganzen Oberkörper mit, nicht nur den Hals. Genau dafür gibt es
+## den Rumpfknoten.
+var look_pitch: float = 0.0
+
 ## Ist die Figur gerade in der Luft?
 ##
 ## ---------------------------------------------------------------------------
@@ -458,7 +473,8 @@ func _process(delta: float) -> void:
 		trunk.position.y = BlockyCharacter.torso_pivot() + bob + breath + _stance_drop()
 		# Beim Rennen nach vorn legen, beim Ducken ebenfalls etwas — wer in
 		# die Hocke geht, richtet sich nicht kerzengerade auf.
-		trunk.rotation_degrees.x = SPRINT_LEAN * _sprint + CROUCH_LEAN * _crouch
+		trunk.rotation_degrees.x = (SPRINT_LEAN * _sprint + CROUCH_LEAN * _crouch
+			+ look_pitch)
 
 	_pose_legs_for_stance()
 

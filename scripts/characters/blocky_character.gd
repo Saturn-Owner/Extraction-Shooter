@@ -447,7 +447,19 @@ func hand_of(part: HealthSystem.Part) -> Node3D:
 ##
 ## Zum Nachladen reicht auch das nicht — dafür holt `CharacterWeapon` die
 ## Waffe kurz an den Körper heran, so wie ein Mensch es auch tut.
-const WEAPON_MOUNT := Vector3(0.18, 1.30, -0.14)
+## ---------------------------------------------------------------------------
+## DIE HÖHE HÄNGT AN DER ERSTEN PERSON
+##
+## Hier stand 1,30 m — Bauchhöhe. Von aussen sah das als lockere Haltung
+## richtig aus. Sobald der Spieler seinen eigenen Körper sieht, stimmt es
+## nicht mehr: Seine Augen liegen auf 1,65 m, die Waffe rutschte also 35 cm
+## unter den Bildrand, und man sah sie nur beim Blick nach unten.
+##
+## 1,48 ist die Schulterhöhe: Das Modell im Kameraraum sitzt auf 1,53, und
+## damit liegt die Waffe des Körpers ungefähr dort, wo der Spieler sie schon
+## immer gesehen hat. Ein angeschultertes Gewehr sieht ausserdem auch von
+## aussen richtiger aus als eines vor dem Bauch.
+const WEAPON_MOUNT := Vector3(0.18, 1.48, -0.14)
 
 ## Wie die Waffe im Anschlag steht.
 ##

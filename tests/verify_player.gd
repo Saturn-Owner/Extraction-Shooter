@@ -107,37 +107,27 @@ func _test_visible_body() -> void:
 		_check(hidden, "%s ist vor der eigenen Kamera versteckt"
 			% BlockyCharacter.part_name(part))
 
-	# Kein Teil darf vergessen werden: Sobald eines fehlt, steht es der
-	# eigenen Kamera im Weg — genau das ist dreimal passiert.
-	var missing: Array[String] = []
-	for part: HealthSystem.Part in BlockyCharacter.VERTICAL:
-		if not PlayerController.HIDDEN_FROM_SELF.has(part):
-			missing.append(BlockyCharacter.part_name(part))
-	_check(missing.is_empty(),
-		"alle sieben Koerperteile stehen in der Liste (fehlt: %s)"
-			% ("nichts" if missing.is_empty() else ", ".join(missing)))
+	_check(not PlayerController.HIDDEN_FROM_SELF.has(HealthSystem.Part.LEFT_ARM)
+			and not PlayerController.HIDDEN_FROM_SELF.has(HealthSystem.Part.LEFT_LEG),
+		"Arme und Beine stehen NICHT auf der Versteckliste")
 
-	# UNSICHTBAR, ABER VORHANDEN — das ist der Unterschied zu "es gibt keinen
-	# Koerper".
+	# ARME, BAUCH UND BEINE MUESSEN SICHTBAR SEIN.
 	#
-	# Kein einziges Teil darf die eigene Kamera erreichen. Gleichzeitig muss
-	# alles noch da sein: Meshes, Trefferzonen, Waffe. Wuerde man den Koerper
-	# stattdessen auf `visible = false` setzen, waeren auch die Trefferzonen
-	# weg und der Spieler wieder unverwundbar.
-	var seen_by_self := 0
-	var meshes_total := 0
-	for part: HealthSystem.Part in BlockyCharacter.VERTICAL:
+	# Das ist der Kern der ersten Person hier: Man soll die eigenen Arme
+	# sehen, wie sie die Waffe halten und nachladen — nicht ein zweites
+	# Modell vor der Kamera.
+	var visible_parts := 0
+	for part: HealthSystem.Part in [HealthSystem.Part.STOMACH,
+			HealthSystem.Part.LEFT_ARM, HealthSystem.Part.RIGHT_ARM,
+			HealthSystem.Part.LEFT_LEG, HealthSystem.Part.RIGHT_LEG]:
 		for mesh: MeshInstance3D in player.body.meshes_of(part):
-			meshes_total += 1
 			if (mesh.layers & camera.cull_mask) != 0:
-				seen_by_self += 1
-	_check(seen_by_self == 0,
-		"kein Koerperteil ist fuer einen selbst sichtbar (%d von %d)"
-			% [seen_by_self, meshes_total])
-	_check(meshes_total >= 11,
-		"und trotzdem sind alle %d Kaesten vorhanden" % meshes_total)
+				visible_parts += 1
+	_check(visible_parts >= 8,
+		"Arme, Bauch und Beine sind sichtbar (%d Kaesten)" % visible_parts)
+
 	_check(player.body.visible,
-		"der Koerper ist NICHT auf unsichtbar gestellt - sonst waeren auch "
+		"der Koerper ist nicht auf unsichtbar gestellt - sonst waeren auch "
 			+ "die Trefferzonen und der eigene Schatten weg")
 
 	# --- Der Koerper HAELT die Waffe, wie die Dummys es tun ---
@@ -165,17 +155,29 @@ func _test_visible_body() -> void:
 				"beide Haende liegen daran (%.0f / %.0f mm)"
 					% [to_grip * 1000.0, to_fore * 1000.0])
 
-		# Zwei Waffen, eine sichtbar: Vor der Kamera haengt das
-		# WeaponView-Modell. Waere die Koerperwaffe auch sichtbar, haette man
-		# zwei Gewehre leicht versetzt im Bild.
+		# ZWEI WAFFEN, EINE SICHTBAR — und zwar die am Koerper.
+		#
+		# Frueher war es umgekehrt: Das Modell im Kameraraum war sichtbar, die
+		# Koerperwaffe versteckt. Dann hielten die Arme ein unsichtbares
+		# Gewehr, waehrend ein zweites daneben schwebte.
 		var visible_weapon := 0
 		for node in PlayerController._all_children(player.body_weapon):
 			if node is VisualInstance3D:
 				if ((node as VisualInstance3D).layers & camera.cull_mask) != 0:
 					visible_weapon += 1
-		_check(visible_weapon == 0,
-			"und sie bleibt vor der eigenen Kamera verborgen (%d sichtbare Teile)"
-				% visible_weapon)
+		_check(visible_weapon > 0,
+			"die Waffe am Koerper ist sichtbar (%d Teile)" % visible_weapon)
+		if player.weapon_view != null:
+			_check(not player.weapon_view.visible,
+				"und das Modell im Kameraraum ist dafuer aus")
+
+		# Auf Schulterhoehe, nicht vor dem Bauch: Bei 1,30 m rutschte sie
+		# unter den Bildrand, die Augen liegen auf 1,65.
+		_check(player.body_weapon.global_position.y
+				> camera.global_position.y - 0.30,
+			"sie haengt hoch genug, um im Bild zu sein (%.2f gegen Auge %.2f)"
+				% [player.body_weapon.global_position.y,
+					camera.global_position.y])
 
 		_check(player.body_weapon.behaviour == CharacterWeapon.Behaviour.DRIVEN,
 			"sie laeuft nicht von allein, sondern zeigt nur die echte Waffe")
@@ -243,16 +245,18 @@ func _test_visible_body() -> void:
 		"dort sieht die Kamera auch Kopf, Brust und Arme")
 	_check(camera.position.z > 1.0,
 		"und steht hinter der Figur (%.1f m)" % camera.position.z)
-	if player.weapon_view != null:
-		_check(not player.weapon_view.visible,
-			"das Kameramodell wird ausgeblendet - sonst schwebt es im Bild")
-
 	player._toggle_third_person()
 	await process_frame
 	_check(not player._third_person and (camera.cull_mask & own_bit) == 0,
 		"und zurueck in die erste Person")
+
+	# In BEIDEN Ansichten bleibt das Modell im Kameraraum aus — gesehen wird
+	# die Waffe am Koerper. Der Umschalter hat es frueher beim Zurueckgehen
+	# wieder eingeschaltet, aus der Zeit, als der Spieler keinen sichtbaren
+	# Arm hatte.
 	if player.weapon_view != null:
-		_check(player.weapon_view.visible, "dort ist das Kameramodell wieder da")
+		_check(not player.weapon_view.visible,
+			"das Kameramodell bleibt in beiden Ansichten aus")
 
 	player.queue_free()
 	floor_body.queue_free()

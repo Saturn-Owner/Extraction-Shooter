@@ -382,36 +382,25 @@ const OWN_BODY_LAYER := 2
 ## sieht seinen Koerper.
 ##
 ## ---------------------------------------------------------------------------
-## DA, ABER UNSICHTBAR — UND ZWAR GANZ
+## ECHTE ERSTE PERSON: DU SIEHST DEINEN EIGENEN KOERPER
 ##
-## Der Koerper ist vollstaendig vorhanden: Er haelt die Waffe, bewegt sich,
-## traegt die Trefferzonen und wuerde von Mitspielern gesehen. Nur die eigene
-## Kamera blendet ihn aus.
+## Der Spieler soll seine Arme sehen, wie sie die Waffe halten und nachladen —
+## nicht ein zweites Modell vor der Kamera. Deshalb sind Arme, Bauch, Beine
+## UND die Waffe des Koerpers sichtbar, und das `WeaponView` im Kameraraum ist
+## ausgeblendet.
 ##
-## Vorher waren einzelne Teile ausgenommen, und das war jedes Mal falsch:
+## Versteckt bleiben nur Kopf und Brust, und dafuer gibt es einen gemessenen
+## Grund: Bei einer Augenhoehe von 1,65 m reicht der Kopf von 1,56 bis 1,80 —
+## die Kamera steckt darin. Die Brust endet bei 1,52, also 13 cm darunter, und
+## fuellte beim Blick nach unten den ganzen Schirm.
 ##
-##   1. Erst alles versteckt  -> man sah gar keinen Koerper.
-##   2. Dann nur Kopf         -> die Brust fuellte beim Blick nach unten
-##                               den ganzen Schirm, sie sitzt 13 cm unter
-##                               der Kamera.
-##   3. Dann Kopf und Brust   -> die Arme greifen die Waffe auf Brusthoehe
-##                               und standen als Flaechen quer im Bild, dazu
-##                               versetzt zur sichtbaren Waffe.
-##
-## Der Grund ist immer derselbe: Die Kamera sitzt IM Koerper. Von dort laesst
-## sich kein Teil gefahrlos zeigen — was nah genug ist, um sichtbar zu sein,
-## ist auch nah genug, um im Weg zu stehen.
-##
-## Gesehen wird der Koerper deshalb dort, wo er hingehoert: von aussen. F5
-## schaltet die Schulterkamera, siehe `_toggle_third_person()`.
+## Was dabei zusammenpassen muss: Die Waffe haengt jetzt auf Schulterhoehe
+## (WEAPON_MOUNT), und der Oberkoerper dreht sich mit dem Blick
+## (`look_pitch`). Ohne beides zeigte die Waffe unter dem Bildrand hindurch
+## und stur waagerecht.
 const HIDDEN_FROM_SELF := [
 	HealthSystem.Part.HEAD,
 	HealthSystem.Part.CHEST,
-	HealthSystem.Part.STOMACH,
-	HealthSystem.Part.LEFT_ARM,
-	HealthSystem.Part.RIGHT_ARM,
-	HealthSystem.Part.LEFT_LEG,
-	HealthSystem.Part.RIGHT_LEG,
 ]
 
 ## Schulterkamera zum Nachsehen.
@@ -565,13 +554,11 @@ func _hide_own_body_from_camera() -> void:
 		for mesh: MeshInstance3D in body.meshes_of(part):
 			mesh.layers = own_bit
 
-	# Die Waffe am Koerper ebenfalls: Vor der Kamera haengt bereits das
-	# WeaponView-Modell. Ohne das haette man zwei Gewehre im Bild, dicht
-	# nebeneinander und leicht versetzt.
-	if body_weapon != null:
-		for node in _all_children(body_weapon):
-			if node is VisualInstance3D:
-				(node as VisualInstance3D).layers = own_bit
+	# Die Waffe des Koerpers bleibt SICHTBAR — sie ist die, die der Spieler
+	# sieht. Dafuer verschwindet das Modell im Kameraraum: Zwei Gewehre dicht
+	# nebeneinander waeren schlimmer als eines an der falschen Stelle.
+	if weapon_view != null:
+		weapon_view.visible = false
 
 	if _camera != null:
 		_camera.cull_mask &= ~own_bit
@@ -588,17 +575,19 @@ func _toggle_third_person() -> void:
 		return
 
 	var own_bit := 1 << (OWN_BODY_LAYER - 1)
+	# Das Modell im Kameraraum bleibt in BEIDEN Ansichten aus: Gesehen wird
+	# die Waffe am Koerper. Frueher wurde es hier wieder eingeschaltet, als
+	# der Spieler noch keinen sichtbaren Arm hatte.
+	if weapon_view != null:
+		weapon_view.visible = false
+
 	if _third_person:
 		_first_person_camera_position = _camera.position
 		_camera.position = THIRD_PERSON_OFFSET
 		_camera.cull_mask |= own_bit
-		if weapon_view != null:
-			weapon_view.visible = false
 	else:
 		_camera.position = _first_person_camera_position
 		_camera.cull_mask &= ~own_bit
-		if weapon_view != null:
-			weapon_view.visible = true
 
 	# Dem Muendungsknall die neue Ruhelage mitteilen. Er setzt die
 	# Kameraposition beim Ruetteln absolut und zoege die Schulterkamera sonst
@@ -635,6 +624,9 @@ func _update_body(_delta: float) -> void:
 	# es hoch oder runter geht.
 	_body_animation.is_airborne = not is_on_floor()
 	_body_animation.vertical_speed = velocity.y
+	# Der Oberkoerper dreht sich mit dem Blick, sonst zeigte die Waffe stur
+	# waagerecht, waehrend man nach oben oder unten sieht.
+	_body_animation.look_pitch = _pitch
 
 
 ## Merkt sich, was im Magazin der Waffe steckt, die gerade in der Hand liegt.
