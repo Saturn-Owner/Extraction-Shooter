@@ -32,8 +32,7 @@ static func materials() -> Dictionary:
 	return {
 		# korn = wie fein die Struktur ist, tiefe = wie stark sie hervortritt,
 		# meter = ueber wie viele Meter sich ein Musterdurchgang zieht.
-		"snow": _surface(Color(0.840, 0.870, 0.900), 0.0, 0.95,
-			{korn = 0.05, tiefe = 0.5, meter = 6.0, zellig = false}),
+		"snow": snow_material(),
 		"concrete": _surface(Color(0.300, 0.310, 0.330), 0.0, 0.85,
 			{korn = 0.18, tiefe = 1.1, meter = 3.0, zellig = false}),
 		"steel": _surface(Color(0.340, 0.345, 0.360), 0.90, 0.40,
@@ -67,6 +66,60 @@ static func materials() -> Dictionary:
 static func container_colors() -> Array[String]:
 	return ["container_red", "container_blue", "container_green",
 		"container_yellow", "container_grey"]
+
+
+# ---------------------------------------------------------------------------
+# Schnee
+# ---------------------------------------------------------------------------
+
+const SNOW_DIR := "res://assets/textures/snow"
+
+## Ueber wie viele Meter sich ein Durchgang der Schneetextur zieht.
+##
+## Vier Meter: Gross genug, dass man die Kachelung auf einer 330 m langen
+## Flaeche nicht als Muster liest, klein genug, dass die Struktur beim
+## Hinuntersehen nicht zu Brei wird. Der Wert ist zum Drehen da.
+const SNOW_METRES := 4.0
+
+
+## Der Boden. Die groesste Flaeche der Karte — und die einzige, bei der eine
+## echte Fototextur mehr bringt als jedes prozedurale Rauschen.
+##
+## Triplanar in Weltkoordinaten ist hier nicht Kuer, sondern Pflicht: Die
+## Landflaechen sind bis zu 330 m lang. Nach den UV-Koordinaten der Mesh
+## gemappt waere ein Durchgang 330 m breit — also gar keine Struktur mehr,
+## nur ein ausgeschmierter Farbverlauf.
+##
+## Ohne die Texturen faellt es auf prozedurales Rauschen zurueck. Ein frischer
+## Clone soll spielbar sein, nicht rot blinken.
+static func snow_material() -> BaseMaterial3D:
+	if not ResourceLoader.exists("%s/snow_color.jpg" % SNOW_DIR):
+		return _surface(Color(0.840, 0.870, 0.900), 0.0, 0.95,
+			{korn = 0.05, tiefe = 0.5, meter = 6.0, zellig = false})
+
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = load("%s/snow_color.jpg" % SNOW_DIR)
+
+	mat.normal_enabled = true
+	# NormalGL, nicht NormalDX: Godot erwartet die OpenGL-Ausrichtung, bei der
+	# der Gruenkanal nach oben zeigt. Mit der DirectX-Fassung waeren alle
+	# Diese Dellen Buckel und alle Buckel Dellen — es faellt kaum auf und sieht
+	# trotzdem dauerhaft falsch aus.
+	mat.normal_texture = load("%s/snow_normal.jpg" % SNOW_DIR)
+	mat.normal_scale = 1.0
+
+	mat.roughness_texture = load("%s/snow_roughness.jpg" % SNOW_DIR)
+	mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
+
+	mat.ao_enabled = true
+	mat.ao_texture = load("%s/snow_ao.jpg" % SNOW_DIR)
+	mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
+
+	mat.uv1_triplanar = true
+	mat.uv1_world_triplanar = true
+	mat.uv1_scale = Vector3.ONE / SNOW_METRES
+
+	return mat
 
 
 # ---------------------------------------------------------------------------

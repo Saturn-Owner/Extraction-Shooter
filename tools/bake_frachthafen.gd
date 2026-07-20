@@ -24,7 +24,15 @@
 ## mehr.
 extends SceneTree
 
-const SCENE := "res://scenes/levels/raid_frachthafen.tscn"
+## Gelesen wird die duenne Quelle, geschrieben die spielbare Karte.
+##
+## GETRENNTE DATEIEN, und zwar aus Erfahrung: Solange beides dieselbe Datei
+## war, ueberschrieb das Backen seine eigene Vorlage. Danach liess sich die
+## Karte nie wieder aus dem Layout erzeugen — jede Materialaenderung in
+## WorldParts kam nicht mehr an, weil die Materialien in der gebackenen Szene
+## festgeschrieben waren.
+const SOURCE := "res://scenes/levels/frachthafen_quelle.tscn"
+const TARGET := "res://scenes/levels/raid_frachthafen.tscn"
 const WORLD_NODE := "Welt"
 
 
@@ -33,9 +41,9 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	var packed := load(SCENE) as PackedScene
+	var packed := load(SOURCE) as PackedScene
 	if packed == null:
-		printerr("Szene nicht ladbar: ", SCENE)
+		printerr("Quelle nicht ladbar: ", SOURCE)
 		quit(1)
 		return
 
@@ -69,12 +77,12 @@ func _run() -> void:
 		quit(1)
 		return
 
-	if ResourceSaver.save(out, SCENE) != OK:
-		printerr("Speichern fehlgeschlagen: ", SCENE)
+	if ResourceSaver.save(out, TARGET) != OK:
+		printerr("Speichern fehlgeschlagen: ", TARGET)
 		quit(1)
 		return
 
-	print("Geschrieben: %s" % SCENE)
+	print("Geschrieben: %s" % TARGET)
 	print("Die Karte laesst sich jetzt im Editor anfassen.")
 	quit(0)
 
