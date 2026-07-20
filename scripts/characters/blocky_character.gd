@@ -376,6 +376,14 @@ func torso() -> Node3D:
 	return get_node_or_null(NodePath(TORSO_NODE)) as Node3D
 
 
+## Die sichtbaren Kästen eines Körperteils. Zweiteilige Glieder haben zwei.
+##
+## Gebraucht, um einzelne Teile vor einer bestimmten Kamera auszublenden —
+## der Spieler versteckt so seinen eigenen Kopf, in dem seine Kamera steckt.
+func meshes_of(part: HealthSystem.Part) -> Array:
+	return _meshes.get(part, [])
+
+
 ## Das obere Gelenk eines Körperteils: Schulter, Hüfte, Hals.
 ## Hier setzt die Animation an.
 ##

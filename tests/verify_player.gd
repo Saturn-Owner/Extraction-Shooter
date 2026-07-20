@@ -75,24 +75,53 @@ func _test_visible_body() -> void:
 			boxes += 1
 	_check(boxes >= 7, "er bringt Trefferzonen mit (%d)" % boxes)
 
-	# --- Der eigene Koerper darf die eigene Sicht nicht verstellen ---
+	# --- Man sieht seinen eigenen Koerper, aber nicht von innen ---
 	#
-	# Der Kopf sitzt genau dort, wo die Kamera steht. Ohne das Ausblenden
-	# schaut man von innen gegen den eigenen Schaedel.
+	# HIER STAND EINMAL DAS GEGENTEIL.
+	#
+	# Zuerst war der ganze Koerper vor der eigenen Kamera ausgeblendet, und
+	# dieser Test bestand darauf. Beim Spielen sah man daraufhin gar keinen
+	# Koerper — nur die Waffe, also genau den Zustand von vorher. Der Test war
+	# gruen und hat die falsche Sache abgesichert.
+	#
+	# Ausgeblendet gehoert nur, worin die Kamera steckt: der Kopf auf 1,56 bis
+	# 1,80 m bei einer Augenhoehe von 1,65.
 	var own_bit := 1 << (PlayerController.OWN_BODY_LAYER - 1)
-	var meshes := 0
-	var on_own_layer := 0
-	for node in PlayerController._all_children(player.body):
-		if node is MeshInstance3D:
-			meshes += 1
-			if (node as MeshInstance3D).layers == own_bit:
-				on_own_layer += 1
-	_check(meshes > 0 and meshes == on_own_layer,
-		"alle %d Koerperteile liegen auf der eigenen Sichtebene" % meshes)
-
 	var camera := player.get_node_or_null("CameraPivot/Camera3D") as Camera3D
 	_check(camera != null and (camera.cull_mask & own_bit) == 0,
-		"und die eigene Kamera blendet sie aus")
+		"die eigene Kamera blendet die versteckte Ebene aus")
+
+	# Kopf UND Brust muessen weg.
+	#
+	# Der Kopf, weil die Kamera darin steckt. Die Brust, weil ihre Oberkante
+	# bei 1,52 m liegt und die Kamera bei 1,65 senkrecht darueber — beim
+	# Blick nach unten fuellte sie im Rendering den kompletten Schirm. Das
+	# habe ich erst gesehen, nachdem ich es gerendert hatte; gerechnet hatte
+	# ich nur, dass sie die Kamera nicht umschliesst. Tut sie auch nicht, sie
+	# steht nur 13 cm davor.
+	for part: HealthSystem.Part in PlayerController.HIDDEN_FROM_SELF:
+		var hidden := true
+		for mesh: MeshInstance3D in player.body.meshes_of(part):
+			if mesh.layers != own_bit:
+				hidden = false
+		_check(hidden, "%s ist vor der eigenen Kamera versteckt"
+			% BlockyCharacter.part_name(part))
+
+	_check(PlayerController.HIDDEN_FROM_SELF.has(HealthSystem.Part.HEAD)
+			and PlayerController.HIDDEN_FROM_SELF.has(HealthSystem.Part.CHEST),
+		"genau Kopf und Brust, nicht mehr")
+
+	# Alles andere MUSS sichtbar bleiben. Sonst sieht man wieder nur die
+	# Waffe — der Zustand, den der Koerper gerade beheben soll.
+	var visible_parts := 0
+	for part: HealthSystem.Part in [HealthSystem.Part.STOMACH,
+			HealthSystem.Part.LEFT_LEG, HealthSystem.Part.RIGHT_LEG,
+			HealthSystem.Part.LEFT_ARM, HealthSystem.Part.RIGHT_ARM]:
+		for mesh: MeshInstance3D in player.body.meshes_of(part):
+			if (mesh.layers & camera.cull_mask) != 0:
+				visible_parts += 1
+	_check(visible_parts >= 8,
+		"Bauch, Arme und Beine bleiben sichtbar (%d Kaesten)" % visible_parts)
 
 	# --- Ein fremder Schuss trifft ein KOERPERTEIL ---
 	var ammo := ItemRegistry.get_item(&"ammo_556x45_m855a1") as AmmoData

@@ -346,16 +346,33 @@ func select_weapon_slot(slot: ItemData.EquipSlot) -> bool:
 var body: BlockyCharacter
 var _body_animation: CharacterAnimation
 
-## Sichtebene des eigenen Koerpers.
+## Sichtebene fuer die Teile, die der Traeger selbst NICHT sehen darf.
 ##
-## Die eigene Kamera blendet sie aus. Ohne das schaut man von innen gegen den
-## eigenen Schaedel — der Kopf sitzt genau dort, wo die Kamera steht.
-##
-## Andere Kameras sehen die Ebene weiterhin, der Koerper ist also nicht
-## unsichtbar, sondern nur fuer seinen eigenen Traeger. Sollen spaeter die
-## eigenen Beine sichtbar werden, bekommen Kopf und Brust eine eigene Ebene
-## und die Beine bleiben auf der Standardebene.
+## Andere Kameras sehen die Ebene weiterhin — die Teile sind also nicht
+## unsichtbar, sondern nur fuer ihren eigenen Traeger.
 const OWN_BODY_LAYER := 2
+
+## Welche Koerperteile die eigene Kamera ausblendet.
+##
+## ---------------------------------------------------------------------------
+## NUR DER KOPF, NICHT DER GANZE KOERPER
+##
+## Zuerst hatte ich ALLES ausgeblendet, mit der Begruendung, die Kamera stecke
+## im Kopf. Fuer den Kopf stimmt das — beim Spielen sah man daraufhin aber
+## ueberhaupt keinen Koerper mehr, nur die Waffe. Genau das, was vorher auch
+## schon da war.
+##
+## Nachgemessen liegt die Kamera auf 1,65 m, und nur der Kopf umschliesst sie:
+##
+##     Kopf     1,56 bis 1,80   <- Kamera steckt drin
+##     Brust    1,11 bis 1,52
+##     Arme     0,88 bis 1,52
+##     Bauch    0,79 bis 1,09
+##     Beine    0,00 bis 0,75
+##
+## Alles unterhalb des Kopfes kann sichtbar bleiben. Wer nach unten schaut,
+## sieht seinen Koerper.
+const HIDDEN_FROM_SELF := [HealthSystem.Part.HEAD, HealthSystem.Part.CHEST]
 
 
 func _build_body() -> void:
@@ -382,13 +399,14 @@ func _build_body() -> void:
 	_hide_own_body_from_camera()
 
 
-## Nimmt den eigenen Koerper aus dem Blickfeld der eigenen Kamera.
+## Nimmt die Teile aus dem Blickfeld, in denen die eigene Kamera steckt.
 func _hide_own_body_from_camera() -> void:
-	for node in _all_children(body):
-		if node is VisualInstance3D:
-			(node as VisualInstance3D).layers = 1 << (OWN_BODY_LAYER - 1)
+	var own_bit := 1 << (OWN_BODY_LAYER - 1)
+	for part: HealthSystem.Part in HIDDEN_FROM_SELF:
+		for mesh: MeshInstance3D in body.meshes_of(part):
+			mesh.layers = own_bit
 	if _camera != null:
-		_camera.cull_mask &= ~(1 << (OWN_BODY_LAYER - 1))
+		_camera.cull_mask &= ~own_bit
 
 
 static func _all_children(node: Node) -> Array[Node]:
