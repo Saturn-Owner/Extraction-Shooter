@@ -94,6 +94,12 @@ var _recoil: Node3D
 ## Die eigenen Haende an der Waffe. Siehe ViewmodelArms.
 var _arms: ViewmodelArms
 
+## Wohin die Hand greift, um ein frisches Magazin zu holen — relativ zur
+## Kamera. Unten links und dicht am Koerper, also dort, wo die Magazintaschen
+## der Weste sitzen. Bewusst unterhalb des Bildrands: Man sieht die Hand
+## hinuntergehen und mit dem Magazin zurueckkommen, nicht die Tasche selbst.
+const POUCH_IN_VIEW := Vector3(-0.22, -0.46, -0.10)
+
 ## Das Modell der Waffe, die gerade in der Hand liegt.
 var _viewmodel: WeaponViewmodel
 
@@ -408,38 +414,57 @@ func _update_recoil(delta: float) -> void:
 func _update_arms() -> void:
 	if _arms == null or _viewmodel == null:
 		return
+	if _viewmodel.grip_point == null or _viewmodel.support_point == null:
+		return
 
-	var grip: Node3D = _viewmodel.grip_point
-	var support: Node3D = _viewmodel.support_point
+	var grip := _viewmodel.grip_point.global_position
+	var handguard := _viewmodel.support_point.global_position
+	var support := handguard
+
 	if _sequence_kind == &"reload" and _sequence_duration > 0.0:
 		var progress := 1.0 - _sequence_time_left / _sequence_duration
-		support = _support_target_while_reloading(progress)
+		support = _support_hand_while_reloading(progress, handguard)
 
 	_arms.aim_at(grip, support)
 
 
-## Wohin die linke Hand im jeweiligen Abschnitt des Nachladens greift.
-func _support_target_while_reloading(progress: float) -> Node3D:
-	# Beim blossen Durchladen bleibt die Hand am Schaft und zieht nur zum
-	# Schluss den Ladehebel — es wird ja kein Magazin gewechselt.
-	if _sequence_chamber_only:
-		if progress >= CharacterAnimation.RELOAD_CHARGE:
-			return _viewmodel.charging_handle
-		return _viewmodel.support_point
+## Wo die linke Hand im jeweiligen Abschnitt des Nachladens ist.
+##
+## Der Ablauf kommt aus `CharacterAnimation.reload_hand_path()` — dieselbe
+## Choreografie, die auch die Figuren im Level laufen. Hier werden nur die
+## Punkte eingesetzt, die es im Kameraraum gibt.
+func _support_hand_while_reloading(progress: float, handguard: Vector3) -> Vector3:
+	if _viewmodel.magwell_point == null:
+		return handguard
 
-	if progress < CharacterAnimation.RELOAD_REACH:
-		return _viewmodel.support_point
-	if progress < CharacterAnimation.RELOAD_FETCH:
-		# Am Schacht: greifen und das leere Magazin herausziehen.
-		return _viewmodel.magwell_point
-	if progress < CharacterAnimation.RELOAD_CARRY:
-		# Unterwegs zur Tasche und zurueck. Es gibt im Kameraraum keine
-		# Weste, also greift die Hand nach unten aus dem Bild — genau das
-		# tut sie auch in Wirklichkeit.
-		return null
-	if progress < CharacterAnimation.RELOAD_CHARGE:
-		return _viewmodel.magwell_point
-	return _viewmodel.charging_handle
+	var magwell := _viewmodel.magwell_point.global_position
+	# Nach unten aus der WAFFE heraus, nicht nach Weltkoordinaten unten: Beim
+	# Nachladen ist sie gekippt.
+	var down := -_viewmodel.magwell_point.global_basis.y.normalized()
+	var pulled := magwell + down * CharacterAnimation.PULL_DISTANCE
+	var handle := magwell
+	if _viewmodel.charging_handle != null:
+		handle = _viewmodel.charging_handle.global_position
+
+	# Beim blossen Durchladen wird kein Magazin gewechselt: Die Hand bleibt am
+	# Schaft und zieht nur zum Schluss den Ladehebel.
+	if _sequence_chamber_only:
+		if progress < CharacterAnimation.RELOAD_SEAT:
+			return handguard
+		if progress < CharacterAnimation.RELOAD_CHARGE:
+			return handguard.lerp(handle,
+				smoothstep(CharacterAnimation.RELOAD_SEAT,
+					CharacterAnimation.RELOAD_CHARGE, progress))
+		return handle.lerp(handguard,
+			smoothstep(CharacterAnimation.RELOAD_CHARGE, 1.0, progress))
+
+	# Wo das frische Magazin herkommt. Im Kameraraum gibt es keine Weste, also
+	# ein Punkt unten links ausserhalb des Bildes — dorthin greift man auch in
+	# Wirklichkeit, zur Tasche an der Brust.
+	var pouch: Vector3 = global_transform * POUCH_IN_VIEW
+
+	return CharacterAnimation.reload_hand_path(progress, handguard, magwell,
+		pulled, pouch, handle)
 
 
 ## Zeitleiste fuer Nachladen und Ladehemmung.

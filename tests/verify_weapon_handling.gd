@@ -446,6 +446,76 @@ func _test_viewmodel_arms() -> void:
 		"die Glieder sind schlank genug fuer 30 cm vor dem Auge (%.3f m)"
 			% ViewmodelArms.UPPER_THICK)
 
+	# --- DIE FARBE KOMMT VOM KOERPER ---
+	#
+	# Es ist derselbe Mensch: Was man am eigenen Arm sieht, muss zu dem
+	# passen, was andere von aussen sehen. Hier stand erst ein selbst
+	# gewaehltes Olivgruen, und beim Umschalten auf F5 wechselte die Figur
+	# sichtbar die Kleidung.
+	var sleeve := ViewmodelArms._skin_material()
+	_check(sleeve.albedo_color.is_equal_approx(BlockyCharacter.COLOR_HEALTHY),
+		"der Aermel hat die Farbe des Koerpers")
+
+	# --- DER NACHLADEWEG IST VOLLSTAENDIG ---
+	#
+	# Der erste Anlauf hatte den Ablauf grob nachgebaut und fuer den
+	# Abschnitt "neues Magazin holen" gar nichts gesetzt — die Hand blieb
+	# stehen, und das Nachladen sah abgebrochen aus.
+	#
+	# Geprueft wird die BAHN, nicht der Code: An den sechs Stationen muss die
+	# Hand wirklich woanders sein.
+	var handguard := Vector3(0.13, -0.15, -0.46)
+	var magwell := Vector3(-0.10, -0.23, -0.43)
+	var pulled := magwell + Vector3(0.0, -0.08, 0.0)
+	var pouch := Vector3(-0.22, -0.46, -0.10)
+	var handle := Vector3(0.06, -0.15, -0.29)
+
+	# GEZIELT GEPRUEFT, NICHT "sechs verschiedene Orte".
+	#
+	# Genau das hatte ich bei den Figuren schon einmal falsch: Greifen (0,20)
+	# und Einschieben (0,80) passieren BEIDE am Magazinschacht — sie muessen
+	# zusammenfallen. Ein Test auf sechs verschiedene Stellen ist deshalb
+	# falsch und wurde hier prompt ein zweites Mal geschrieben.
+	# An den WEGMARKEN gemessen, nicht an gegriffenen Zahlen dazwischen.
+	# Erster Versuch pruefte bei 0,20 und 0,92 — dort ist die Hand schon
+	# wieder unterwegs, und beide Pruefungen waren rot, obwohl der Ablauf
+	# stimmte.
+	var during_grip := (CharacterAnimation.RELOAD_REACH
+		+ CharacterAnimation.RELOAD_GRIP) * 0.5
+	var at_grip := CharacterAnimation.reload_hand_path(during_grip, handguard,
+		magwell, pulled, pouch, handle)
+	var at_seat := CharacterAnimation.reload_hand_path(
+		CharacterAnimation.RELOAD_SEAT, handguard, magwell, pulled, pouch, handle)
+	var at_charge := CharacterAnimation.reload_hand_path(
+		CharacterAnimation.RELOAD_CHARGE, handguard, magwell, pulled, pouch, handle)
+
+	_check(at_grip.distance_to(magwell) < 0.01,
+		"waehrend des Greifens liegt die Hand am Schacht (%.3f m)"
+			% at_grip.distance_to(magwell))
+	_check(at_seat.distance_to(magwell) < 0.01,
+		"beim Einschieben wieder dort — dieselbe Stelle, mit Absicht")
+	_check(at_charge.distance_to(handle) < 0.01,
+		"und zum Schluss am Ladehebel (%.3f m)"
+			% at_charge.distance_to(handle))
+	_check(at_grip.distance_to(handguard) > 0.15,
+		"keine davon mehr am Vorderschaft")
+
+	# Am Schluss zurueck an den Schaft — sonst bliebe die Hand am Ladehebel
+	# haengen und die naechste Bewegung faenge falsch an.
+	var ending := CharacterAnimation.reload_hand_path(1.0, handguard, magwell,
+		pulled, pouch, handle)
+	_check(ending.distance_to(handguard) < 0.01,
+		"und am Ende liegt die Hand wieder am Vorderschaft (%.3f m)"
+			% ending.distance_to(handguard))
+
+	# Die Tasche liegt unter dem Bildrand: Man sieht die Hand hinuntergehen,
+	# nicht die Tasche selbst.
+	var fetching := CharacterAnimation.reload_hand_path(0.45, handguard,
+		magwell, pulled, pouch, handle)
+	_check(fetching.y < magwell.y - 0.10,
+		"beim Holen greift sie deutlich nach unten (%.3f gegen %.3f m)"
+			% [fetching.y, magwell.y])
+
 	model.queue_free()
 
 

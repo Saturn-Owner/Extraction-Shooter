@@ -120,14 +120,13 @@ func _make_arm(arm_name: String, shoulder: Vector3, side: float) -> Node3D:
 
 ## Richtet beide Arme auf ihre Ziele aus.
 ##
-## `grip` ist der Pistolengriff, `support` der Vorderschaft — beides Knoten am
-## Waffenmodell. Fehlt einer, bleibt der Arm, wo er ist: Ein Arm, der ins
-## Leere zeigt, sieht schlimmer aus als einer, der stillsteht.
-func aim_at(grip: Node3D, support: Node3D) -> void:
-	if grip != null:
-		_solve(_right_shoulder, _right_elbow, grip.global_position, 1.0)
-	if support != null:
-		_solve(_left_shoulder, _left_elbow, support.global_position, -1.0)
+## WELTPOSITIONEN, KEINE KNOTEN. Beim Nachladen ist die linke Hand die meiste
+## Zeit an gar keinem Knoten, sondern unterwegs zwischen Magazinschacht und
+## Tasche. Der erste Anlauf nahm Knoten und setzte für diesen Abschnitt
+## nichts — die Hand blieb dann stehen, und das Nachladen brach sichtbar ab.
+func aim_at(grip: Vector3, support: Vector3) -> void:
+	_solve(_right_shoulder, _right_elbow, grip, 1.0)
+	_solve(_left_shoulder, _left_elbow, support, -1.0)
 
 
 ## Analytische Zweiknochen-Kinematik, wie in CharacterAnimation.
@@ -183,11 +182,18 @@ static func _look_down(direction: Vector3) -> Quaternion:
 	return Quaternion(Vector3.DOWN, direction.normalized())
 
 
-## Handschuh und Ärmel. Bewusst matt und dunkel: Etwas so dicht vor dem Auge
-## darf nicht spiegeln, sonst zieht es den Blick von der Waffe weg.
+## Der Ärmel — DIESELBE FARBE WIE DER KÖRPER.
+##
+## Hier stand erst ein selbst gewähltes Olivgrün. Es ist derselbe Mensch:
+## Was man in der ersten Person am eigenen Arm sieht, muss zu dem passen, was
+## andere von aussen sehen — sonst wechselt die Figur beim Umschalten auf F5
+## sichtbar die Kleidung.
+##
+## Deshalb `BlockyCharacter.COLOR_HEALTHY`. Wer die Figur einfärbt, färbt die
+## Hände mit.
 static func _skin_material() -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.208, 0.226, 0.180)
+	mat.albedo_color = BlockyCharacter.COLOR_HEALTHY
 	mat.metallic = 0.0
 	mat.roughness = 0.92
 	return mat

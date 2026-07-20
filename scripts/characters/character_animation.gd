@@ -575,16 +575,33 @@ func _support_hand_goal() -> Vector3:
 		return handguard
 
 	var magwell := magwell_target.global_position
-	var pouch := pouch_position()
-	var p := reload_progress
-
 	# Herausgezogen wird nach unten aus der Waffe heraus, nicht nach
 	# Weltkoordinaten unten: Die Waffe ist beim Nachladen gekippt.
 	var down := -magwell_target.global_basis.y.normalized()
-	var pulled := magwell + down * PULL_DISTANCE
+	var handle := charge_target.global_position if charge_target != null else magwell
 
-	# 1. Hinreichen. smoothstep statt lerp, damit die Hand anfährt und
-	#    abbremst, statt ruckartig loszuschnellen.
+	return reload_hand_path(reload_progress, handguard, magwell,
+		magwell + down * PULL_DISTANCE, pouch_position(), handle)
+
+
+## Der Weg der Stützhand über das ganze Nachladen, als reine Rechnung.
+##
+## ---------------------------------------------------------------------------
+## EINE CHOREOGRAFIE FÜR FIGUR UND KAMERAMODELL
+##
+## Dieselbe Bewegung gibt es zweimal zu sehen: an den Figuren im Level und an
+## den eigenen Händen vor der Kamera (`ViewmodelArms`). Sie hier statisch zu
+## halten heisst, dass beide sie aus DERSELBEN Quelle beziehen.
+##
+## Der erste Anlauf im Kameraraum hatte den Ablauf grob nachgebaut und in der
+## Mitte einfach nichts gesetzt — die Hand blieb dort stehen, und das
+## Nachladen sah abgebrochen aus. Genau dafür gibt es diese Funktion.
+##
+## Alle Punkte in Weltkoordinaten, alle Abschnitte mit `smoothstep`: Die Hand
+## fährt an und bremst ab, statt zwischen den Marken zu springen.
+static func reload_hand_path(p: float, handguard: Vector3, magwell: Vector3,
+		pulled: Vector3, pouch: Vector3, handle: Vector3) -> Vector3:
+	# 1. Hinreichen.
 	if p < RELOAD_REACH:
 		return handguard.lerp(magwell, smoothstep(0.0, RELOAD_REACH, p))
 
@@ -609,7 +626,6 @@ func _support_hand_goal() -> Vector3:
 
 	# 6. Ladehebel. Das Modell zieht ihn ab 0,85 nach hinten — die Hand
 	#    folgt ihm einfach, statt eine eigene Bahn zu laufen.
-	var handle := charge_target.global_position if charge_target != null else magwell
 	if p < RELOAD_CHARGE:
 		return magwell.lerp(handle, smoothstep(RELOAD_SEAT, RELOAD_CHARGE, p))
 
