@@ -341,7 +341,11 @@ func hand_of(part: HealthSystem.Part) -> Node3D:
 ## werden so gestellt, dass sie plausibel danach greifen. Eine Waffe, die in
 ## die falsche Richtung zeigt, fällt sofort auf; eine Hand, die zwei
 ## Zentimeter neben dem Griff liegt, bei eckigen Gliedmassen nicht.
-const WEAPON_MOUNT := Vector3(0.10, 1.28, -0.18)
+## DIE REICHWEITE DES STÜTZARMS BESTIMMT DIESEN WERT MIT. Bei (0.10, 1.28,
+## -0.18) lag der Vorderschaft 0,687 m von der linken Schulter entfernt, der
+## Arm ist aber nur 0,637 m lang — die Hand blieb 54 mm davor in der Luft
+## stehen. Weiter am Körper, und beide Hände kommen bequem hin.
+const WEAPON_MOUNT := Vector3(0.06, 1.30, -0.12)
 
 
 ## Der Knoten, an den eine Waffe gehängt wird.

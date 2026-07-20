@@ -97,6 +97,19 @@ var selector: Node3D
 var charging_handle: Node3D
 var muzzle_point: Node3D
 
+## Wo die Hände anfassen. Nur fuer Figuren, die man von aussen sieht — im
+## Kameraraum sieht man ohnehin keine Haende.
+##
+## JEDE WAFFE SAGT SELBST, WO SIE ANGEFASST WIRD. Ein Sturmgewehr hat einen
+## Pistolengriff und einen Vorderschaft, eine Flinte eine Pumpe, eine Pistole
+## nur eine Griffstelle. Zentrale Werte in der Figur wuerden bedeuten, dass
+## jede Waffe gleich gehalten wird — genau das, was CLAUDE.md fuer die
+## Modelle ausschliesst.
+##
+## Fehlt einer der Punkte, faellt die Figur auf eine feste Haltung zurueck.
+var grip_point: Node3D
+var support_point: Node3D
+
 var _action_home: Vector3
 var _magazine_home: Vector3
 var _charging_handle_home: Vector3
@@ -348,6 +361,8 @@ func _collect_parts() -> void:
 	selector = get_node_or_null("Selector") as Node3D
 	charging_handle = get_node_or_null("ChargingHandle") as Node3D
 	muzzle_point = get_node_or_null("MuzzlePoint") as Node3D
+	grip_point = get_node_or_null("GripPoint") as Node3D
+	support_point = get_node_or_null("SupportPoint") as Node3D
 
 	if action != null:
 		_action_home = action.position

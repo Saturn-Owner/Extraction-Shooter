@@ -100,6 +100,16 @@ func _arm_with_weapon() -> void:
 	# Die Arme gehören jetzt an die Waffe, nicht in den Gehzyklus.
 	_animation.holding_weapon = true
 
+	# Die Griffpunkte kommen aus dem Waffenmodell — jede Waffe sagt selbst,
+	# wo sie angefasst wird.
+	#
+	# Kein Warten nötig: Der Waffenpunkt hängt bereits im Baum, also läuft
+	# das _ready() der Waffe und danach das des Modells noch innerhalb von
+	# add_child(). Die Punkte stehen hier schon.
+	if weapon.viewmodel != null:
+		_animation.grip_target = weapon.viewmodel.grip_point
+		_animation.support_target = weapon.viewmodel.support_point
+
 
 ## Läuft hin und her, falls patrol_width gesetzt ist.
 ##

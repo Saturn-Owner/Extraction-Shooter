@@ -130,6 +130,16 @@ func _build_points() -> void:
 	# Auswurffenster: rechts neben dem Verschluss.
 	add_child(GlbParts.pivot("EjectPoint", Vector3(0.030, 0.026, -0.098)))
 
+	# Wo die Haende anfassen. Beide Werte sind am Modell gemessen, nicht
+	# geschaetzt: Der Abzug sitzt bei z = -0,088, das Magazin reicht von
+	# -0,125 bis -0,237, die Muendung liegt bei -0,621.
+	#
+	# Der Pistolengriff steht hinter und unter dem Abzug, die Faust umschliesst
+	# ihn also etwa eine Handbreit darunter. Der Vorderschaft liegt vor dem
+	# Magazin auf halbem Weg zur Muendung.
+	add_child(GlbParts.pivot("GripPoint", Vector3(0.0, -0.085, -0.050)))
+	add_child(GlbParts.pivot("SupportPoint", Vector3(0.0, -0.020, -0.290)))
+
 
 ## Die vier Steckplaetze.
 ##

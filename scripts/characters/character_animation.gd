@@ -42,6 +42,15 @@ var speed: float = 0.0
 ## Waffe, die an der Hand hängt, würde mitpendeln.
 var holding_weapon: bool = false
 
+## Wohin die Hände greifen sollen. Kommen von der Waffe.
+##
+## Sind beide gesetzt, wird die Armhaltung GERECHNET statt aus festen Winkeln
+## genommen — siehe `_solve_arm()`. Fehlt einer, greift die feste Haltung
+## darunter als Rückfallebene.
+var grip_target: Node3D
+var support_target: Node3D
+
+
 ## Haltung mit Waffe. Werte in Grad.
 ##
 ## ---------------------------------------------------------------------------
@@ -263,6 +272,13 @@ func _process(delta: float) -> void:
 func _pose_weapon_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 		swing: float) -> void:
 	var left := part == HealthSystem.Part.LEFT_ARM
+
+	# Die linke Hand stützt vorn am Schaft, die rechte hält den Griff.
+	var target := support_target if left else grip_target
+	if target != null and hinge != null and _solve_arm(part, joint, hinge, target):
+		return
+
+	# Rückfallebene: feste Winkel, wenn die Waffe keine Griffpunkte nennt.
 	var shoulder := HOLD_LEFT_SHOULDER if left else HOLD_RIGHT_SHOULDER
 	var elbow := HOLD_LEFT_ELBOW if left else HOLD_RIGHT_ELBOW
 
@@ -270,6 +286,81 @@ func _pose_weapon_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 	joint.rotation_degrees = shoulder + Vector3(sway, 0.0, 0.0)
 	if hinge != null:
 		hinge.rotation_degrees = elbow
+
+
+## Stellt einen Arm so, dass die Hand auf dem Zielpunkt liegt.
+##
+## ---------------------------------------------------------------------------
+## ZWEI KNOCHEN, ANALYTISCH GELÖST — KEINE ITERATION
+##
+## Feste Winkel für die Waffenhaltung waren ein Irrweg: Man dreht an X, der Arm
+## hebt sich seitlich, man dreht an Z, er dreht sich um sich selbst, und nach
+## drei Versuchen greift die Hand immer noch daneben. Godot wendet Euler-Winkel
+## als YXZ an, und damit tut jede Änderung etwas anderes als erwartet.
+##
+## Rückwärts ist es dagegen eindeutig. Ober- und Unterarm sind zwei Strecken
+## fester Länge; wo die Hand liegen soll, ist bekannt. Damit liegt der
+## Ellenbogen auf einem KREIS um die Verbindungslinie Schulter–Ziel, und der
+## Kosinussatz gibt Radius und Abstand davon. Welcher Punkt auf dem Kreis es
+## wird, entscheidet der Polvektor — also die Richtung, in die der Ellenbogen
+## zeigen soll. Beim Menschen: nach aussen und nach hinten.
+##
+## Ergebnis: Man sagt, wo die Hand hin soll, und muss nie wieder an einem
+## Winkel drehen. Ändert sich die Waffe, wandern die Hände von selbst mit.
+##
+## Gibt false zurück, wenn der Arm zu kurz ist — dann greift die feste Haltung.
+func _solve_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
+		target: Node3D) -> bool:
+	if character == null:
+		return false
+
+	var size := character.size_of(part)
+	var upper: float = size.y * float(BlockyCharacter.HINGES[part].at)
+	var lower: float = size.y - upper
+
+	# Alles im Raum der FIGUR rechnen, nicht in Weltkoordinaten: Dann ist die
+	# Rechnung unabhängig davon, wo und wie gedreht die Figur steht.
+	var to_local := character.global_transform.affine_inverse()
+	var shoulder := joint.position
+	var goal := to_local * target.global_position
+
+	var delta := goal - shoulder
+	var distance := delta.length()
+	if distance < 0.001:
+		return false
+
+	# Ein Arm kann sich nicht strecken. Liegt das Ziel ausserhalb der
+	# Reichweite, zeigt der Arm wenigstens dorthin, statt sich zu verrenken.
+	distance = clampf(distance, absf(upper - lower) + 0.005, upper + lower - 0.005)
+	var direction := delta.normalized()
+
+	# Kosinussatz: Wie weit liegt der Ellenbogen auf der Linie, und wie weit
+	# daneben?
+	var along := (upper * upper - lower * lower + distance * distance) / (2.0 * distance)
+	var offset := sqrt(maxf(0.0, upper * upper - along * along))
+
+	# Der Ellenbogen zeigt nach aussen und nach hinten — so hält ein Mensch
+	# ein Gewehr. Ohne diese Vorgabe wäre jede Lage auf dem Kreis gleich gut,
+	# und der Arm könnte auch nach oben abknicken.
+	var side := signf(shoulder.x)
+	var pole := Vector3(side * 0.7, -0.3, 0.65)
+	pole -= direction * pole.dot(direction)
+	if pole.length() < 0.001:
+		pole = Vector3.UP
+	pole = pole.normalized()
+
+	var elbow := shoulder + direction * along + pole * offset
+
+	# Beide Glieder hängen entlang -Y. Gesucht ist je die Drehung, die -Y auf
+	# die Richtung des Glieds legt.
+	var upper_dir := (elbow - shoulder).normalized()
+	var lower_dir := (goal - elbow).normalized()
+
+	joint.basis = Basis(Quaternion(Vector3.DOWN, upper_dir))
+	# Der Ellenbogen sitzt im Raum der Schulter, seine Richtung muss also
+	# dorthin umgerechnet werden.
+	hinge.basis = Basis(Quaternion(Vector3.DOWN, joint.basis.inverse() * lower_dir))
+	return true
 
 
 ## Winkel eines Zwischengelenks — Knie oder Ellenbogen.

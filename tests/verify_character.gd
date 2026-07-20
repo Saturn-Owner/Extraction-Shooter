@@ -604,6 +604,47 @@ func _test_weapon_in_hand() -> void:
 	# Die Arme gehören an die Waffe, nicht in den Gehzyklus.
 	_check(figure._animation.holding_weapon, "die Arme sind im Anschlag")
 
+	# DIE HÄNDE MÜSSEN AUF DEN GRIFFPUNKTEN LIEGEN.
+	#
+	# Das ist der eigentliche Beweis, dass die inverse Kinematik rechnet und
+	# nicht nur plausibel aussieht: Die Waffe sagt, wo sie angefasst wird,
+	# und danach muss die Hand dort sein — auf den Millimeter, nicht
+	# ungefähr. Feste Winkel haben genau daran versagt.
+	_check(figure.weapon.viewmodel.grip_point != null, "die Waffe nennt ihren Griff")
+	_check(figure.weapon.viewmodel.support_point != null, "und ihren Vorderschaft")
+
+	figure._animation._process(1.0 / 60.0)
+
+	for entry in [
+		{
+			hand = HealthSystem.Part.RIGHT_ARM,
+			point = figure.weapon.viewmodel.grip_point,
+			label = "die rechte Hand liegt am Griff",
+		},
+		{
+			hand = HealthSystem.Part.LEFT_ARM,
+			point = figure.weapon.viewmodel.support_point,
+			label = "die linke Hand liegt am Vorderschaft",
+		},
+	]:
+		var hand := figure.hand_of(entry.hand)
+		var gap := hand.global_position.distance_to(entry.point.global_position)
+		_check(gap < 0.02, "%s (%.1f mm daneben)" % [entry.label, gap * 1000.0])
+
+	# UND SIE MÜSSEN DORT BLEIBEN, WENN DIE FIGUR WOANDERS STEHT.
+	#
+	# Die Rechnung läuft im Raum der Figur. Stünde irgendwo eine
+	# Weltkoordinate darin, ginge sie hier schief — und im Testgelände steht
+	# keine Figur im Ursprung.
+	figure.global_position = Vector3(7.0, 0.0, -33.0)
+	figure.rotation_degrees = Vector3(0.0, 143.0, 0.0)
+	figure._animation._process(1.0 / 60.0)
+	var moved_hand := figure.hand_of(HealthSystem.Part.RIGHT_ARM)
+	var moved_gap := moved_hand.global_position.distance_to(
+		figure.weapon.viewmodel.grip_point.global_position)
+	_check(moved_gap < 0.02,
+		"auch versetzt und gedreht (%.1f mm daneben)" % (moved_gap * 1000.0))
+
 	var arm := figure.joint_of(HealthSystem.Part.RIGHT_ARM)
 	var before := arm.rotation_degrees
 	figure._animation.speed = 4.0
