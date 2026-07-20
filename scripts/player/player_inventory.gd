@@ -165,22 +165,51 @@ func equip_weapon(stack: ItemStack) -> bool:
 	return true
 
 
-## Alle Waffen, die der Spieler dabei hat — einschliesslich der in der Hand.
+## Alle Waffen, die der Spieler dabei hat.
 ##
-## DIE IN DER HAND GEHOERT DAZU, auch wenn sie nicht im Raster liegt.
-## Vorher fehlte sie: Beim Durchschalten mit Q/E schrumpfte die Liste dadurch
-## bei jedem Wechsel um eins, der Zaehler zeigte auf die falsche Stelle und
-## dieselbe Waffe kam zweimal hintereinander dran.
+## ---------------------------------------------------------------------------
+## DREI ORTE, NICHT ZWEI
+##
+## Eine Waffe kann an drei Stellen sein, und alle drei gehoeren in diese Liste:
+##
+##   1. im Raster (Taschen oder Rucksack)
+##   2. in der Hand — `equipped_weapon`
+##   3. AUF DEM ANDEREN WAFFENPLATZ, also umgehaengt statt eingepackt
+##
+## Der dritte Fall fehlte, und mit zwei Waffen faellt das nicht auf: Eine ist
+## in der Hand, die andere im Raster. Erst ab der dritten steckt eine dauerhaft
+## auf dem freien Platz — `assign_weapon()` legt sie dorthin und NICHT ins
+## Raster zurueck.
+##
+## Im Testgelaende mit Gewehr, Flinte und Pistole hiess das: Die Liste
+## schrumpfte auf zwei, das Durchschalten mit Q/E pendelte zwischen Gewehr und
+## Flinte, und die Pistole kam nie wieder. Sie war nicht verloren — sie hing
+## am Koerper und wurde nur nicht mitgezaehlt.
 ##
 ## Die Reihenfolge ist nach ID sortiert und damit stabil. Ohne das haengt sie
-## davon ab, welche Waffe gerade im Raster liegt und welche nicht — und dann
-## springt das Durchschalten bei jedem Wechsel neu durcheinander.
+## davon ab, welche Waffe gerade wo liegt — und dann springt das Durchschalten
+## bei jedem Wechsel neu durcheinander.
 func get_carried_weapons() -> Array[ItemStack]:
 	var result: Array[ItemStack] = []
+	var seen: Dictionary = {}
+
 	for stack in grid.get_all_stacks():
-		if stack.get_data() is WeaponData:
+		if stack.get_data() is WeaponData and not seen.has(stack.instance_id):
+			seen[stack.instance_id] = true
 			result.append(stack)
-	if equipped_weapon != null:
+
+	# Die Waffenplaetze am Koerper. Die Waffe in der Hand steht ebenfalls auf
+	# einem davon, deshalb der Abgleich ueber `instance_id` — sonst kaeme sie
+	# doppelt vor und das Durchschalten bliebe an ihr haengen.
+	if equipment != null:
+		for slot: ItemData.EquipSlot in [ItemData.EquipSlot.PRIMARY,
+				ItemData.EquipSlot.SECONDARY]:
+			var held := equipment.get_item(slot)
+			if held != null and not seen.has(held.instance_id):
+				seen[held.instance_id] = true
+				result.append(held)
+
+	if equipped_weapon != null and not seen.has(equipped_weapon.instance_id):
 		result.append(equipped_weapon)
 
 	result.sort_custom(func(a: ItemStack, b: ItemStack) -> bool:
