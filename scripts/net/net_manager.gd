@@ -22,18 +22,30 @@ signal connection_succeeded
 signal connection_failed
 signal server_disconnected
 
+## Der eigene Avatar ist da — das Level weiß jetzt, wo der Spieler hingehört.
+signal own_avatar_spawned(spawn_position: Vector3)
+
 const DEFAULT_PORT := 24567
 const MAX_PEERS := 8
 ## Die Arena hat vier Spawn-Ecken; mehr Spieler teilen sich die Ecken.
 const SPAWN_COUNT := 4
+
+const AVATAR_SCENE := "res://scenes/net/remote_avatar.tscn"
 
 enum Mode {OFFLINE, SERVER, CLIENT}
 
 var mode: Mode = Mode.OFFLINE
 ## Anzeigename, den der Client nach dem Verbinden beim Server anmeldet.
 var player_name: String = "Spieler"
-## peer_id -> {name, spawn_index, alive, kills, weapon_id}
+## peer_id -> {name, spawn_index, alive, kills, weapon_id, ready}
 var roster: Dictionary = {}
+
+## Das gerade laufende Arena-Level meldet sich hier an. Solange keines
+## angemeldet ist, werden Spawn-RPCs still verworfen — das passiert z. B.
+## in Tests ohne Szene oder während eines Szenenwechsels.
+var arena: Node = null
+## peer_id -> RemoteAvatar, auf jedem Rechner gleich befüllt.
+var avatars: Dictionary = {}
 
 var _console: DevConsole
 
@@ -103,7 +115,104 @@ func shutdown() -> void:
 	multiplayer.multiplayer_peer = null
 	mode = Mode.OFFLINE
 	roster.clear()
+	# Die Figuren der anderen verschwinden mit der Verbindung — sonst stehen
+	# Geister in der Arena, deren Synchronizer ins Leere funken.
+	for peer_id in avatars:
+		if is_instance_valid(avatars[peer_id]):
+			avatars[peer_id].queue_free()
+	avatars.clear()
 	roster_changed.emit()
+
+
+# --- Arena und Avatare ----------------------------------------------------
+
+## Das Arena-Level meldet sich beim Laden an. Auf dem Client stößt das die
+## Bereitmeldung an den Server an — erst DANN spawnt der Server Avatare für
+## diesen Client. Wer sofort beim Verbinden spawnen würde, funkte gegen einen
+## Client, dessen Szene noch gar nicht steht, und die Pakete verpufften.
+func register_arena(level: Node) -> void:
+	arena = level
+	avatars.clear()
+	# Der Server braucht keine Bereitmeldung an sich selbst — er spawnt,
+	# sobald Clients sich melden.
+	if is_client():
+		_client_ready.rpc_id(1)
+
+
+func unregister_arena(level: Node) -> void:
+	if arena == level:
+		arena = null
+		avatars.clear()
+
+
+## Client meldet: Meine Arena-Szene steht, ich kann Spawns empfangen.
+@rpc("any_peer", "reliable")
+func _client_ready() -> void:
+	if not is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	if not roster.has(peer_id) or roster[peer_id].ready:
+		return
+	roster[peer_id].ready = true
+
+	# Erst bekommt der Neue alle, die schon da sind ...
+	for existing_id in avatars:
+		_spawn_avatar.rpc_id(peer_id, existing_id,
+			avatars[existing_id].sync_position, roster[existing_id].name)
+	# ... dann bekommen alle Bereiten (und der Server selbst) den Neuen.
+	var spawn_position := _spawn_point_of(peer_id)
+	_spawn_avatar_here(peer_id, spawn_position, roster[peer_id].name)
+	for other_id in roster:
+		if roster[other_id].ready:
+			_spawn_avatar.rpc_id(other_id, peer_id, spawn_position, roster[peer_id].name)
+
+
+## Wo der Spieler hingehört: seine Ecke, laut Arena-Level.
+func _spawn_point_of(peer_id: int) -> Vector3:
+	if arena != null and arena.has_method("spawn_position"):
+		return arena.spawn_position(roster[peer_id].spawn_index)
+	return Vector3.ZERO
+
+
+@rpc("authority", "reliable")
+func _spawn_avatar(peer_id: int, spawn_position: Vector3, display_name: String) -> void:
+	_spawn_avatar_here(peer_id, spawn_position, display_name)
+
+
+## Baut den Avatar in den lokalen Baum — auf Server wie Client identisch,
+## damit die Synchronizer-Pfade übereinstimmen.
+func _spawn_avatar_here(peer_id: int, spawn_position: Vector3, display_name: String) -> void:
+	if arena == null or avatars.has(peer_id):
+		return
+	var container: Node = arena.get_node_or_null("Avatare")
+	if container == null:
+		return
+	var avatar: RemoteAvatar = (load(AVATAR_SCENE) as PackedScene).instantiate()
+	# Der Name MUSS die Peer-ID sein: Er ist der Knotenpfad, über den die
+	# Synchronizer beider Seiten zueinanderfinden.
+	avatar.name = str(peer_id)
+	avatar.sync_position = spawn_position
+	avatar.display_name = display_name
+	# Autorität VOR dem Einhängen setzen, sonst startet der Synchronizer
+	# mit der falschen und die erste Pose kommt vom falschen Absender.
+	avatar.set_multiplayer_authority(peer_id)
+	container.add_child(avatar)
+	avatars[peer_id] = avatar
+
+	if peer_id == multiplayer.get_unique_id():
+		own_avatar_spawned.emit(spawn_position)
+
+
+@rpc("authority", "reliable")
+func _despawn_avatar(peer_id: int) -> void:
+	_despawn_avatar_here(peer_id)
+
+
+func _despawn_avatar_here(peer_id: int) -> void:
+	if avatars.has(peer_id):
+		if is_instance_valid(avatars[peer_id]):
+			avatars[peer_id].queue_free()
+		avatars.erase(peer_id)
 
 
 # --- Server-Seite ---------------------------------------------------------
@@ -119,6 +228,7 @@ func _on_peer_connected(peer_id: int) -> void:
 		alive = true,
 		kills = 0,
 		weapon_id = "",
+		ready = false,
 	}
 	print("[Net] Peer %d verbunden (Spawn %d)" % [peer_id, roster[peer_id].spawn_index])
 	_push_roster()
@@ -128,6 +238,8 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	if not is_server():
 		return
 	roster.erase(peer_id)
+	_despawn_avatar_here(peer_id)
+	_despawn_avatar.rpc(peer_id)
 	print("[Net] Peer %d getrennt" % peer_id)
 	_push_roster()
 

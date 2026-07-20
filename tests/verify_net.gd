@@ -24,9 +24,14 @@ const CONNECT_RETRY_MS := 2000
 const MAX_CONNECT_ATTEMPTS := 5
 const OVERALL_TIMEOUT_MS := 40000
 
-enum Stage {BOOT, CONNECT, WAIT_ROSTER, DONE}
+enum Stage {BOOT, CONNECT, WAIT_ROSTER, WAIT_AVATAR, DONE}
 
 var _net: Node
+var _arena: Node3D
+## Wo der Server den eigenen Avatar hingestellt hat — festgehalten im Moment
+## des Spawns. Später überschreibt die NetSync-Brücke sync_position laufend
+## mit der echten Spielerposition, dann ist der Spawn-Wert nicht mehr ablesbar.
+var _spawned_at := Vector3.INF
 var _failed := 0
 var _passed := 0
 var _stage: Stage = Stage.BOOT
@@ -124,7 +129,13 @@ func _process(_delta: float) -> bool:
 			# wer auf die erste prüft, testet gegen einen Wettlauf.
 			var my_id: int = _net.local_peer_id()
 			if _net.roster.has(my_id) and _net.roster[my_id].name == _net.player_name:
-				_run_wire_checks()
+				_run_roster_checks()
+				_enter_arena()
+				_next_stage(Stage.WAIT_AVATAR)
+		Stage.WAIT_AVATAR:
+			if _net.avatars.has(_net.local_peer_id()) \
+					and _arena.get_node_or_null("Player") != null:
+				_run_avatar_checks()
 				return _finish()
 		Stage.DONE:
 			return true
@@ -156,7 +167,7 @@ func _drive_connect() -> void:
 				_net.shutdown()
 
 
-func _run_wire_checks() -> void:
+func _run_roster_checks() -> void:
 	var my_id: int = _net.local_peer_id()
 	_check(my_id > 1, "Eigene Peer-ID ist vergeben (%d)" % my_id)
 	_check(_net.is_client(), "Modus ist Client")
@@ -166,6 +177,46 @@ func _run_wire_checks() -> void:
 	_check(entry.name == "Spieler", "Anzeigename kam über die Leitung an (%s)" % entry.name)
 	_check(entry.alive == true, "Frisch verbunden heißt lebendig")
 	_check(entry.kills == 0, "Killzähler beginnt bei null")
+
+
+## Baut die Arena in den Testbaum — wie es der Bootstrap nach dem Verbinden
+## täte. Erst DANACH meldet sich der Client bereit, und erst dann darf der
+## Server Avatare für ihn spawnen.
+func _enter_arena() -> void:
+	var packed: PackedScene = load("res://scenes/levels/arena_beta.tscn")
+	_check(packed != null, "Arena-Szene lädt")
+	_net.own_avatar_spawned.connect(func(at: Vector3) -> void: _spawned_at = at)
+	_arena = packed.instantiate()
+	root.add_child(_arena)
+	# Das Level meldet sich in _ready() selbst bei Net an — genau dieser Weg
+	# (register_arena -> _client_ready -> Server spawnt) wird hier getestet.
+
+
+func _run_avatar_checks() -> void:
+	var my_id: int = _net.local_peer_id()
+	var avatar: Node3D = _net.avatars[my_id]
+	_check(avatar.get_multiplayer_authority() == my_id,
+		"Eigener Avatar gehört dem eigenen Peer")
+	_check(avatar.get_node_or_null("Koerper") == null,
+		"Eigener Avatar bleibt körperlos (nur Transport)")
+
+	# Der Server hat die Ecke aus dem Roster benutzt — der Avatar muss an
+	# genau dem Marker gespawnt sein, den das Level für diesen Index kennt.
+	var expected: Vector3 = _arena.spawn_position(_net.roster[my_id].spawn_index)
+	_check(_spawned_at.distance_to(expected) < 0.01,
+		"Avatar wurde an der zugewiesenen Ecke gespawnt")
+
+	var player := _arena.get_node_or_null("Player") as Node3D
+	_check(player != null, "Lokaler Spieler wurde in die Arena gestellt")
+	if player != null:
+		_check(player.global_position.distance_to(expected) < 0.5,
+			"Spieler steht an seiner Ecke")
+		_check(player.get_node_or_null("NetSync") != null,
+			"NetSync-Brücke hängt am Spieler")
+
+	var benches := _arena.get_node("Werkbaenke").get_child_count()
+	_check(benches == 4, "Vier Werkbänke stehen an den Spawns (%d)" % benches)
+	_check(_arena.get_node("Spawns").get_child_count() == 4, "Vier Spawn-Ecken")
 
 	_net.shutdown()
 	_check(not _net.is_multiplayer(), "Trennen setzt den Modus zurück")
