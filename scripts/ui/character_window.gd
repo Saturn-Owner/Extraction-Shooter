@@ -17,9 +17,9 @@
 ## bis Rot. Eine Zeichenroutine, zwei Bedeutungen — und der Spieler sieht
 ## sofort, dass es derselbe Körper ist.
 ##
-## Die Figur ist selbst gezeichnet, kein 3D-Modell: sieben Umrisse, die
-## aneinanderstossen und zusammen eine menschliche Silhouette ergeben. Ein
-## richtiges Modell kommt, wenn es Charaktermodelle gibt.
+## Die Figur ist selbst gezeichnet, kein 3D-Modell: Sieben Flächen genügen,
+## um Kopf, Rumpf, Arme und Beine zu unterscheiden. Ein richtiges Modell
+## kommt, wenn es Charaktermodelle gibt.
 class_name CharacterWindow
 extends Control
 
@@ -333,68 +333,26 @@ func _refresh_slots() -> void:
 # Die Figur
 # ---------------------------------------------------------------------------
 
-## Die Umrisse der Körperteile, in Anteilen der Zeichenfläche.
+## Wo die Körperteile liegen, in Anteilen der Zeichenfläche.
 ##
-## Vorher waren das sieben Rechtecke — verständlich, aber es sah aus wie ein
-## Bauplan, nicht wie ein Mensch. Die Flächen stossen bewusst aneinander:
-## Zwischen Brust und Bauch soll keine Lücke klaffen, sonst zerfällt der
-## Körper optisch in Einzelteile.
-##
-## Links und rechts sind aus SICHT DES SPIELERS gemeint, also gespiegelt zum
-## Bild — die Figur schaut einen an. Ein Treffer am linken Arm leuchtet damit
-## rechts im Fenster auf, so wie im Spiegel.
-const BODY_SHAPES := {
-	HealthSystem.Part.HEAD: [
-		Vector2(0.445, 0.020), Vector2(0.555, 0.020), Vector2(0.585, 0.055),
-		Vector2(0.575, 0.105), Vector2(0.540, 0.130), Vector2(0.540, 0.152),
-		Vector2(0.460, 0.152), Vector2(0.460, 0.130), Vector2(0.425, 0.105),
-		Vector2(0.415, 0.055),
-	],
-	HealthSystem.Part.CHEST: [
-		Vector2(0.460, 0.150), Vector2(0.540, 0.150), Vector2(0.680, 0.200),
-		Vector2(0.700, 0.245), Vector2(0.672, 0.400), Vector2(0.328, 0.400),
-		Vector2(0.300, 0.245), Vector2(0.320, 0.200),
-	],
-	HealthSystem.Part.STOMACH: [
-		Vector2(0.328, 0.400), Vector2(0.672, 0.400), Vector2(0.660, 0.505),
-		Vector2(0.640, 0.560), Vector2(0.360, 0.560), Vector2(0.340, 0.505),
-	],
-	HealthSystem.Part.RIGHT_ARM: [
-		Vector2(0.320, 0.200), Vector2(0.300, 0.245), Vector2(0.328, 0.400),
-		Vector2(0.315, 0.470), Vector2(0.290, 0.560), Vector2(0.205, 0.545),
-		Vector2(0.215, 0.400), Vector2(0.230, 0.250),
-	],
-	HealthSystem.Part.LEFT_ARM: [
-		Vector2(0.680, 0.200), Vector2(0.770, 0.250), Vector2(0.785, 0.400),
-		Vector2(0.795, 0.545), Vector2(0.710, 0.560), Vector2(0.685, 0.470),
-		Vector2(0.672, 0.400), Vector2(0.700, 0.245),
-	],
-	HealthSystem.Part.RIGHT_LEG: [
-		Vector2(0.360, 0.560), Vector2(0.496, 0.560), Vector2(0.496, 0.760),
-		Vector2(0.470, 0.940), Vector2(0.475, 0.985), Vector2(0.375, 0.985),
-		Vector2(0.372, 0.940), Vector2(0.348, 0.760),
-	],
-	HealthSystem.Part.LEFT_LEG: [
-		Vector2(0.504, 0.560), Vector2(0.640, 0.560), Vector2(0.652, 0.760),
-		Vector2(0.628, 0.940), Vector2(0.625, 0.985), Vector2(0.525, 0.985),
-		Vector2(0.530, 0.940), Vector2(0.504, 0.760),
-	],
+## Sieben Rechtecke. Es gab zwischendurch eine Silhouette aus Polygonen —
+## sie sah menschlicher aus, aber Lucas wollte die schlichte Fassung zurück.
+## Für eine Anzeige, die vor allem lesbar sein muss, ist sie auch die
+## ehrlichere: klare Flächen, klare Zahlen, nichts überlappt.
+const BODY_RECTS := {
+	HealthSystem.Part.HEAD: Rect2(0.38, 0.02, 0.24, 0.13),
+	HealthSystem.Part.CHEST: Rect2(0.30, 0.17, 0.40, 0.22),
+	HealthSystem.Part.STOMACH: Rect2(0.32, 0.40, 0.36, 0.16),
+	HealthSystem.Part.LEFT_ARM: Rect2(0.11, 0.17, 0.17, 0.34),
+	HealthSystem.Part.RIGHT_ARM: Rect2(0.72, 0.17, 0.17, 0.34),
+	HealthSystem.Part.LEFT_LEG: Rect2(0.30, 0.58, 0.18, 0.40),
+	HealthSystem.Part.RIGHT_LEG: Rect2(0.52, 0.58, 0.18, 0.40),
 }
 
 
-func _poly_for(part: HealthSystem.Part) -> PackedVector2Array:
-	var scaled := PackedVector2Array()
-	for point: Vector2 in BODY_SHAPES[part]:
-		scaled.append(point * _figure.size)
-	return scaled
-
-
-## Der Mittelpunkt einer Fläche — dorthin kommt die Zahl.
-func _center_of(poly: PackedVector2Array) -> Vector2:
-	var sum := Vector2.ZERO
-	for point: Vector2 in poly:
-		sum += point
-	return sum / maxf(1.0, float(poly.size()))
+func _rect_for(part: HealthSystem.Part) -> Rect2:
+	var r: Rect2 = BODY_RECTS[part]
+	return Rect2(r.position * _figure.size, r.size * _figure.size)
 
 
 func _draw_figure() -> void:
@@ -404,8 +362,8 @@ func _draw_figure() -> void:
 	var font := ThemeDB.fallback_font
 	var show_health := _tab == Tab.GESUNDHEIT
 
-	for part: HealthSystem.Part in BODY_SHAPES:
-		var poly := _poly_for(part)
+	for part: HealthSystem.Part in BODY_RECTS:
+		var rect := _rect_for(part)
 		var ratio := player.health.get_ratio(part)
 
 		# Unter "Ausruestung" neutral, unter "Gesundheit" nach Zustand.
@@ -414,20 +372,18 @@ func _draw_figure() -> void:
 		var fill := COLOR_NEUTRAL
 		if show_health or ratio <= 0.0:
 			fill = _color_for(ratio)
-		_figure.draw_colored_polygon(poly, fill)
+		_figure.draw_rect(rect, fill)
 
 		var selected: bool = show_health and part == _selected
-		var outline := poly.duplicate()
-		outline.append(poly[0])
-		_figure.draw_polyline(outline, COLOR_SELECTED if selected else COLOR_OUTLINE,
-			2.0 if selected else 1.0, true)
+		_figure.draw_rect(rect, COLOR_SELECTED if selected else COLOR_OUTLINE,
+			false, 2.0 if selected else 1.0)
 
 		if not show_health:
 			continue
 
 		var text := "%d" % roundi(player.health.get_hp(part))
 		var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-		var pos := _center_of(poly) + Vector2(-width * 0.5, 4.0)
+		var pos := rect.position + Vector2((rect.size.x - width) * 0.5, rect.size.y * 0.5 + 4.0)
 		_figure.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 			Color(0.95, 0.96, 0.97) if ratio > 0.0 else Color(0.62, 0.24, 0.20))
 
@@ -447,8 +403,8 @@ func _on_figure_input(event: InputEvent) -> void:
 	if button == null or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT:
 		return
 
-	for part: HealthSystem.Part in BODY_SHAPES:
-		if Geometry2D.is_point_in_polygon(button.position, _poly_for(part)):
+	for part: HealthSystem.Part in BODY_RECTS:
+		if _rect_for(part).has_point(button.position):
 			_selected = part
 			_figure.queue_redraw()
 			return
