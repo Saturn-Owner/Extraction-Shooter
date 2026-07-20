@@ -183,7 +183,7 @@ display_name = "Ausgang Sued"
 [node name="AusgangKlippe" parent="Ausgaenge" instance=ExtResource("4_extraction")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 0, -34)
 required_time = 5.0
-required_item_id = &"backpack_small"
+required_item_id = &"backpack_wander"
 display_name = "Vereiste Klippe"
 
 [node name="Player" parent="." instance=ExtResource("1_player")]
