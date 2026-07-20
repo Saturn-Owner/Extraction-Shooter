@@ -134,6 +134,9 @@ var is_aiming: bool = false
 ## Belastung durch den eigenen Muendungsknall. Wird in _ready() angelegt.
 var muzzle_blast: MuzzleBlast
 
+## Schritte und Atmen. Ebenfalls in _ready() angelegt.
+var sounds: PlayerSounds
+
 ## Sichtfeld aus der Szene, auf das nach dem Zielen zurueckgekehrt wird.
 var _base_fov: float = 75.0
 
@@ -185,6 +188,13 @@ func _ready() -> void:
 		if weapon_view != null:
 			weapon_view.attach_weapon(weapon)
 			weapon.set_visual_muzzle(weapon_view.get_muzzle_point())
+	# Schritte und Atmen. Ebenfalls im Code erzeugt, aus demselben Grund wie
+	# der Muendungsknall: kein Eingriff in player.tscn.
+	sounds = PlayerSounds.new()
+	sounds.name = "Geraeusche"
+	add_child(sounds)
+	sounds.setup(self)
+
 	if inventory != null:
 		inventory.changed.connect(_on_inventory_changed)
 		_on_inventory_changed()
