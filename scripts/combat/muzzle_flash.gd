@@ -74,6 +74,9 @@ func _build_particles() -> void:
 	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	material.albedo_color = COLOR
+	# Weicher Fleck statt hartem Viereck. Bei Dauerfeuer lagen sonst lauter
+	# gelbe Kloetze uebereinander im Bild.
+	material.albedo_texture = PowderSmoke.make_soft_dot()
 	material.emission_enabled = true
 	material.emission = COLOR
 	material.emission_energy_multiplier = 4.0

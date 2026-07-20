@@ -48,6 +48,9 @@ var _weapon_node: Node3D
 
 ## Der helle Schleier. Wird selbst angelegt.
 var overlay: BlastOverlay
+
+## Der Pulverdampf. Ebenfalls selbst angelegt.
+var smoke_cloud: PowderSmoke
 var _time_since_shot: float = 999.0
 var _shake_time: float = 0.0
 
@@ -85,6 +88,10 @@ func _ready() -> void:
 	overlay = BlastOverlay.new()
 	overlay.name = "BlastOverlay"
 	add_child(overlay)
+
+	smoke_cloud = PowderSmoke.new()
+	smoke_cloud.name = "PowderSmoke"
+	add_child(smoke_cloud)
 
 	for noise in [_noise_pitch, _noise_yaw, _noise_roll]:
 		noise.frequency = NOISE_FREQUENCY
@@ -197,6 +204,23 @@ func _process(delta: float) -> void:
 	if overlay != null:
 		overlay.set_alpha(flash * config.flash_alpha)
 
+	_update_smoke()
+
+
+## Haelt den Dampf an der Muendung. Die Schwaden selbst bleiben stehen.
+func _update_smoke() -> void:
+	if smoke_cloud == null:
+		return
+	if _weapon == null:
+		smoke_cloud.emitting = false
+		return
+
+	# Der sichtbare Muendungspunkt wandert mit dem Modell und mit einem
+	# angebauten Schalldaempfer — deshalb von der Waffe erfragen statt zu raten.
+	var muzzle := _weapon.get_shot_origin()
+	var forward := _camera.global_basis if _camera != null else Basis.IDENTITY
+	smoke_cloud.follow(muzzle, forward, smoke)
+
 
 ## Setzt das Wackeln auf die Kamera.
 ##
@@ -273,6 +297,8 @@ func reset() -> void:
 	apply_shake()
 	if overlay != null:
 		overlay.set_alpha(0.0)
+	if smoke_cloud != null:
+		smoke_cloud.emitting = false
 
 
 func _load_config() -> MuzzleBlastData:

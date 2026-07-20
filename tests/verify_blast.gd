@@ -407,4 +407,32 @@ func _test_in_level() -> void:
 			"aber nie mehr als eingestellt (%.2f von %.2f)"
 				% [blast.overlay.get_alpha(), blast.config.flash_alpha])
 
+	# --- Der Pulverdampf ---
+	_check(blast.smoke_cloud != null, "der Pulverdampf ist da")
+	if blast.smoke_cloud != null:
+		# DIE WICHTIGSTE EIGENSCHAFT. Mit local_coords = true klebten die
+		# Schwaden an der Kamera und zögen mit jedem Blick mit — man bekäme sie
+		# durch nichts los, und aus der Mechanik "tritt zur Seite, dann siehst
+		# du wieder" würde ein Filter, den man für einen Fehler hält.
+		_check(not blast.smoke_cloud.local_coords,
+			"die Schwaden bleiben in der Welt stehen, statt an der Kamera zu kleben")
+
+		_check(blast.smoke_cloud.amount <= PowderSmoke.MAX_PARTICLES,
+			"die Partikelzahl ist gedeckelt (%d)" % blast.smoke_cloud.amount)
+
+		# Ohne grosszügige Hülle schneidet Godot die abgedrifteten Schwaden weg.
+		_check(blast.smoke_cloud.visibility_aabb.size.length() > 5.0,
+			"die Sichtbarkeitshülle ist gross genug (%.1f m)"
+				% blast.smoke_cloud.visibility_aabb.size.length())
+
+		blast.reset()
+		blast._process(1.0 / 60.0)
+		_check(not blast.smoke_cloud.emitting, "ohne Belastung raucht nichts")
+
+		blast.smoke = 1.0
+		blast._process(1.0 / 60.0)
+		_check(blast.smoke_cloud.emitting, "bei voller Belastung raucht es")
+		_check(blast.smoke_cloud.amount_ratio > 0.9,
+			"und zwar dicht (%.2f)" % blast.smoke_cloud.amount_ratio)
+
 	player.queue_free()
