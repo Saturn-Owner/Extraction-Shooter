@@ -75,6 +75,8 @@ $suites = @(
     "verify_ballistics",
     "verify_feedback",
     "verify_loadout",
+    "verify_raid",
+    "verify_health",
     "verify_weapon_handling",
     "verify_attachments",
     "verify_workbench",
@@ -98,7 +100,18 @@ foreach ($suite in $suites) {
     $summary = ($lines | Select-String -Pattern "bestanden|ERGEBNIS" | Select-Object -Last 1)
     $summaryText = if ($summary) { $summary.ToString().Trim() } else { "(keine Zusammenfassung)" }
 
-    if ($run.ExitCode -eq 0) {
+    # Ein Skriptfehler kann eine Pruefung ueberspringen, ohne sie scheitern zu
+    # lassen - die Suite meldet dann stillschweigend weniger Pruefungen und
+    # bleibt gruen. Genau so blieb ein Parserfehler im Loot-Fenster unbemerkt.
+    $scriptErrors = $lines | Select-String -Pattern "SCRIPT ERROR"
+
+    if ($run.ExitCode -eq 0 -and $scriptErrors) {
+        Write-Host "FEHLER   $summaryText (Skriptfehler trotz gruener Pruefungen)" -ForegroundColor Red
+        $failed += $suite
+        $scriptErrors | Select-Object -First 5 | ForEach-Object {
+            Write-Host "    $($_.ToString().Trim())" -ForegroundColor DarkRed
+        }
+    } elseif ($run.ExitCode -eq 0) {
         Write-Host "OK   $summaryText" -ForegroundColor Green
     } else {
         Write-Host "FEHLER   $summaryText" -ForegroundColor Red

@@ -30,6 +30,17 @@ enum Category {
 	ATTACHMENT,  ## Anbauteile für Waffen: Visiere, Mündungen, Griffe
 }
 
+## Seltenheitsstufe. Bestimmt Hintergrundfarbe im Inventar und den Klang
+## beim Fund. Wird aus dem Preis ABGELEITET, nicht pro Item gepflegt —
+## sonst müsste man bei jeder Preisänderung daran denken.
+enum Rarity {
+	COMMON,     ## Krimskrams, Pistolenmunition — grau, kein Fundgeräusch
+	UNCOMMON,   ## brauchbare Ausrüstung — gedämpftes Grün
+	RARE,       ## gute Munition, solide Waffen — Blau
+	EPIC,       ## Platten, hochwertige Munition — Gold
+	LEGENDARY,  ## die teuersten Waffen — Rot, der Fund, für den man bleibt
+}
+
 ## Eindeutige ID, z.B. "ammo_556x45_m995". Wird zum Speichern benutzt —
 ## darum NIEMALS nachträglich ändern, sonst brechen alte Spielstände.
 @export var id: StringName = &""
@@ -41,6 +52,31 @@ enum Category {
 @export_multiline var description: String = ""
 
 @export var category: Category = Category.MISC
+
+## In welchen Ausrüstungsplatz dieser Gegenstand gehört.
+##
+## Getrennt von `category`, weil beides Verschiedenes beantwortet:
+## Die Kategorie sagt, WAS es ist (für Händler und Sortierung), der Platz
+## sagt, WO man es trägt. Eine Schutzplatte und ein Plattenträger sind
+## unterschiedliche Kategorien, aber beide gehören an den Oberkörper.
+enum EquipSlot {
+	NONE,      ## nicht anlegbar, liegt nur im Inventar
+	HEAD,      ## Helm
+	CHEST,     ## Schutzplatte, Plattenträger
+	BELT,      ## Gürtel
+	SHIRT,     ## Oberbekleidung
+	PANTS,     ## Hose
+	BOOTS,     ## Schuhe
+	BACKPACK,  ## Rucksack
+	PRIMARY,   ## Primärwaffe — Taste 1
+	SECONDARY, ## Sekundärwaffe — Taste 2
+}
+
+@export var equip_slot: EquipSlot = EquipSlot.NONE
+
+## Wärmedämmung. Zählt nur, solange der Gegenstand ANGELEGT ist —
+## eine Jacke im Rucksack wärmt niemanden.
+@export_range(0.0, 10.0) var insulation: float = 0.0
 
 ## Icon im Inventar. Darf am Anfang leer bleiben (Graybox).
 @export var icon: Texture2D
@@ -90,6 +126,95 @@ func get_grid_area() -> int:
 ## Ob dieser Gegenstand andere aufnehmen kann (Rucksack, Weste, Tasche).
 func is_container() -> bool:
 	return container_width > 0 and container_height > 0
+
+
+## Wie lange es dauert, diesen Gegenstand in einer Kiste zu finden.
+##
+## Bewusst berechnet statt pro Item gepflegt — bei hunderten Gegenständen
+## würde niemand diese Werte aktuell halten, und sie wären inkonsistent.
+##
+## Zwei Einflüsse:
+##   GRÖSSE     Ein Sturmgewehr ist sperrig und braucht länger als eine
+##              einzelne Patrone.
+##   SELTENHEIT Teure Dinge liegen nicht obenauf. Der Preis ist dabei ein
+##              guter Näherungswert für Seltenheit, weil er ohnehin schon
+##              gepflegt wird.
+##
+## Beispiele mit den aktuellen Daten:
+##   9mm FMJ (1x1, 42)        ~0.7 s
+##   M995 (1x1, 780)          ~1.3 s
+##   Schutzplatte (2x3, 18500) ~3.3 s
+##   AR-15 (5x2, 24000)       ~4.4 s
+func get_search_time() -> float:
+	var size_part := float(get_grid_area()) * 0.25
+
+	# Zehnerlogarithmus des Preises, damit teure Ausreisser die Zeit nicht
+	# ins Absurde treiben. Ab etwa 30 Spielwaehrung beginnt der Zuschlag.
+	var rarity_part := 0.0
+	if base_price > 0:
+		rarity_part = clampf(log(float(base_price)) / log(10.0) - 1.5, 0.0, 3.0) * 0.5
+
+	return clampf(0.4 + size_part + rarity_part, 0.4, 7.0)
+
+
+## Seltenheit aus dem Preis abgeleitet.
+##
+## Bewusst am Preis festgemacht statt als eigenes Feld: Der Preis wird
+## ohnehin gepflegt, und ein Gegenstand, der viel wert ist, IST selten.
+## Zwei getrennte Felder würden früher oder später auseinanderlaufen.
+##
+## Die Grenzen orientieren sich an den vorhandenen Daten:
+##   9mm FMJ 42         -> COMMON
+##   M855A1 260         -> UNCOMMON
+##   M995 780           -> RARE
+##   Schutzplatte 18500 -> EPIC
+##   AR-15 24000        -> LEGENDARY
+##
+## Die oberste Stufe ist bewusst eng: Vorher galten 14 von 43 Gegenständen
+## als hoechste Stufe, weil jede Waffe teuer ist. Wenn fast alles glaenzt,
+## bedeutet Glaenzen nichts mehr.
+func get_rarity() -> Rarity:
+	if base_price >= 20000:
+		return Rarity.LEGENDARY
+	if base_price >= 5000:
+		return Rarity.EPIC
+	if base_price >= 500:
+		return Rarity.RARE
+	if base_price >= 150:
+		return Rarity.UNCOMMON
+	return Rarity.COMMON
+
+
+## Ob dieser Gegenstand einen Fund wert ist, fuer den man stehenbleibt.
+## Steuert die auffaelligere Fundanimation.
+func is_high_value() -> bool:
+	return get_rarity() >= Rarity.EPIC
+
+
+## Kurze Typbezeichnung für die Infoanzeige. Basisklasse: die Kategorie.
+func get_type_label() -> String:
+	match category:
+		Category.AMMO: return "Munition"
+		Category.WEAPON: return "Waffe"
+		Category.ARMOR_PLATE: return "Schutzplatte"
+		Category.ARMOR_RIG: return "Plattentraeger"
+		Category.CLOTHING: return "Kleidung"
+		Category.BACKPACK: return "Rucksack"
+		Category.MEDICAL: return "Medizin"
+		Category.FOOD: return "Verpflegung"
+		Category.KEY: return "Schluessel"
+		Category.TOOL: return "Werkzeug"
+	return "Gegenstand"
+
+
+## Zeilen für die Infoanzeige beim Darüberfahren.
+## Unterklassen hängen ihre eigenen Werte an.
+func get_info_lines() -> Array[String]:
+	var lines: Array[String] = []
+	lines.append("Gewicht:  %.2f kg" % weight_kg)
+	lines.append("Platz:    %dx%d" % [grid_width, grid_height])
+	lines.append("Wert:     %d" % base_price)
+	return lines
 
 
 ## Kleine Selbstprüfung. Gibt eine Liste von Problemen zurück,

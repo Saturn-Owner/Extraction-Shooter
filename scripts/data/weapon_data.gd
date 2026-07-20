@@ -201,6 +201,21 @@ func has_own_viewmodel() -> bool:
 	return viewmodel != null
 
 
+func get_type_label() -> String:
+	return "Waffe  —  %s" % caliber
+
+
+func get_info_lines() -> Array[String]:
+	var lines: Array[String] = []
+	lines.append("Magazin:      %d Schuss" % magazine_size)
+	lines.append("Feuerrate:    %d /min" % fire_rate_rpm)
+	lines.append("Praezision:   %.1f MOA" % accuracy_moa)
+	lines.append("Rueckstoss:   %.0f hoch / %.0f seitlich" % [recoil_vertical, recoil_horizontal])
+	lines.append("Ergonomie:    %d von 100" % ergonomics)
+	lines.append_array(super())
+	return lines
+
+
 func validate() -> Array[String]:
 	var problems := super()
 	if caliber == &"":

@@ -681,11 +681,59 @@ func load_rounds(count: int) -> int:
 	rounds_in_magazine += loaded
 	_chamber_if_possible()
 	_shots_since_release = 0
-	# Bewusst ohne Sound: Der synthetische Nachladeklang klang schlecht.
-	# Sobald echte Aufnahmen vorliegen, hier wieder einhaengen.
 	if loaded > 0:
+		_play_reload()
 		reloaded.emit(rounds_in_magazine)
 	return loaded
+
+
+## Stellt einen gemerkten Magazinzustand wieder her — Magazin UND Lauf.
+##
+## ---------------------------------------------------------------------------
+## WARUM NICHT load_rounds()
+##
+## load_rounds() ist zum NACHLADEN da und tut deshalb zweierlei zuviel: Es
+## kammert nach (`_chamber_if_possible`) und es spielt das Nachladegeraeusch.
+##
+## Beides ist beim Waffenwechsel falsch. Das Nachkammern nimmt eine Patrone
+## aus dem Magazin und legt sie in den Lauf — bei einer Waffe, die schon eine
+## im Lauf hatte, kommt dadurch jedes Mal eine Patrone zu wenig im Magazin an.
+## Nach zehn Wechseln fehlen zehn Schuss, ohne dass jemand geschossen haette.
+## Und das Geraeusch gehoert zum Nachladen, nicht zum Griff an die Schulter.
+##
+## Diese Funktion setzt den Zustand deshalb schlicht, ohne Nebenwirkung.
+func restore_magazine(rounds: int, chambered: bool) -> void:
+	if data == null:
+		return
+	rounds_in_magazine = clampi(rounds, 0, data.magazine_size)
+	round_chambered = chambered
+	_shots_since_release = 0
+
+
+## Spielt die Nachladegeraeusche als Folge ab: Magazin raus, Magazin rein,
+## durchladen — mit den Pausen dazwischen, die eine echte Bewegung braucht.
+##
+## Bewusst NICHT eine einzige lange Datei: Die Abstaende sollen spaeter zur
+## Nachladedauer der jeweiligen Waffe passen, und eine leere MP5 laedt
+## anders nach als ein Scharfschuetzengewehr.
+##
+## Fehlt eine Datei, passiert nichts. Stille ist besser als ein falscher
+## Klang — der synthetische Versuch klang schlecht und war deshalb lange
+## ganz abgeschaltet.
+func _play_reload() -> void:
+	var steps := WeaponAudio.get_reload_sequence()
+	if steps.is_empty():
+		return
+
+	for step in steps:
+		var stream: AudioStream = step.stream
+		var delay: float = step.delay
+		if delay > 0.0:
+			await get_tree().create_timer(delay).timeout
+		# Waehrend der Pause kann die Waffe weggelegt worden sein.
+		if not is_inside_tree():
+			return
+		_play(stream, randf_range(0.97, 1.03))
 
 
 ## Fuellt das Magazin ohne Munitionsverbrauch.
