@@ -89,6 +89,23 @@ var _shake_time: float = 0.0
 ## die Waffe sonst in den Ursprung springen wuerde.
 var _weapon_home: Vector3 = Vector3.ZERO
 
+## Ruhelage der Kamera, auf die das Ruetteln aufgesetzt wird.
+##
+## ---------------------------------------------------------------------------
+## WARUM DAS NICHT EINFACH NULL IST
+##
+## Hier stand `_camera.position = offset`, also die Annahme, die Kamera sitze
+## im Ursprung ihres Elternknotens. Fuer die erste Person stimmt das.
+##
+## Die Schulterkamera (F5) setzt sie aber 2,8 m nach hinten — und dieses
+## Ruetteln zog sie in jedem Bild wieder auf null zurueck. Die dritte Person
+## sprang dadurch sofort in die erste, ohne dass etwas im Umschalter falsch
+## gewesen waere.
+##
+## Bei der Waffe wurde es von Anfang an richtig gemacht (`_weapon_home +
+## offset`); die Kamera war die Ausnahme.
+var camera_home: Vector3 = Vector3.ZERO
+
 ## Frequenz der Rauschquellen.
 ##
 ## ACHTUNG, HIER LAG EIN FEHLER: FastNoiseLite steht ab Werk auf 0.01. Bei den
@@ -372,7 +389,7 @@ func apply_shake() -> void:
 	)
 
 	_camera.rotation_degrees = angles
-	_camera.position = offset
+	_camera.position = camera_home + offset
 
 	# Dieselbe Bewegung auf die Waffe, sonst schwimmt sie gegenlaeufig im Bild.
 	if _weapon_node != null:

@@ -97,6 +97,20 @@ var is_sprinting: bool = false
 ## Hat die Figur die Waffe im Anschlag am Auge?
 var is_aiming: bool = false
 
+## Ist die Figur gerade in der Luft?
+##
+## ---------------------------------------------------------------------------
+## OHNE DAS RUDERT SIE IM FLUG WEITER
+##
+## Der Schrittzyklus haengt am Tempo, und waagerecht ist man beim Springen
+## genauso schnell wie vorher. Die Beine liefen also munter weiter, waehrend
+## die Figur durch die Luft flog — als wuerde sie auf dem Nichts gehen.
+##
+## `vertical_speed` unterscheidet Steigen von Fallen: Beim Absprung zieht man
+## die Beine an, beim Landen streckt man sie nach vorn.
+var is_airborne: bool = false
+var vertical_speed: float = 0.0
+
 ## Wo die Magazintaschen sitzen: vorn links am Bauch, dicht am Körper.
 ##
 ## In Figurkoordinaten, weil die Hand dorthin greift, egal wie die Figur steht
@@ -292,6 +306,23 @@ const SPRINT_SPEED_BLEND := 6.0
 ## sich duckt, geht in die Knie, er klappt nicht zusammen.
 const CROUCH_LEAN := -4.0
 
+## ---------------------------------------------------------------------------
+## SPRINGEN
+##
+## Beim Steigen die Beine anziehen, beim Fallen nach vorn strecken. Beides
+## nimmt der Kniewinkel auf; der Oberschenkel kommt leicht mit.
+const JUMP_TUCK_KNEE := -55.0    ## angezogen im Steigen
+const JUMP_TUCK_THIGH := 22.0
+const JUMP_REACH_KNEE := -12.0   ## fast gestreckt im Fallen
+const JUMP_REACH_THIGH := -8.0
+
+## Ab dieser Steiggeschwindigkeit gilt der Absprung als voll ausgeprägt.
+const JUMP_FULL_SPEED := 3.5
+
+## Wie schnell in die Sprunghaltung und zurück geblendet wird. Schnell, weil
+## ein Sprung kurz ist — bei 6.0 wäre er vorbei, bevor die Beine oben sind.
+const AIRBORNE_BLEND := 14.0
+
 ## Welche Teile schwingen, und mit welchem Vorzeichen.
 ##
 ## Arme gegen die Beine derselben Seite: Wer rechts vortritt, schwingt den
@@ -314,6 +345,9 @@ var _crouch: float = 0.0
 
 ## Wie sehr die Figur gerade rennt, 0 bis 1. Läuft `is_sprinting` weich nach.
 var _sprint: float = 0.0
+
+## Wie sehr sie gerade in der Luft ist, 0 bis 1.
+var _airborne: float = 0.0
 
 ## Schrittphase in Radiant.
 var _phase: float = 0.0
@@ -369,6 +403,8 @@ func _process(delta: float) -> void:
 	_crouch = move_toward(_crouch, wants_crouch, STANCE_SPEED * delta)
 	var wants_sprint := 1.0 if (alive and is_sprinting) else 0.0
 	_sprint = move_toward(_sprint, wants_sprint, SPRINT_SPEED_BLEND * delta)
+	var wants_air := 1.0 if (alive and is_airborne) else 0.0
+	_airborne = move_toward(_airborne, wants_air, AIRBORNE_BLEND * delta)
 
 	# Die Schrittfrequenz ergibt sich aus dem Tempo, nicht aus einer festen
 	# Zahl — siehe Klassenkopf.
@@ -443,6 +479,7 @@ func _process(delta: float) -> void:
 ## Bei `_crouch = 0` ist die Absenkung null und der Winkel null — es wird also
 ## die Ruhelage geschrieben, und genau das soll passieren.
 func _pose_legs_for_stance() -> void:
+	_pose_legs_for_jump()
 	var thigh := _crouch_knee_angle()
 	for part in [HealthSystem.Part.LEFT_LEG, HealthSystem.Part.RIGHT_LEG]:
 		var joint := character.joint_of(part)
@@ -664,6 +701,31 @@ func _solve_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 ## Vorzeichenwechsel heraus. Ein Knie zeigt nach hinten (negativ), ein
 ## Ellenbogen nach vorn (positiv) — die Figur schaut nach -Z, ein positiver
 ## Ausschlag führt das untere Ende also nach vorn.
+## Zieht die Beine an, solange die Figur in der Luft ist.
+##
+## Ueberlagert den Gehzyklus, statt ihn zu ersetzen: Wer im Lauf abspringt,
+## behaelt seine Schrittstellung und zieht sie nur an. Deshalb wird hier
+## dazugerechnet und nicht gesetzt — beide Werte stehen kurz vorher absolut,
+## also gibt es keinen Aufsummierungsfehler wie beim Ducken.
+func _pose_legs_for_jump() -> void:
+	if _airborne <= 0.001:
+		return
+
+	# Steigen oder Fallen? Beim Absprung angezogen, beim Landen gestreckt.
+	var rising := clampf(vertical_speed / JUMP_FULL_SPEED, 0.0, 1.0)
+	var knee := lerpf(JUMP_REACH_KNEE, JUMP_TUCK_KNEE, rising) * _airborne
+	var thigh := lerpf(JUMP_REACH_THIGH, JUMP_TUCK_THIGH, rising) * _airborne
+
+	for part in [HealthSystem.Part.LEFT_LEG, HealthSystem.Part.RIGHT_LEG]:
+		var joint := character.joint_of(part)
+		if joint == null:
+			continue
+		joint.rotation_degrees.x += thigh
+		var hinge := character.hinge_of(part)
+		if hinge != null:
+			hinge.rotation_degrees.x += knee
+
+
 ## Wie weit der Oberkörper gerade abgesenkt ist. Negativ heisst nach unten.
 func _stance_drop() -> float:
 	return -CROUCH_DROP * _crouch

@@ -33,6 +33,7 @@ enum Behaviour {
 	HOLD,     ## nur halten
 	RELOAD,   ## immer wieder nachladen
 	SHOOT,    ## feuern, bis leer, dann nachladen
+	DRIVEN,   ## nichts von allein — von aussen gesteuert, siehe unten
 }
 
 @export var weapon_id: StringName = &"weapon_rifle_ar15"
@@ -212,7 +213,7 @@ func _process(delta: float) -> void:
 	_update_hold_pose()
 
 	match behaviour:
-		Behaviour.HOLD:
+		Behaviour.HOLD, Behaviour.DRIVEN:
 			pass
 		Behaviour.RELOAD:
 			_tick_reload_loop(delta)
@@ -277,6 +278,52 @@ func _fire() -> void:
 
 	if _rounds <= 0:
 		_resting = rest_seconds
+
+
+## ---------------------------------------------------------------------------
+## VON AUSSEN GESTEUERT — FUER DEN SPIELER
+##
+## Die drei Betriebsarten darueber sind Vorfuehrungen: Sie feuern und laden
+## nach eigenem Takt, damit man im Testgelaende etwas sieht. Der Spieler
+## braucht das Gegenteil — sein Koerper soll zeigen, was seine ECHTE Waffe
+## gerade tut.
+##
+## Deshalb `DRIVEN`: Die Waffe tut von allein gar nichts, und `Weapon` schiebt
+## ueber diese beiden Aufrufe herein, was passiert ist. Es gibt damit weiterhin
+## nur EINE Stelle, die ueber Munition und Nachladen entscheidet — die echte
+## Waffe. Der Koerper stellt nur dar.
+##
+## Genau umgekehrt waere der Fehler: Wenn diese Klasse beim Spieler mitzaehlte,
+## haetten wir zwei Wahrheiten ueber dasselbe Magazin.
+func drive_shot() -> void:
+	if viewmodel == null:
+		return
+	viewmodel.notify_shot()
+	var muzzle := viewmodel.muzzle_point
+	if muzzle != null:
+		var power := WeaponAudio.get_power_for_weapon(data)
+		MuzzleFlash.spawn(_spawn_parent(), muzzle.global_transform, 0.6 + power)
+
+
+func drive_dry_shot() -> void:
+	if viewmodel != null:
+		viewmodel.notify_shot_dry()
+
+
+## Nachladen von aussen: Fortschritt 0 bis 1, negativ heisst fertig.
+func drive_reload(progress: float, from_empty: bool, chamber_only: bool) -> void:
+	if viewmodel == null:
+		return
+	if progress < 0.0:
+		_reloading = false
+		_reload_left = 0.0
+		viewmodel.notify_sequence_ended()
+		return
+	_reloading = true
+	# reload_progress() rechnet aus _reload_left zurueck — hier andersherum
+	# gefuellt, damit Haltung und Hand denselben Wert sehen wie sonst auch.
+	_reload_left = (1.0 - clampf(progress, 0.0, 1.0)) * maxf(0.01, reload_seconds)
+	viewmodel.notify_reload(progress, from_empty, chamber_only)
 
 
 func _start_reload() -> void:

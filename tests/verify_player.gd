@@ -111,22 +111,73 @@ func _test_visible_body() -> void:
 			and PlayerController.HIDDEN_FROM_SELF.has(HealthSystem.Part.CHEST),
 		"genau Kopf und Brust, nicht mehr")
 
-	# Alles andere MUSS sichtbar bleiben. Sonst sieht man wieder nur die
-	# Waffe — der Zustand, den der Koerper gerade beheben soll.
+	# Bauch und Beine MUESSEN sichtbar bleiben. Sonst sieht man beim Blick
+	# nach unten wieder nur die Waffe — der Zustand, den der Koerper beheben
+	# soll.
+	#
+	# Die Arme sind bewusst NICHT dabei: Seit der Koerper eine Waffe haelt,
+	# greifen sie auf Brusthoehe, also 20 cm vor dem Auge, und standen als
+	# grosse Flaechen quer im Bild. Dazu passten sie nicht zur sichtbaren
+	# Waffe, die im Kameraraum woanders haengt.
 	var visible_parts := 0
 	for part: HealthSystem.Part in [HealthSystem.Part.STOMACH,
-			HealthSystem.Part.LEFT_LEG, HealthSystem.Part.RIGHT_LEG,
-			HealthSystem.Part.LEFT_ARM, HealthSystem.Part.RIGHT_ARM]:
+			HealthSystem.Part.LEFT_LEG, HealthSystem.Part.RIGHT_LEG]:
 		for mesh: MeshInstance3D in player.body.meshes_of(part):
 			if (mesh.layers & camera.cull_mask) != 0:
 				visible_parts += 1
-	_check(visible_parts >= 8,
-		"Bauch, Arme und Beine bleiben sichtbar (%d Kaesten)" % visible_parts)
+	_check(visible_parts >= 5,
+		"Bauch und Beine bleiben sichtbar (%d Kaesten)" % visible_parts)
+
+	# --- Der Koerper HAELT die Waffe, wie die Dummys es tun ---
+	#
+	# Ohne sie hingen die Arme an den Seiten, waehrend das Kameramodell davor
+	# schwebte — beim Blick nach unten sah man genau das. Die Waffe am Koerper
+	# ist dieselbe CharacterWeapon wie bei den Figuren im Testgelaende, nur in
+	# der Betriebsart DRIVEN: Sie entscheidet nichts, sie zeigt nur.
+	_check(player.body_weapon != null, "der Koerper haelt eine Waffe")
+	if player.body_weapon != null:
+		var anim := player._body_animation
+		_check(anim.holding_weapon,
+			"die Arme gehoeren an die Waffe statt in den Gehzyklus")
+		_check(anim.grip_target != null and anim.support_target != null,
+			"die Griffpunkte kommen aus dem Waffenmodell")
+
+		if anim.grip_target != null and anim.support_target != null:
+			var right_hand := player.body.hand_of(HealthSystem.Part.RIGHT_ARM)
+			var left_hand := player.body.hand_of(HealthSystem.Part.LEFT_ARM)
+			var to_grip := right_hand.global_position.distance_to(
+				anim.grip_target.global_position)
+			var to_fore := left_hand.global_position.distance_to(
+				anim.support_target.global_position)
+			_check(to_grip < 0.05 and to_fore < 0.05,
+				"beide Haende liegen daran (%.0f / %.0f mm)"
+					% [to_grip * 1000.0, to_fore * 1000.0])
+
+		# Zwei Waffen, eine sichtbar: Vor der Kamera haengt das
+		# WeaponView-Modell. Waere die Koerperwaffe auch sichtbar, haette man
+		# zwei Gewehre leicht versetzt im Bild.
+		var visible_weapon := 0
+		for node in PlayerController._all_children(player.body_weapon):
+			if node is VisualInstance3D:
+				if ((node as VisualInstance3D).layers & camera.cull_mask) != 0:
+					visible_weapon += 1
+		_check(visible_weapon == 0,
+			"und sie bleibt vor der eigenen Kamera verborgen (%d sichtbare Teile)"
+				% visible_weapon)
+
+		_check(player.body_weapon.behaviour == CharacterWeapon.Behaviour.DRIVEN,
+			"sie laeuft nicht von allein, sondern zeigt nur die echte Waffe")
 
 	# --- Ein fremder Schuss trifft ein KOERPERTEIL ---
+	# Gezielt wird auf den KOPF, nicht auf die Brust.
+	#
+	# Vor der Brust liegen jetzt die Arme, weil sie die Waffe halten — ein
+	# Schuss dorthin trifft zuerst den Unterarm. Das ist richtig so und war
+	# der Grund, warum diese Pruefung nach dem Bewaffnen des Koerpers rot
+	# wurde. Der Kopf ist die einzige Zone, vor der nichts steht.
 	var ammo := ItemRegistry.get_item(&"ammo_556x45_m855a1") as AmmoData
-	var chest := player.body.hitbox_of(HealthSystem.Part.CHEST)
-	var target := chest.global_position
+	var head_box := player.body.hitbox_of(HealthSystem.Part.HEAD)
+	var target := head_box.global_position
 	var from := target + Vector3(0.0, 0.0, -6.0)
 	var before := player.health.get_total_hp()
 
@@ -139,9 +190,9 @@ func _test_visible_body() -> void:
 	_check(player.health.get_total_hp() < before,
 		"ein fremder Schuss verletzt ihn (%.0f auf %.0f)"
 			% [before, player.health.get_total_hp()])
-	_check(player.health.get_hp(HealthSystem.Part.CHEST)
-			< HealthSystem.get_max_hp(HealthSystem.Part.CHEST),
-		"und zwar an der Brust, nicht irgendwo")
+	_check(player.health.get_hp(HealthSystem.Part.HEAD)
+			< HealthSystem.get_max_hp(HealthSystem.Part.HEAD),
+		"und zwar am getroffenen Koerperteil, nicht irgendwo")
 
 	# --- Der Geschoss-Ausschluss kennt die Trefferzonen ---
 	#
@@ -162,9 +213,34 @@ func _test_visible_body() -> void:
 	_check(excluded.size() >= boxes + 1,
 		"der Ausschluss deckt Kapsel UND alle Trefferzonen (%d Koerper)"
 			% excluded.size())
-	_check(excluded.has(chest.get_rid()),
-		"die Brustzone des Schuetzen steht darin")
+	_check(excluded.has(head_box.get_rid()),
+		"die Kopfzone des Schuetzen steht darin")
 	probe.queue_free()
+
+	# --- Schulterkamera zum Nachsehen ---
+	#
+	# In der ersten Person steckt die Kamera im Kopf; von dort sieht man vom
+	# eigenen Koerper fast nichts — Kopf, Brust und Arme sind ausgeblendet,
+	# und der Rest liegt unter dem Bildrand. Ohne diese Ansicht liesse sich
+	# gar nicht pruefen, ob Halten, Rennen, Ducken und Springen richtig
+	# aussehen. Sie ist ein Werkzeug, kein Spielmodus.
+	player._toggle_third_person()
+	await process_frame
+	_check(player._third_person, "F5 schaltet in die dritte Person")
+	_check((camera.cull_mask & own_bit) != 0,
+		"dort sieht die Kamera auch Kopf, Brust und Arme")
+	_check(camera.position.z > 1.0,
+		"und steht hinter der Figur (%.1f m)" % camera.position.z)
+	if player.weapon_view != null:
+		_check(not player.weapon_view.visible,
+			"das Kameramodell wird ausgeblendet - sonst schwebt es im Bild")
+
+	player._toggle_third_person()
+	await process_frame
+	_check(not player._third_person and (camera.cull_mask & own_bit) == 0,
+		"und zurueck in die erste Person")
+	if player.weapon_view != null:
+		_check(player.weapon_view.visible, "dort ist das Kameramodell wieder da")
 
 	player.queue_free()
 	floor_body.queue_free()

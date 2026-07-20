@@ -991,14 +991,46 @@ func _test_stances() -> void:
 	figure.aiming = false
 	figure.sprinting = true
 
+	# --- Springen: anziehen im Steigen, strecken im Fallen ---
+	#
+	# Ohne eigene Haltung liefe der Schrittzyklus in der Luft weiter — die
+	# Figur ruderte durch den Sprung, als ginge sie auf dem Nichts.
+	figure.sprinting = false
+	figure._animation.is_airborne = true
+	figure._animation.vertical_speed = 4.0
+	for i in range(90):
+		await process_frame
+	var tucked := figure.hinge_of(HealthSystem.Part.LEFT_LEG).rotation_degrees.x
+
+	figure._animation.vertical_speed = -6.0
+	for i in range(90):
+		await process_frame
+	var reaching := figure.hinge_of(HealthSystem.Part.LEFT_LEG).rotation_degrees.x
+
+	_check(tucked < reaching - 20.0,
+		"im Steigen sind die Beine staerker angezogen als im Fallen (%.0f gegen %.0f Grad)"
+			% [tucked, reaching])
+
+	figure._animation.is_airborne = false
+	figure._animation.vertical_speed = 0.0
+	for i in range(120):
+		await process_frame
+	_check(absf(figure.hinge_of(HealthSystem.Part.LEFT_LEG).rotation_degrees.x) < 1.0,
+		"nach der Landung stehen die Beine wieder gerade")
+
 	# --- Beim Rennen nach VORN, nicht nach hinten ---
 	#
 	# Das Vorzeichen ist nicht dasselbe wie beim Bein: Ein Bein hängt vom
 	# Gelenk nach unten, der Rumpf ragt nach oben. Mit dem Vorzeichen des
 	# Beins lehnte sich die Figur beim Rennen zurück, und im Rendering sah
 	# das aus wie eine Haltung, nur eben die falsche.
+	# Das Rennen ausdruecklich einschalten, statt sich darauf zu verlassen,
+	# dass es von weiter oben noch anliegt. Der Sprungtest davor schaltet es
+	# ab — danach mass dieser Test zweimal dieselbe Haltung und war trotzdem
+	# gruen, bis die Sprungpruefung dazwischenkam.
 	figure.aiming = false
-	for i in range(60):
+	figure.sprinting = true
+	for i in range(120):
 		await process_frame
 	var chest := figure.joint_of(HealthSystem.Part.CHEST)
 	var leaning := chest.global_position.z
