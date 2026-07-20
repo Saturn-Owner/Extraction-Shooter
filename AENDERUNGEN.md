@@ -106,6 +106,69 @@ Startszene. Die neue Karte öffnet man in Godot und drückt **F6**.
 
 ---
 
+## 21.07.2026 — Zweite Karte: Frachthafen
+
+Merge von `feature/karte-frachthafen` nach `main`.
+
+Die alte Karte war ein Platzhalter: 160 × 160 m Boden, aber alles passte in
+50 × 48 m, und der nächste Ausgang lag **10 m vom Spawn** — ein Raid war in
+zwölf Sekunden vorbei, ohne dass man eine Kiste anfassen musste.
+
+### Der Hafen
+
+Eine zweite Karte als eigene Szene, `raid_eisstadt` bleibt erhalten. Nach dem
+Vorbild eines Containerterminals: Wasser und Kai im Norden, acht
+Containerbrücken, zwei begehbare Schiffe, ein Slip, der West- und Ost-Terminal
+trennt, zwölf Containerblocks, Bahnhof, drei Lagerhallen, Werkstor. Rund
+330 × 185 m, 686 Festkörper.
+
+Das Militärloot liegt **nur auf den Schiffen**, 176 m vom Spawn und nur über
+eine Gangway erreichbar — dafür ist der Ausgang dort oben der schnellste.
+Bezahlt wird mit dem Weg, nicht mit dem Timer. Der Frachthafen ist jetzt die
+**Startszene**.
+
+### Container als eigenes Modell
+
+- **Lucas' eigener Entwurf**, aus einer three.js-Vorlage in Godot nachgebaut
+  (`tools/build_container.gd`): geriffelte Wände, dunkler Stahlrahmen mit
+  Eckbeschlägen, in fünf Farben. Über hundert Quader in **einer** Mesh mit zwei
+  Flächen — Anstrich (umfärbbar) und Rahmen (immer dunkel).
+- Ein zwischenzeitlich genutztes fremdes Modell wurde **vollständig entfernt**,
+  weil das Weitergaberecht ungeklärt war. Der Container ist reine Eigenarbeit.
+
+### Weltbausteine und Werkzeuge
+
+- Neu `scripts/world/world_parts.gd` — das Gegenstück zu `ViewmodelParts` für
+  die Welt: `solid()`, `ramp()`, `container()`, `building()` mit Wandöffnungen,
+  plus prozedurales Rauschen mit **Triplanar in Weltkoordinaten** (sonst sähe
+  dieselbe Textur am 6-m-Container und am 330-m-Kai völlig verschieden aus).
+- Boden mit echtem **CC0-Schnee** (ambientCG Snow006).
+- `tools/bake_frachthafen.gd` übersetzt die im Code gebaute Welt in eine echte
+  Szene (2401 Knoten), damit sich die Karte im Editor anfassen lässt, obwohl
+  das Layout aus Daten entsteht. Quelle (`frachthafen_quelle.tscn`) und
+  Ergebnis sind getrennt, sonst überschriebe das Backen seine eigene Vorlage.
+
+### Nebenbei behoben
+
+- **Toter Ausgang auf der alten Karte:** `AusgangKlippe` verlangte
+  `backpack_small` — ein Item, das es nicht gibt. Auf `backpack_wander`
+  korrigiert.
+- Größenwächter im Test: fängt Dateien über 50 MB ab, bevor ein Push an
+  GitHubs 100-MB-Grenze scheitert.
+
+### Verifikation
+
+`tests/verify_frachthafen.gd`, **95 Prüfungen** — darunter die
+Design-Entscheidung als Rechnung (Militärloot liegt tiefer als Wohnungsloot)
+und dass kein Container über seiner Kollision schwebt. Alle 17 Suiten grün.
+
+**Von einem Menschen zu prüfen:** ob die Farben im Schnee wirken, ob man sich
+zwischen den zwölf Blocks zurechtfindet, ob die 176 m zu den Schiffen spannend
+sind. Und offen: Aufstiege auf die Container fehlen noch, das Wasser ist eine
+Notlösung.
+
+---
+
 ## 20.07.2026 — Der Rucksack
 
 Merge von `feature/rucksack` nach `main`.
