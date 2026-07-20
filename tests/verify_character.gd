@@ -25,6 +25,7 @@ func _initialize() -> void:
 	await _test_damage_reaches_the_right_part()
 	await _test_the_plate_covers_only_the_chest()
 	await _test_the_target_can_be_reset()
+	await _test_movement()
 	_test_colours()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
@@ -334,6 +335,98 @@ func _test_the_target_can_be_reset() -> void:
 	_check(figure.has_method("reset"), "sie hat reset() wie TargetDummy")
 
 	figure.queue_free()
+
+
+func _test_movement() -> void:
+	_section("Bewegung")
+
+	var character := _make()
+	var animation := CharacterAnimation.new()
+	character.add_child(animation)
+	animation.attach(character)
+	await process_frame
+
+	var leg := character.joint_of(HealthSystem.Part.LEFT_LEG)
+	var arm := character.joint_of(HealthSystem.Part.LEFT_ARM)
+	_check(leg != null and arm != null, "die Gelenke sind da")
+	if leg == null or arm == null:
+		character.queue_free()
+		return
+
+	# --- Im Stand bewegt sich nichts sichtbar ---
+	animation.speed = 0.0
+	for i in range(40):
+		animation._process(1.0 / 60.0)
+	_check(absf(leg.rotation_degrees.x) < 0.01,
+		"im Stand hängen die Beine gerade (%.4f Grad)" % leg.rotation_degrees.x)
+
+	# --- Beim Gehen schwingen sie, UND ZWAR MERKLICH ---
+	#
+	# Beide Schranken, nicht nur eine. Beim Mündungsknall hat genau das
+	# gefehlt: Der Effekt war vierzigmal zu schwach, und der Test war grün,
+	# weil er nur nach oben geprüft hat — null besteht eine Obergrenze
+	# mühelos.
+	animation.speed = 4.0
+	var widest_leg := 0.0
+	var widest_arm := 0.0
+	for i in range(240):
+		animation._process(1.0 / 60.0)
+		widest_leg = maxf(widest_leg, absf(leg.rotation_degrees.x))
+		widest_arm = maxf(widest_arm, absf(arm.rotation_degrees.x))
+
+	_check(widest_leg > CharacterAnimation.SWING_LEG * 0.5,
+		"beim Gehen schwingen die Beine deutlich (%.1f von %.1f Grad)"
+			% [widest_leg, CharacterAnimation.SWING_LEG])
+	_check(widest_leg <= CharacterAnimation.SWING_LEG + 0.1,
+		"aber nie über den eingestellten Wert (%.1f Grad)" % widest_leg)
+	_check(widest_arm < widest_leg,
+		"die Arme schwingen weniger weit als die Beine (%.1f gegen %.1f)"
+			% [widest_arm, widest_leg])
+
+	# --- Arm und Bein DERSELBEN Seite laufen gegeneinander ---
+	# Andersherum sieht ein Gang sofort falsch aus, ohne dass man sagen
+	# könnte warum. Ein Vorzeichenfehler in der Tabelle faellt sonst niemandem
+	# auf, weil sich ja etwas bewegt.
+	animation._phase = PI * 0.5
+	animation._intensity = 1.0
+	animation._process(0.0)
+	_check(signf(leg.rotation_degrees.x) != signf(arm.rotation_degrees.x),
+		"linker Arm und linkes Bein gegenläufig (%.1f gegen %.1f)"
+			% [leg.rotation_degrees.x, arm.rotation_degrees.x])
+
+	# --- DIE TREFFERZONE MUSS MITSCHWINGEN ---
+	#
+	# Der eigentliche Sinn der Übung: Ein vorgestrecktes Bein soll auch dort
+	# treffbar sein, wo es aussieht. Bewegte sich nur das Mesh, zielte man
+	# ins Leere und die Kugel ginge durch ein Bein, das gar nicht mehr da ist.
+	var hitbox := character.hitbox_of(HealthSystem.Part.LEFT_LEG)
+	var swung := hitbox.global_position
+	animation.reset()
+	animation._process(0.0)
+	var resting := hitbox.global_position
+	_check(swung.distance_to(resting) > 0.05,
+		"die Trefferzone des Beins wandert mit (%.3f m)" % swung.distance_to(resting))
+
+	# --- Und die Ruhelage kommt exakt zurück ---
+	_check(leg.rotation_degrees.is_zero_approx() and arm.rotation_degrees.is_zero_approx(),
+		"reset() stellt die Ruhelage her")
+
+	# --- Eine Leiche atmet nicht ---
+	var dead := _make()
+	var dead_animation := CharacterAnimation.new()
+	dead.add_child(dead_animation)
+	dead_animation.attach(dead)
+	await process_frame
+	dead.health.apply_damage(HealthSystem.Part.HEAD, 999.0)
+	dead_animation.speed = 4.0
+	for i in range(120):
+		dead_animation._process(1.0 / 60.0)
+	var dead_leg := dead.joint_of(HealthSystem.Part.LEFT_LEG)
+	_check(absf(dead_leg.rotation_degrees.x) < 0.01,
+		"eine tote Figur geht nicht weiter (%.4f Grad)" % dead_leg.rotation_degrees.x)
+
+	character.queue_free()
+	dead.queue_free()
 
 
 func _test_colours() -> void:

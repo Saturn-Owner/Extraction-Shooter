@@ -27,12 +27,32 @@ extends BlockyCharacter
 ## Wie hoch über dem Scheitel die Schrift schwebt.
 const LABEL_HEIGHT := 0.32
 
+## Wie weit die Figur hin und her geht, in Metern. 0 = sie steht.
+##
+## Ein bewegliches Ziel ist der ehrlichere Test: Auf ein stehendes Ziel
+## trifft man auch mit falschem Vorhalt, und die Flugzeit der Kugel merkt man
+## erst, wenn sich etwas bewegt.
+@export var patrol_width: float = 0.0
+
+@export var patrol_speed: float = 1.4
+
 var _label: Label3D
 var _hits: int = 0
+var _animation: CharacterAnimation
+var _patrol_origin: Vector3
+var _patrol_ready: bool = false
+var _patrol_time: float = 0.0
 
 
 func _ready() -> void:
 	super()
+
+	_animation = CharacterAnimation.new()
+	_animation.name = "Bewegung"
+	add_child(_animation)
+	# Erst nach super(), denn attach() liest die Ruhelage der Gelenke —
+	# und die gibt es erst, nachdem BlockyCharacter.build() gelaufen ist.
+	_animation.attach(self)
 
 	_label = Label3D.new()
 	_label.name = "Beschriftung"
@@ -51,6 +71,43 @@ func _ready() -> void:
 	_update_label()
 
 
+## Läuft hin und her, falls patrol_width gesetzt ist.
+##
+## Die Figur dreht sich in ihre Laufrichtung, statt seitwärts zu schieben.
+## Ein Gehzyklus mit vor und zurück schwingenden Beinen sieht bei
+## Seitwärtsbewegung sofort falsch aus — das Auge erkennt es, ohne dass man
+## benennen könnte, was stört.
+func _process(delta: float) -> void:
+	if _animation == null:
+		return
+
+	# DIE AUSGANGSPOSITION ERST HIER MERKEN, NICHT IN _ready().
+	#
+	# Wer einen Knoten einhängt, setzt seine Position üblicherweise DANACH —
+	# global_position braucht den Baum. In _ready() stünde hier also noch
+	# (0,0,0), und die Figur spränge beim ersten Schritt in den Weltursprung.
+	if not _patrol_ready:
+		_patrol_origin = position
+		_patrol_ready = true
+
+	if patrol_width <= 0.0 or (health != null and health.is_dead):
+		_animation.speed = 0.0
+		return
+
+	_patrol_time += delta
+
+	# Kosinus statt Sägezahn: An den Umkehrpunkten wird die Figur langsamer
+	# und dreht dort, statt schlagartig die Richtung zu wechseln.
+	var half := patrol_width * 0.5
+	var omega := patrol_speed / maxf(0.01, half)
+	var offset := cos(_patrol_time * omega) * half
+	var velocity := -sin(_patrol_time * omega) * half * omega
+
+	position = _patrol_origin + Vector3(offset, 0.0, 0.0)
+	rotation_degrees.y = 90.0 if velocity >= 0.0 else -90.0
+	_animation.speed = absf(velocity)
+
+
 func _on_part_hit(_part: HealthSystem.Part, _result: Ballistics.HitResult) -> void:
 	_hits += 1
 	_update_label()
@@ -60,6 +117,10 @@ func _on_part_hit(_part: HealthSystem.Part, _result: Ballistics.HitResult) -> vo
 ## damit das Testgelände beide über denselben Aufruf zurücksetzen kann.
 func reset() -> void:
 	_hits = 0
+	_patrol_time = 0.0
+	position = _patrol_origin
+	if _animation != null:
+		_animation.reset()
 	if health != null:
 		health.reset()
 	plate_durability = plate.max_durability if plate != null else 0.0

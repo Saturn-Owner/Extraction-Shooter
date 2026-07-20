@@ -108,7 +108,18 @@ func _toggle_character_window() -> void:
 ## Wo die Figuren stehen. Dritte Reihe neben den flachen Scheiben, damit man
 ## auf dieselbe Entfernung vergleichen kann: Scheibe ohne Platte bei x = -3,
 ## mit Platte bei x = 0, Figur bei x = +3.
-const HUMANOID_DISTANCES := [25.0, 100.0, 300.0]
+## Die mittlere geht, die beiden anderen stehen. Ein bewegliches Ziel prüft
+## den Vorhalt, ein stehendes die Trefferzonen — man braucht beides.
+##
+## DER GEHER STEHT WEITER RECHTS, und das ist kein Geschmack: Er pendelt um
+## seinen Standplatz, also über acht Meter von x = 4 bis x = 12. Bliebe er
+## wie die anderen bei x = 3, liefe seine Bahn von -1 bis 7 — mitten durch
+## die gepanzerte Scheibe bei x = 0.
+const HUMANOID_PLACES := [
+	{distance = 25.0, x = 3.0, patrol = 0.0},
+	{distance = 100.0, x = 8.0, patrol = 8.0},
+	{distance = 300.0, x = 3.0, patrol = 0.0},
+]
 
 
 ## Stellt die Figuren AUS DEM CODE hin, nicht in testgelaende.tscn.
@@ -126,13 +137,17 @@ func _place_humanoids() -> void:
 	if container == null:
 		return
 
-	for distance in HUMANOID_DISTANCES:
+	for place in HUMANOID_PLACES:
+		var distance: float = place.distance
 		var figure := HumanoidTarget.new()
 		figure.name = "Figur%dm" % int(distance)
 		figure.label_text = "%d m  Figur" % int(distance)
+		figure.patrol_width = place.patrol
+		figure.patrol_speed = 1.6
+
 		container.add_child(figure)
 		# Nach dem Einhängen setzen: global_position braucht den Baum.
-		figure.global_position = Vector3(3.0, 0.0, -distance)
+		figure.global_position = Vector3(place.x, 0.0, -distance)
 		# Sie schaut den Schützen an — sonst zielt man auf ihre Seite und
 		# die Arme decken den Rumpf ab.
 		figure.rotation_degrees = Vector3(0.0, 180.0, 0.0)
