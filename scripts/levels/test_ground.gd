@@ -13,6 +13,7 @@
 ##   Strg          Ducken
 ##   Leertaste     Springen
 ##   Linksklick    Schiessen
+##   Tab           Charakterfenster: Ausrüstung, Trefferpunkte, Inventar
 ##   R             Nachladen (verbraucht echte Munition aus dem Inventar)
 ##   B             Feuermodus wechseln
 ##   Q / E         Waffe wechseln (nur was im Inventar liegt)
@@ -55,7 +56,53 @@ func _ready() -> void:
 		target.was_hit.connect(_on_target_hit.bind(target))
 
 	_place_humanoids()
+	_add_character_window()
 	_give_loadout()
+
+
+## Das Charakterfenster gab es hier bisher nicht.
+##
+## ---------------------------------------------------------------------------
+## WARUM DAS FEHLTE UND WARUM ES STÖRT
+##
+## Es hängt in `raid_eisstadt.tscn`, nicht in der Spielerszene — im
+## Testgelände tat `Tab` deshalb schlicht nichts. Solange man hier nur auf
+## flache Scheiben geschossen hat, fiel das niemandem auf.
+##
+## Mit den Figuren fällt es sofort auf: Sie haben Trefferpunkte pro Körperteil,
+## und die will man beim Schiessen sehen. Ohne das Fenster ist der einzige
+## Hinweis die kurze Schrift über ihrem Kopf, und die eigenen Trefferpunkte
+## sieht man gar nicht.
+##
+## AUS DEM CODE UND NICHT IN DIE SZENE, aus demselben Grund wie die Figuren
+## selbst: An `testgelaende.tscn` haben zuletzt beide Entwickler gearbeitet,
+## und `.tscn` lässt sich bei Konflikten praktisch nicht zusammenführen.
+const CHARACTER_WINDOW := preload("res://scenes/ui/character_window.tscn")
+
+var _character_window: CharacterWindow
+
+
+func _add_character_window() -> void:
+	var hud := get_node_or_null("HUD")
+	if hud == null:
+		return
+
+	_character_window = CHARACTER_WINDOW.instantiate() as CharacterWindow
+	hud.add_child(_character_window)
+
+	# Bei offenem Fenster steht die Figur still und die Maus ist frei —
+	# sonst dreht man sich beim Ziehen im Raster im Kreis.
+	_character_window.opened.connect(func(): _player.set_ui_open(true))
+	_character_window.closed.connect(func(): _player.set_ui_open(false))
+
+
+func _toggle_character_window() -> void:
+	if _character_window == null:
+		return
+	if _character_window.is_open():
+		_character_window.close()
+		return
+	_character_window.open_for(_player)
 
 
 ## Wo die Figuren stehen. Dritte Reihe neben den flachen Scheiben, damit man
@@ -192,6 +239,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	var inventory := _player.inventory
 
 	match (event as InputEventKey).physical_keycode:
+		KEY_TAB:
+			_toggle_character_window()
+		KEY_ESCAPE:
+			# Das Fenster schreibt unten selbst "[Tab] / [Esc] schliessen" —
+			# ohne diese Zeile wäre der Hinweis hier gelogen.
+			#
+			# Kein Streit mit der Maustaste: PlayerController prüft bei
+			# `toggle_mouse` ausdrücklich `not ui_open`, und offen ist offen.
+			if _character_window != null and _character_window.is_open():
+				_character_window.close()
 		KEY_Q:
 			_switch_weapon(-1)
 		KEY_E:
@@ -268,7 +325,7 @@ func _process(_delta: float) -> void:
 		lines.append("> %s" % _last_action)
 
 	lines.append("")
-	lines.append("Q/E Waffe  5/6 Munition  R Laden  B Modus")
+	lines.append("Tab Charakter  Q/E Waffe  5/6 Munition  R Laden  B Modus")
 	lines.append("T Nachschub  Z Ballast  0 Reset  Esc Maus")
 
 	_label.text = "\n".join(lines)
