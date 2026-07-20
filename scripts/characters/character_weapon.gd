@@ -79,10 +79,18 @@ const VOICES := 3
 ## Ein Mensch löst das genauso: Zum Wechseln zieht man die Waffe an sich
 ## heran und kippt sie, damit der Schacht zur greifenden Hand zeigt. Danach
 ## geht sie zurück in den Anschlag.
-const RELOAD_SHIFT := Vector3(-0.12, 0.0, 0.08)
+const RELOAD_SHIFT := Vector3(-0.16, -0.02, 0.10)
 
-## Wie weit die Waffe dabei zur Seite kippt, in Grad.
-const RELOAD_ROLL := -16.0
+## Wie die Waffe dabei gedreht wird, in Grad.
+##
+## KRÄFTIG, NICHT ANDEUTUNGSWEISE. Bei 16 Grad Kippen war der Wechsel kaum
+## vom Anschlag zu unterscheiden — man sah eine Hand wandern, aber die Waffe
+## stand fast still, und das liest sich nicht als Handgriff.
+##
+## 35 Grad Kippen drehen den Schacht sichtbar zur greifenden Hand, die
+## zusätzliche Drehung um die Hochachse holt die Waffe quer vor den Körper.
+## Genau so nimmt man ein Gewehr zum Wechseln herum.
+const RELOAD_ROTATION := Vector3(0.0, 14.0, -35.0)
 
 ## In diesem Abschnitt wird herangezogen bzw. wieder ausgerichtet.
 const BRING_IN_END := 0.12
@@ -174,7 +182,7 @@ func _update_hold_pose() -> void:
 			amount = 1.0 - smoothstep(PUSH_OUT_START, 1.0, progress)
 
 	position = _home_position + RELOAD_SHIFT * amount
-	rotation_degrees.z = RELOAD_ROLL * amount
+	rotation_degrees = RELOAD_ROTATION * amount
 
 
 ## Lädt endlos nach, mit Pause dazwischen.
