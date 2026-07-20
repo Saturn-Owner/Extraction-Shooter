@@ -8,6 +8,50 @@ Begründungen im Einzelnen stehen weiterhin in den Commits.
 
 ---
 
+## 20.07.2026 — Schritte im Schnee und Keuchen beim Sprinten
+
+Merge von `feature/schrittgeraeusche` nach `main`. **3 Commits.**
+
+Die Waffe war bis dahin die einzige Tonquelle im Spiel — man lief lautlos
+durch eine Schneelandschaft.
+
+### Schritte
+
+- Elf Varianten, geschnitten aus einer **168 Sekunden langen Aufnahme**
+  (CC0, bajko, Freesound 378056). Aus 46 MB wurden 400 KB.
+- Ausgewählt nach **Messwerten statt Gehör**: Dauer 0,32–0,41 s (ein einzelner
+  Tritt, keine zwei verschmolzenen), gleiches Frequenzband, kurzer Nachklang,
+  kein Vorlauf.
+- Der Takt hängt an der **zurückgelegten Strecke**, nicht an einem Timer. Alle
+  0,90 m ein Tritt beim Gehen, 0,75 m geduckt, 1,25 m im Sprint. Dadurch stimmt
+  die Trittfrequenz von selbst — auch wenn Gewicht oder ein zerschossenes Bein
+  bremsen.
+- **Geduckt ist 8 dB leiser als gehen.** Schleichen soll sich lohnen,
+  spätestens wenn es Gegner gibt.
+
+### Ausser Atem
+
+Setzt nur ein, wenn **5 Sekunden am Stück gesprintet** wurde **und** die
+Ausdauer unter 15 liegt. Aufgehört wird erst über 35 — mit nur einer Schwelle
+ginge es an der Grenze im Sekundentakt an und aus.
+
+### Neues Werkzeug
+
+`tools/cut_range.gd` schneidet einen Bereich aus einer durchgehenden Aufnahme.
+Ohne Bereich zeigt es Pegel und Ereignisdichte je Sekunde — damit liess sich
+im Atemgeräusch der Umschlag von ruhig zu schnell bei 11 s finden, ohne es zu
+hören.
+
+### Von den Tests gefunden
+
+- Ein Schnipsel hatte **126 ms Stille am Anfang** — der Schritt wäre spürbar
+  nach dem Fuss gekommen. Ersetzt.
+- Die erste Messung meldete **0,08 s für einen 0,4-Sekunden-Schritt**: Godot
+  importiert Tondateien komprimiert (QOA), in `AudioStreamWAV.data` stehen dann
+  keine Samples mehr. Gemessen wird jetzt die Datei auf der Platte.
+
+---
+
 ## 20.07.2026 — Waffenwerkstatt: Modelle, Anbauteile, Werkbank, Ton
 
 Merge von `feature/waffen-werkstatt` nach `main`.
