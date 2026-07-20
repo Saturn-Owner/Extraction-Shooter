@@ -162,6 +162,42 @@ const HINGES := {
 ## ein Oberarm, ein Unterschenkel schmaler als ein Oberschenkel.
 const TAPER := 0.85
 
+## Was am Rumpf hängt statt direkt an der Figur.
+##
+## ---------------------------------------------------------------------------
+## WARUM ES DIESEN ZWISCHENKNOTEN GIBT
+##
+## Vorher hingen alle sieben Teile NEBENEINANDER an der Figur, jedes mit
+## seiner absoluten Höhe. Für Gehen und Nachladen genügt das: Da bewegen sich
+## nur einzelne Glieder.
+##
+## Ducken und Hinlegen bewegen dagegen den ganzen Oberkörper. Ohne diesen
+## Knoten müsste man Kopf, Brust, Bauch, beide Arme UND den Waffenpunkt
+## einzeln absenken und einzeln kippen — sechs Stellen, die beim nächsten
+## Ändern auseinanderlaufen. Mit ihm ist Ducken eine Zeile und Hinlegen eine
+## zweite.
+##
+## Die Beine bleiben absichtlich an der Figur: Sie tragen den Körper, sie
+## werden nicht von ihm getragen. Beim Ducken sinkt der Rumpf, während die
+## Beine sich beugen — genau die entgegengesetzte Bewegung.
+##
+## Trefferzonen, Waffe und Weste hängen darunter und gehen von selbst mit.
+## Eine geduckte Figur ist damit auch wirklich ein kleineres Ziel, ohne dass
+## dafür eine einzige Zeile Trefferzonen-Code nötig wäre.
+##
+## WICHTIG: Der Rumpf steht auf Position NULL. Alle Höhen in VERTICAL bleiben
+## dadurch unverändert gültig — der Umbau verschiebt nichts, er schiebt nur
+## eine Ebene dazwischen.
+const TORSO_NODE := "Rumpf"
+
+const UPPER_BODY := [
+	HealthSystem.Part.HEAD,
+	HealthSystem.Part.CHEST,
+	HealthSystem.Part.STOMACH,
+	HealthSystem.Part.LEFT_ARM,
+	HealthSystem.Part.RIGHT_ARM,
+]
+
 
 ## Baut die Figur samt Trefferzonen auf. Mehrfach aufrufbar.
 func build() -> void:
@@ -177,11 +213,20 @@ func build() -> void:
 	var old_mount := weapon_mount()
 	if old_mount != null:
 		old_mount.queue_free()
+
+	# Der Rumpf zuerst: Oberkörper und Waffenpunkt hängen darunter.
+	var old_torso := torso()
+	if old_torso != null:
+		old_torso.queue_free()
+	var trunk := Node3D.new()
+	trunk.name = TORSO_NODE
+	add_child(trunk)
+
 	var mount := Node3D.new()
 	mount.name = "Waffenpunkt"
 	mount.position = WEAPON_MOUNT
 	mount.rotation_degrees = WEAPON_MOUNT_ROTATION
-	add_child(mount)
+	trunk.add_child(mount)
 
 	for part: HealthSystem.Part in VERTICAL:
 		var size := size_of(part)
@@ -197,7 +242,11 @@ func build() -> void:
 		var joint := Node3D.new()
 		joint.name = part_name(part)
 		joint.position = Vector3(centre.x, centre.y + size.y * 0.5, centre.z)
-		add_child(joint)
+		# Oberkörper an den Rumpf, Beine an die Figur — siehe UPPER_BODY.
+		if UPPER_BODY.has(part):
+			trunk.add_child(joint)
+		else:
+			add_child(joint)
 
 		if not HINGES.has(part):
 			_add_segment(joint, part, size)
@@ -298,10 +347,26 @@ func centre_of(part: HealthSystem.Part) -> Vector3:
 	return Vector3(HORIZONTAL[part].offset, centre_y, 0.0)
 
 
+## Der Oberkörper als Ganzes. Ducken senkt ihn, Hinlegen kippt ihn.
+## Siehe UPPER_BODY.
+func torso() -> Node3D:
+	return get_node_or_null(NodePath(TORSO_NODE)) as Node3D
+
+
 ## Das obere Gelenk eines Körperteils: Schulter, Hüfte, Hals.
 ## Hier setzt die Animation an.
+##
+## Sucht an beiden Stellen, weil die Beine an der Figur hängen und der
+## Oberkörper am Rumpf. Wer hier nur einen der beiden Orte absucht, bekommt
+## für die halbe Figur `null` zurück — und eine Animation, die stillschweigend
+## nur die Beine bewegt.
 func joint_of(part: HealthSystem.Part) -> Node3D:
-	return get_node_or_null(NodePath(part_name(part)))
+	var name := NodePath(part_name(part))
+	var direct := get_node_or_null(name) as Node3D
+	if direct != null:
+		return direct
+	var trunk := torso()
+	return trunk.get_node_or_null(name) as Node3D if trunk != null else null
 
 
 ## Das Zwischengelenk — Ellenbogen oder Knie. Null bei Rumpf und Kopf.
@@ -372,6 +437,12 @@ const WEAPON_MOUNT_ROTATION := Vector3(0.0, 12.0, 0.0)
 
 ## Der Knoten, an den eine Waffe gehängt wird.
 func weapon_mount() -> Node3D:
+	# Hängt am Rumpf, damit die Waffe beim Ducken und Hinlegen mitgeht.
+	var trunk := torso()
+	if trunk != null:
+		var at_torso := trunk.get_node_or_null("Waffenpunkt") as Node3D
+		if at_torso != null:
+			return at_torso
 	return get_node_or_null("Waffenpunkt") as Node3D
 
 

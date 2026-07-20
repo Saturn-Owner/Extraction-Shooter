@@ -29,6 +29,7 @@ func _initialize() -> void:
 	await _test_hinges()
 	await _test_weapon_in_hand()
 	await _test_vest()
+	await _test_stances()
 	_test_colours()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
@@ -898,6 +899,107 @@ func _test_vest() -> void:
 	bare._process(1.0 / 60.0)
 	_check(true, "das Nachladen laeuft trotzdem ohne Fehler")
 	bare.queue_free()
+
+
+## Ducken, Zielen, Rennen.
+##
+## ---------------------------------------------------------------------------
+## DER FUSS IST DIE EIGENTLICHE PRÜFUNG
+##
+## Der Kniewinkel beim Ducken wird aus der Beinlänge gerechnet, damit die Füsse
+## stehen bleiben. Wer die Ducktiefe ändert und den Winkel vergisst, bekommt
+## eine Figur, die im Boden versinkt oder in der Luft schwebt — und das fällt
+## beim Spielen kaum auf, weil man auf den Oberkörper sieht.
+##
+## Geprüft wird deshalb nicht der Winkel, sondern das Ergebnis: Wo steht der
+## Fuss? Ein Test auf den Winkel würde die Formel gegen sich selbst prüfen.
+func _test_stances() -> void:
+	_section("Haltungen")
+
+	var figure := HumanoidTarget.new()
+	figure.wears_vest = true
+	figure.weapon_id = &"weapon_rifle_ar15"
+	root.add_child(figure)
+	await process_frame
+
+	var head := figure.joint_of(HealthSystem.Part.HEAD)
+	var standing_head := head.global_position.y
+	var standing_foot := _foot_height(figure)
+	_check(absf(standing_foot) < 0.001,
+		"stehend steht der Fuss auf dem Boden (%.4f m)" % standing_foot)
+
+	# --- Ducken ---
+	figure.crouching = true
+	for i in range(200):
+		await process_frame
+
+	var crouched_head := head.global_position.y
+	var crouched_foot := _foot_height(figure)
+	_check(crouched_head < standing_head - 0.15,
+		"geduckt sinkt der Kopf spürbar (%.2f auf %.2f m)"
+			% [standing_head, crouched_head])
+	_check(absf(crouched_foot) < 0.005,
+		"und der Fuss bleibt trotzdem am Boden (%.4f m)" % crouched_foot)
+
+	# Ein Knie, das nach hinten knickt, ergibt ein Vogelbein. Beim Rendern war
+	# genau das der Verdacht — die Messung hat ihn widerlegt, und diese Prüfung
+	# hält das fest.
+	var hip := figure.joint_of(HealthSystem.Part.LEFT_LEG)
+	var knee := figure.hinge_of(HealthSystem.Part.LEFT_LEG)
+	_check(knee.global_position.z < hip.global_position.z - 0.05,
+		"das Knie zeigt nach vorn, nicht nach hinten (%.3f)"
+			% knee.global_position.z)
+
+	# --- Wieder aufstehen ---
+	figure.crouching = false
+	for i in range(240):
+		await process_frame
+
+	_check(absf(figure.joint_of(HealthSystem.Part.LEFT_LEG).position.y
+			- figure._animation._rest[HealthSystem.Part.LEFT_LEG].y) < 0.001,
+		"nach dem Aufstehen sitzt die Hüfte wieder in der Ruhelage")
+	_check(absf(_foot_height(figure)) < 0.001,
+		"und der Fuss steht wieder genau auf null")
+
+	# --- Zielen hebt die Waffe ---
+	var hip_height := figure.weapon.position.y
+	figure.aiming = true
+	for i in range(120):
+		await process_frame
+	var aimed_height := figure.weapon.position.y
+	_check(aimed_height > hip_height + 0.1,
+		"gezielt kommt die Waffe hoch (%.2f auf %.2f)" % [hip_height, aimed_height])
+
+	# --- Rennen nimmt sie herunter ---
+	figure.aiming = false
+	figure.sprinting = true
+	for i in range(120):
+		await process_frame
+	_check(figure.weapon.rotation_degrees.x < -10.0,
+		"rennend zeigt die Mündung nach unten (%.1f Grad)"
+			% figure.weapon.rotation_degrees.x)
+
+	# Zielen und Rennen zugleich darf sich nicht addieren.
+	figure.aiming = true
+	for i in range(120):
+		await process_frame
+	_check(figure.weapon.rotation_degrees.x < -10.0,
+		"wer rennt, zielt nicht — Rennen hat Vorrang")
+
+	figure.queue_free()
+
+
+## Tiefster Punkt des linken Beins, entlang der Richtung des Unterschenkels.
+##
+## NICHT über `global_position.y - halbe Höhe`: Das gilt nur für einen
+## ungedrehten Kasten. Bei 45 Grad Beugung lag diese Rechnung um 8 cm daneben
+## und liess eine korrekte Haltung falsch aussehen.
+func _foot_height(figure: HumanoidTarget) -> float:
+	var size := figure.size_of(HealthSystem.Part.LEFT_LEG)
+	var at: float = BlockyCharacter.HINGES[HealthSystem.Part.LEFT_LEG].at
+	var lower := size.y - size.y * at
+	var knee := figure.hinge_of(HealthSystem.Part.LEFT_LEG)
+	return (knee.global_transform * Vector3(0.0, -lower, 0.0)).y
 
 
 func _test_colours() -> void:

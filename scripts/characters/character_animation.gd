@@ -64,6 +64,39 @@ var pouch_target: Node3D
 ## Fortschritt des Nachladens, 0 bis 1. Negativ heisst: wird nicht nachgeladen.
 var reload_progress: float = -1.0
 
+## ---------------------------------------------------------------------------
+## DIE HALTUNG — WAS DIE FIGUR GERADE TUT
+##
+## Diese Felder sind die ganze Schnittstelle nach aussen. Wer sie füllt, ist
+## der Animation egal: heute das Skript einer Zielfigur, morgen die Tasten des
+## Spielers, später die Entscheidung eines KI-Gegners.
+##
+## GENAU DARIN LIEGT DER ZWECK. Stünden Ducken und Zielen als Sonderfälle im
+## Dummy-Skript, müsste der Spieler dieselbe Bewegung ein zweites Mal
+## bekommen — und die KI ein drittes Mal. Drei Kopien derselben Haltung, die
+## ab dem ersten Nachjustieren verschieden aussehen.
+##
+## Es passt ausserdem zu Grundsatzentscheidung 2: Der Spieler MELDET seinen
+## Zustand, er rechnet die Haltung nicht selbst.
+##
+## `speed` und `holding_weapon` oben gehören fachlich dazu — sie standen nur
+## schon da, bevor es diesen Satz gab.
+## ---------------------------------------------------------------------------
+
+enum Stance {
+	STAND,   ## aufrecht
+	CROUCH,  ## geduckt
+}
+
+var stance: Stance = Stance.STAND
+
+## Rennt die Figur? Ändert die HALTUNG, nicht das Tempo — das steht in `speed`.
+## Wer rennt, beugt sich vor und nimmt die Waffe herunter.
+var is_sprinting: bool = false
+
+## Hat die Figur die Waffe im Anschlag am Auge?
+var is_aiming: bool = false
+
 ## Wo die Magazintaschen sitzen: vorn links am Bauch, dicht am Körper.
 ##
 ## In Figurkoordinaten, weil die Hand dorthin greift, egal wie die Figur steht
@@ -207,6 +240,43 @@ const BREATH_SPEED := 1.6
 ## bleibt. Ohne das friert die Figur mitten im Schritt ein.
 const SETTLE_SPEED := 6.0
 
+## ---------------------------------------------------------------------------
+## DUCKEN
+##
+## Wie tief der Körper sinkt, in Metern. Der EINZIGE Wert, an dem man dreht —
+## der Kniewinkel folgt daraus, siehe `_crouch_knee_angle()`.
+##
+## WARUM NICHT DIE 0,70 m DES SPIELERS: Dessen Augenhöhe fällt von 1,65 auf
+## 0,95. Übertrüge man das eins zu eins, sässe die Figur auf den Fersen —
+## rechnerisch bräuchte es 86 Grad Oberschenkelbeugung. Das ist eine Hocke,
+## keine Gefechtsstellung. Hier steht ein Wert, der wie Ducken aussieht; ob
+## Spieler und Figur am Ende gleich tief gehen sollen, ist eine Frage an
+## Lucas, sobald der Spieler einen sichtbaren Körper hat.
+##
+## WARUM NICHT TIEFER: Hier standen erst 0,32 m. Im Rendering las sich das
+## nicht als Ducken, sondern als Hocke — 55 Grad Oberschenkel, 110 Grad Knie,
+## die Knie weit vor dem Körper. Die Figur hat kein Fussgelenk, das so eine
+## Beugung auffangen könnte; der Unterschenkel steht dann schräg nach hinten
+## und das Bein sieht geknickt aus. Bei 0,22 m sind es 45 Grad, und der Kopf
+## sinkt von 1,80 auf 1,58 m — sichtbar geduckt, ohne dass das Bein bricht.
+const CROUCH_DROP := 0.22
+
+## Wie schnell zwischen Stehen und Ducken gewechselt wird.
+const STANCE_SPEED := 7.0
+
+## ---------------------------------------------------------------------------
+## RENNEN
+##
+## Wer rennt, legt sich nach vorn. Das ist der ganze Unterschied zum schnellen
+## Gehen — der Schrittzyklus rechnet sich ohnehin schon aus dem Tempo, ein
+## eigener „Sprintzyklus" wäre eine zweite Wahrheit über dieselbe Bewegung.
+const SPRINT_LEAN := 11.0
+const SPRINT_SPEED_BLEND := 6.0
+
+## Wie weit sich der Oberkörper beim Ducken zusätzlich vorbeugt. Klein — wer
+## sich duckt, geht in die Knie, er klappt nicht zusammen.
+const CROUCH_LEAN := 4.0
+
 ## Welche Teile schwingen, und mit welchem Vorzeichen.
 ##
 ## Arme gegen die Beine derselben Seite: Wer rechts vortritt, schwingt den
@@ -219,14 +289,16 @@ const SWINGING := {
 	HealthSystem.Part.RIGHT_ARM: {amount = SWING_ARM, sign = 1.0},
 }
 
-## Was mitwippt, statt zu schwingen.
-const UPPER_BODY := [
-	HealthSystem.Part.HEAD,
-	HealthSystem.Part.CHEST,
-	HealthSystem.Part.STOMACH,
-	HealthSystem.Part.LEFT_ARM,
-	HealthSystem.Part.RIGHT_ARM,
-]
+## Was mitwippt, steht jetzt in `BlockyCharacter.UPPER_BODY` und hängt dort
+## unter einem gemeinsamen Rumpfknoten. Hier stand dieselbe Liste ein zweites
+## Mal — zwei Listen, die dasselbe meinen, laufen früher oder später
+## auseinander.
+
+## Wie geduckt die Figur gerade ist, 0 bis 1. Läuft `stance` weich nach.
+var _crouch: float = 0.0
+
+## Wie sehr die Figur gerade rennt, 0 bis 1. Läuft `is_sprinting` weich nach.
+var _sprint: float = 0.0
 
 ## Schrittphase in Radiant.
 var _phase: float = 0.0
@@ -276,6 +348,13 @@ func _process(delta: float) -> void:
 		target_intensity = sqrt(clampf(speed / FULL_SWING_SPEED, 0.0, 1.0))
 	_intensity = move_toward(_intensity, target_intensity, SETTLE_SPEED * delta)
 
+	# Haltung weich nachziehen. Ein Sprung von aufrecht zu geduckt sieht aus
+	# wie ein Ruckler, nicht wie eine Bewegung. Tote ducken sich nicht mehr.
+	var wants_crouch := 1.0 if (alive and stance == Stance.CROUCH) else 0.0
+	_crouch = move_toward(_crouch, wants_crouch, STANCE_SPEED * delta)
+	var wants_sprint := 1.0 if (alive and is_sprinting) else 0.0
+	_sprint = move_toward(_sprint, wants_sprint, SPRINT_SPEED_BLEND * delta)
+
 	# Die Schrittfrequenz ergibt sich aus dem Tempo, nicht aus einer festen
 	# Zahl — siehe Klassenkopf.
 	if speed > 0.01 and alive:
@@ -318,11 +397,57 @@ func _process(delta: float) -> void:
 	if alive:
 		breath = sin(_time * BREATH_SPEED) * BREATH_HEIGHT * (1.0 - _intensity)
 
-	for part: HealthSystem.Part in UPPER_BODY:
+	# Ein Knoten statt fünf. Vorher wurde jedes Oberkörperteil einzeln
+	# angehoben; wer eines vergass, bekam eine Figur, deren Kopf beim Gehen
+	# vom Hals abhob. Der Rumpf trägt jetzt auch das Ducken, siehe
+	# `_torso_height()`.
+	var trunk := character.torso()
+	if trunk != null:
+		trunk.position.y = bob + breath + _stance_drop()
+		# Beim Rennen nach vorn legen, beim Ducken ebenfalls etwas — wer in
+		# die Hocke geht, richtet sich nicht kerzengerade auf.
+		trunk.rotation_degrees.x = SPRINT_LEAN * _sprint + CROUCH_LEAN * _crouch
+
+	_pose_legs_for_stance()
+
+
+## Senkt die Hüften ab und beugt die Knie, wenn die Figur duckt.
+##
+## Die Beine hängen an der FIGUR, nicht am Rumpf — sie tragen den Körper,
+## statt von ihm getragen zu werden. Beim Ducken müssen sie deshalb eigens
+## mitgenommen werden: Hüfte runter wie der Rumpf, Knie gebeugt, damit der
+## Fuss stehen bleibt.
+## KEIN vorzeitiges Aussteigen, wenn gerade nicht geduckt wird.
+##
+## Hier stand `if _crouch <= 0.001: return`. Sobald die Figur wieder stand,
+## räumte damit niemand mehr auf, was das letzte geduckte Bild hinterlassen
+## hatte: Die Hüften blieben 8,9 mm unter der Ruhelage stehen. Beim
+## wiederholten Ducken hätte sich das aufsummiert.
+##
+## Bei `_crouch = 0` ist die Absenkung null und der Winkel null — es wird also
+## die Ruhelage geschrieben, und genau das soll passieren.
+func _pose_legs_for_stance() -> void:
+	var thigh := _crouch_knee_angle()
+	for part in [HealthSystem.Part.LEFT_LEG, HealthSystem.Part.RIGHT_LEG]:
 		var joint := character.joint_of(part)
 		if joint == null:
 			continue
-		joint.position = _rest[part] + Vector3(0.0, bob + breath, 0.0)
+		# Dieselbe Absenkung wie der Rumpf, sonst reisst die Figur in der
+		# Mitte auseinander.
+		#
+		# ABSOLUT VON DER RUHELAGE AUS, NICHT DAZUZÄHLEN. Hier stand erst
+		# `position.y += ...`, und weil die Beinposition im Gehzweig sonst
+		# nicht zurückgesetzt wird, sank die Figur mit jedem Bild um weitere
+		# 32 cm — nach drei Sekunden standen die Füsse 57 Meter unter dem
+		# Boden. Dieselbe Falle, vor der der Kommentar beim Ausschlag warnt.
+		joint.position = _rest[part] + Vector3(0.0, _stance_drop(), 0.0)
+		joint.rotation_degrees.x += thigh
+
+		var knee := character.hinge_of(part)
+		if knee != null:
+			# Doppelt zurück: Der Unterschenkel steht dann so schräg wie der
+			# Oberschenkel, nur andersherum — der Fuss bleibt unter der Hüfte.
+			knee.rotation_degrees.x -= thigh * 2.0
 
 
 ## Setzt einen Arm in die Waffenhaltung.
@@ -504,6 +629,38 @@ func _solve_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 ## Vorzeichenwechsel heraus. Ein Knie zeigt nach hinten (negativ), ein
 ## Ellenbogen nach vorn (positiv) — die Figur schaut nach -Z, ein positiver
 ## Ausschlag führt das untere Ende also nach vorn.
+## Wie weit der Oberkörper gerade abgesenkt ist. Negativ heisst nach unten.
+func _stance_drop() -> float:
+	return -CROUCH_DROP * _crouch
+
+
+## Um wieviel Grad der Oberschenkel beim Ducken nach vorn kippt.
+##
+## ---------------------------------------------------------------------------
+## GERECHNET, DAMIT DIE FÜSSE AUF DEM BODEN BLEIBEN
+##
+## Ein Bein ist ein Zweigelenker. Kippt der Oberschenkel um a nach vorn und
+## knickt das Knie um 2a zurück, steht der Unterschenkel wieder so schräg wie
+## der Oberschenkel — nur andersherum. Der Fuss bleibt dadurch unter der
+## Hüfte, und der ganze Körper sinkt um
+##
+##     Absenkung = Beinlänge × (1 − cos a)
+##
+## Nach a aufgelöst ergibt sich der Winkel unten. Wer CROUCH_DROP ändert,
+## bekommt den passenden Kniewinkel damit geschenkt.
+##
+## Ein geschätzter Winkel hätte die Füsse je nach Tiefe in den Boden gedrückt
+## oder in der Luft hängen lassen — und das fällt bei einer geduckten Figur
+## erst auf, wenn jemand genau hinsieht.
+func _crouch_knee_angle() -> float:
+	var leg := character.size_of(HealthSystem.Part.LEFT_LEG).y
+	if leg <= 0.0:
+		return 0.0
+	# clampf, weil eine Absenkung grösser als die Beinlänge keinen Winkel hat.
+	var cosine := clampf(1.0 - (CROUCH_DROP * _crouch) / leg, -1.0, 1.0)
+	return rad_to_deg(acos(cosine))
+
+
 func _hinge_angle(part: HealthSystem.Part, swing_sign: float) -> float:
 	var is_leg := part == HealthSystem.Part.LEFT_LEG or part == HealthSystem.Part.RIGHT_LEG
 

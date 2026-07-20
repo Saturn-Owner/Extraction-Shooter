@@ -47,6 +47,32 @@ const LABEL_HEIGHT := 0.32
 ## die Magazine.
 @export var wears_vest: bool = false
 
+## ---------------------------------------------------------------------------
+## HALTUNG
+##
+## Dieselben drei Zustaende, die der Spieler laengst kennt: is_crouching,
+## is_sprinting, is_aiming in player_controller.gd. Hier sind sie Schalter zum
+## Vorfuehren; beim Spieler haengen sie an Tasten, bei einem KI-Gegner spaeter
+## an dessen Entscheidung.
+##
+## Weitergereicht werden sie in `_apply_stance()` — an die Animation fuer den
+## Koerper und an die Waffe fuer deren Haltung. Beide bekommen sie aus DIESER
+## einen Quelle, damit Koerper und Waffe nicht auseinanderlaufen koennen.
+@export var crouching: bool = false:
+	set(value):
+		crouching = value
+		_apply_stance()
+
+@export var sprinting: bool = false:
+	set(value):
+		sprinting = value
+		_apply_stance()
+
+@export var aiming: bool = false:
+	set(value):
+		aiming = value
+		_apply_stance()
+
 var weapon: CharacterWeapon
 var vest: CharacterVest
 
@@ -92,7 +118,24 @@ func _ready() -> void:
 		_arm_with_weapon()
 
 	part_hit.connect(_on_part_hit)
+	_apply_stance()
 	_update_label()
+
+
+## Reicht die Haltung an Körper und Waffe weiter.
+##
+## Wird auch aus den Settern gerufen, also unter Umständen bevor `_ready()`
+## gelaufen ist — deshalb die Prüfungen auf null. Ohne die stürzt die Szene
+## beim Setzen eines Hakens im Editor ab.
+func _apply_stance() -> void:
+	if _animation != null:
+		_animation.stance = (CharacterAnimation.Stance.CROUCH if crouching
+			else CharacterAnimation.Stance.STAND)
+		_animation.is_sprinting = sprinting
+		_animation.is_aiming = aiming
+	if weapon != null:
+		weapon.is_aiming = aiming
+		weapon.is_sprinting = sprinting
 
 
 ## Zieht der Figur die Weste an.

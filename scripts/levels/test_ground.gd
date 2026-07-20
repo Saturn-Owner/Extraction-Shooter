@@ -137,6 +137,27 @@ const HUMANOID_PLACES := [
 		distance = 15.0, x = -14.0, patrol = 0.0, speed = 0.0, label = "schiesst",
 		weapon = true, behaviour = CharacterWeapon.Behaviour.SHOOT,
 	},
+
+	# Die Haltungen zum Vergleichen: rechts daneben, dieselbe Entfernung,
+	# damit man sie nebeneinander sieht statt nacheinander suchen zu muessen.
+	# Aufrecht stehend gibt es schon links — hier nur, was neu ist.
+	{
+		distance = 15.0, x = 4.0, patrol = 0.0, speed = 0.0, label = "zielt",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+		aiming = true,
+	},
+	{
+		distance = 15.0, x = 7.0, patrol = 0.0, speed = 0.0, label = "geduckt",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+		crouching = true, aiming = true,
+	},
+	# Der Renner laeuft wirklich, sonst sieht man nur die Neigung und nicht,
+	# dass Schrittzyklus und Haltung zusammenpassen.
+	{
+		distance = 20.0, x = 12.0, patrol = 12.0, speed = 5.2, label = "rennt mit Waffe",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+		sprinting = true,
+	},
 ]
 
 
@@ -158,7 +179,11 @@ func _place_humanoids() -> void:
 	for place in HUMANOID_PLACES:
 		var distance: float = place.distance
 		var figure := HumanoidTarget.new()
-		figure.name = "Figur%dm" % int(distance)
+		# Entfernung UND Beschriftung im Namen: Bei 15 m stehen inzwischen
+		# fünf Figuren, die sonst alle "Figur15m" hiessen und von Godot
+		# durchnummeriert würden. Im Szenenbaum sucht man dann, welche welche
+		# ist.
+		figure.name = "Figur%dm_%s" % [int(distance), String(place.label).capitalize()]
 		figure.label_text = "%d m  %s" % [int(distance), place.label]
 		figure.patrol_width = place.patrol
 		figure.patrol_speed = place.speed
@@ -171,6 +196,13 @@ func _place_humanoids() -> void:
 			figure.wears_vest = true
 
 		container.add_child(figure)
+
+		# Die Haltung erst nach dem Einhängen: Ihre Setter reichen sie an
+		# Animation und Waffe weiter, und die gibt es erst nach _ready().
+		figure.aiming = place.get("aiming", false)
+		figure.crouching = place.get("crouching", false)
+		figure.sprinting = place.get("sprinting", false)
+
 		# Nach dem Einhängen setzen: global_position braucht den Baum.
 		figure.global_position = Vector3(place.x, 0.0, -distance)
 		# Sie schaut den Schützen an — sonst zielt man auf ihre Seite und
