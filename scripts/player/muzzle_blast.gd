@@ -45,6 +45,9 @@ var _camera: Camera3D
 
 ## Der Waffenknoten. Wackelt mit, damit die Waffe nicht im Bild schwimmt.
 var _weapon_node: Node3D
+
+## Der helle Schleier. Wird selbst angelegt.
+var overlay: BlastOverlay
 var _time_since_shot: float = 999.0
 var _shake_time: float = 0.0
 
@@ -79,6 +82,10 @@ var _noise_roll := FastNoiseLite.new()
 func _ready() -> void:
 	if config == null:
 		config = _load_config()
+	overlay = BlastOverlay.new()
+	overlay.name = "BlastOverlay"
+	add_child(overlay)
+
 	for noise in [_noise_pitch, _noise_yaw, _noise_roll]:
 		noise.frequency = NOISE_FREQUENCY
 	_noise_pitch.seed = 1
@@ -187,6 +194,9 @@ func _process(delta: float) -> void:
 	_shake_time += delta
 	apply_shake()
 
+	if overlay != null:
+		overlay.set_alpha(flash * config.flash_alpha)
+
 
 ## Setzt das Wackeln auf die Kamera.
 ##
@@ -261,6 +271,8 @@ func reset() -> void:
 	tinnitus = 0.0
 	_time_since_shot = 999.0
 	apply_shake()
+	if overlay != null:
+		overlay.set_alpha(0.0)
 
 
 func _load_config() -> MuzzleBlastData:

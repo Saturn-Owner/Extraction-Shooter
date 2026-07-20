@@ -62,7 +62,13 @@ extends Resource
 @export_group("Stärke bei voller Belastung")
 
 ## Deckkraft des hellen Schleiers.
-@export_range(0.0, 1.0) var flash_alpha: float = 0.55
+##
+## KLEINER ALS MAN DENKT. Der Schleier wird ADDITIV gezeichnet, und das
+## Testgelaende ist eine Schneelandschaft — bei 0,55 war das ganze Bild
+## weissgewaschen, Kisten und Ziele verschwanden vollstaendig. In einem
+## dunklen Innenraum wirkt derselbe Wert deutlich staerker; sobald es solche
+## Level gibt, gehoert das nochmal geprueft.
+@export_range(0.0, 1.0) var flash_alpha: float = 0.16
 
 ## Wackeln um die Blickachse. DARF GROSS SEIN: Rollen dreht das Bild, aber
 ## nicht die Blickrichtung — es kostet keine Präzision.

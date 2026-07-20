@@ -382,4 +382,29 @@ func _test_in_level() -> void:
 		_check(weapon_node.rotation_degrees.is_zero_approx(),
 			"und stehen ohne Belastung beide gerade (%v)" % weapon_node.rotation_degrees)
 
+	# --- Der Schleier ---
+	_check(blast.overlay != null, "der Schleier ist da")
+	if blast.overlay != null:
+		_check(blast.overlay.layer < 10,
+			"er liegt unter der Werkbank-Oberfläche (Schicht %d)" % blast.overlay.layer)
+
+		var rect := blast.overlay.get_node_or_null("Schleier") as TextureRect
+		_check(rect != null and rect.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+			"und fängt keine Mausklicks ab — sonst wäre die Werkbank blockiert")
+
+		blast.reset()
+		blast._process(1.0 / 60.0)
+		_check(is_zero_approx(blast.overlay.get_alpha()),
+			"ohne Belastung ist er unsichtbar (%.4f)" % blast.overlay.get_alpha())
+		_check(rect != null and not rect.visible,
+			"und wird dann gar nicht erst gezeichnet")
+
+		blast.flash = 1.0
+		blast._process(1.0 / 60.0)
+		_check(blast.overlay.get_alpha() > 0.0,
+			"bei voller Blendung deckt er (%.2f)" % blast.overlay.get_alpha())
+		_check(blast.overlay.get_alpha() <= blast.config.flash_alpha + 0.001,
+			"aber nie mehr als eingestellt (%.2f von %.2f)"
+				% [blast.overlay.get_alpha(), blast.config.flash_alpha])
+
 	player.queue_free()
