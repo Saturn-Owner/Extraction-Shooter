@@ -270,12 +270,16 @@ const STANCE_SPEED := 7.0
 ## Wer rennt, legt sich nach vorn. Das ist der ganze Unterschied zum schnellen
 ## Gehen — der Schrittzyklus rechnet sich ohnehin schon aus dem Tempo, ein
 ## eigener „Sprintzyklus" wäre eine zweite Wahrheit über dieselbe Bewegung.
-const SPRINT_LEAN := 11.0
+## NEGATIV heisst nach VORN. Das ist nicht dasselbe Vorzeichen wie beim Bein:
+## Ein Bein haengt vom Gelenk nach UNTEN, der Rumpf ragt nach OBEN. Dieselbe
+## Drehung schwingt das eine nach vorn und das andere nach hinten. Mit +11 hat
+## sich die Figur beim Rennen zurueckgelehnt — gemessene 14,7 cm nach hinten.
+const SPRINT_LEAN := -11.0
 const SPRINT_SPEED_BLEND := 6.0
 
 ## Wie weit sich der Oberkörper beim Ducken zusätzlich vorbeugt. Klein — wer
 ## sich duckt, geht in die Knie, er klappt nicht zusammen.
-const CROUCH_LEAN := 4.0
+const CROUCH_LEAN := -4.0
 
 ## Welche Teile schwingen, und mit welchem Vorzeichen.
 ##
@@ -403,7 +407,8 @@ func _process(delta: float) -> void:
 	# `_torso_height()`.
 	var trunk := character.torso()
 	if trunk != null:
-		trunk.position.y = bob + breath + _stance_drop()
+		# Von der Hüfthöhe aus, nicht von null: Dort sitzt das Rumpfgelenk.
+		trunk.position.y = BlockyCharacter.torso_pivot() + bob + breath + _stance_drop()
 		# Beim Rennen nach vorn legen, beim Ducken ebenfalls etwas — wer in
 		# die Hocke geht, richtet sich nicht kerzengerade auf.
 		trunk.rotation_degrees.x = SPRINT_LEAN * _sprint + CROUCH_LEAN * _crouch
@@ -578,9 +583,28 @@ func _solve_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 	var upper: float = size.y * float(BlockyCharacter.HINGES[part].at)
 	var lower: float = size.y - upper
 
-	# Alles im Raum der FIGUR rechnen, nicht in Weltkoordinaten: Dann ist die
-	# Rechnung unabhängig davon, wo und wie gedreht die Figur steht.
-	var to_local := character.global_transform.affine_inverse()
+	# Im Raum des ELTERNKNOTENS rechnen, nicht in Weltkoordinaten: Dann ist
+	# die Rechnung unabhängig davon, wo und wie gedreht die Figur steht.
+	#
+	# ---------------------------------------------------------------------
+	# WARUM DER ELTERNKNOTEN UND NICHT DIE FIGUR
+	#
+	# `shoulder` ist `joint.position`, also die Lage RELATIV ZUM ELTERN-
+	# KNOTEN. Hier stand `character.global_transform` — und solange die Arme
+	# direkt an der Figur hingen, war das derselbe Raum.
+	#
+	# Seit der Oberkörper unter `Rumpf` hängt, ist er es nicht mehr. Beim
+	# aufrechten Stehen fällt das nicht auf, weil der Rumpf dann auf null
+	# steht und ungedreht ist; die Hände sassen weiter auf 6 mm genau. Sobald
+	# sich die Figur duckte oder rannte, wanderte der Rumpf — und die Hände
+	# griffen 22 cm neben die Waffe, während die Waffe selbst richtig sass.
+	#
+	# Mit dem Elternknoten stimmt die Rechnung unabhängig davon, wieviele
+	# Knoten zwischen Figur und Schulter liegen.
+	var parent := joint.get_parent_node_3d()
+	if parent == null:
+		return false
+	var to_local := parent.global_transform.affine_inverse()
 	var shoulder := joint.position
 	var goal := to_local * target
 

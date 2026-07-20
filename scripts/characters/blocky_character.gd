@@ -185,10 +185,26 @@ const TAPER := 0.85
 ## Eine geduckte Figur ist damit auch wirklich ein kleineres Ziel, ohne dass
 ## dafür eine einzige Zeile Trefferzonen-Code nötig wäre.
 ##
-## WICHTIG: Der Rumpf steht auf Position NULL. Alle Höhen in VERTICAL bleiben
-## dadurch unverändert gültig — der Umbau verschiebt nichts, er schiebt nur
-## eine Ebene dazwischen.
+## ---------------------------------------------------------------------------
+## ER SITZT AUF HÜFTHÖHE, NICHT AM BODEN
+##
+## Erst stand der Rumpf auf Position null. Das war bequem — alle Höhen aus
+## VERTICAL blieben unverändert gültig —, aber falsch, sobald er sich neigt:
+## Eine Drehung geht immer um den EIGENEN Ursprung, und der lag damit zwischen
+## den Füssen. Elf Grad Vorneigung beim Rennen schoben die Brust dadurch 29 cm
+## nach vorn; die Figur kippte wie ein gefällter Baum, statt sich zu beugen.
+##
+## Jetzt sitzt er auf Hüfthöhe, also dort, wo ein Mensch sich beugt. Die
+## Oberkörperteile ziehen diese Höhe von ihrer Position ab und stehen damit
+## unverändert an derselben Stelle.
 const TORSO_NODE := "Rumpf"
+
+## Höhe des Rumpfgelenks über dem Boden: die Hüfte, also die Oberkante der
+## Beine. Aus derselben Quelle gerechnet wie die Beine selbst — wer die
+## Proportionen ändert, verschiebt das Gelenk mit.
+static func torso_pivot() -> float:
+	var vertical: Array = VERTICAL[HealthSystem.Part.LEFT_LEG]
+	return (BOTTOM_FRACTION - float(vertical[0])) * SCALE
 
 const UPPER_BODY := [
 	HealthSystem.Part.HEAD,
@@ -218,13 +234,17 @@ func build() -> void:
 	var old_torso := torso()
 	if old_torso != null:
 		old_torso.queue_free()
+	var pivot := torso_pivot()
 	var trunk := Node3D.new()
 	trunk.name = TORSO_NODE
+	trunk.position = Vector3(0.0, pivot, 0.0)
 	add_child(trunk)
 
 	var mount := Node3D.new()
 	mount.name = "Waffenpunkt"
-	mount.position = WEAPON_MOUNT
+	# Die Hüfthöhe abziehen: WEAPON_MOUNT ist vom Boden aus gemessen, der
+	# Waffenpunkt hängt aber jetzt unter dem Rumpf.
+	mount.position = WEAPON_MOUNT - Vector3(0.0, pivot, 0.0)
 	mount.rotation_degrees = WEAPON_MOUNT_ROTATION
 	trunk.add_child(mount)
 
@@ -244,6 +264,9 @@ func build() -> void:
 		joint.position = Vector3(centre.x, centre.y + size.y * 0.5, centre.z)
 		# Oberkörper an den Rumpf, Beine an die Figur — siehe UPPER_BODY.
 		if UPPER_BODY.has(part):
+			# Die Hüfthöhe abziehen, weil der Rumpf dort sitzt. Ohne das
+			# stünde der Oberkörper 75 cm zu hoch.
+			joint.position.y -= pivot
 			trunk.add_child(joint)
 		else:
 			add_child(joint)

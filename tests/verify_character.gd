@@ -986,7 +986,71 @@ func _test_stances() -> void:
 	_check(figure.weapon.rotation_degrees.x < -10.0,
 		"wer rennt, zielt nicht — Rennen hat Vorrang")
 
+	# --- Beim Rennen nach VORN, nicht nach hinten ---
+	#
+	# Das Vorzeichen ist nicht dasselbe wie beim Bein: Ein Bein hängt vom
+	# Gelenk nach unten, der Rumpf ragt nach oben. Mit dem Vorzeichen des
+	# Beins lehnte sich die Figur beim Rennen zurück, und im Rendering sah
+	# das aus wie eine Haltung, nur eben die falsche.
+	figure.aiming = false
+	for i in range(60):
+		await process_frame
+	var chest := figure.joint_of(HealthSystem.Part.CHEST)
+	var leaning := chest.global_position.z
+	figure.sprinting = false
+	for i in range(180):
+		await process_frame
+	_check(leaning < chest.global_position.z - 0.05,
+		"rennend neigt sich der Oberkörper nach vorn (%.2f m)"
+			% (chest.global_position.z - leaning))
+
 	figure.queue_free()
+	await process_frame
+
+	# --- Die Hände bleiben in JEDER Haltung an der Waffe ---
+	#
+	# ---------------------------------------------------------------------
+	# DIESE PRÜFUNG FEHLTE, UND DAS HAT WEHGETAN
+	#
+	# Nach dem Einbau des Rumpfknotens rechnete die Armlösung die Schulter im
+	# Raum des Rumpfes, das Ziel aber im Raum der Figur. Aufrecht fiel das
+	# nicht auf, weil beide Räume dann zusammenfallen — geduckt und rennend
+	# griffen die Hände 22 cm neben die Waffe.
+	#
+	# Alle 123 Prüfungen blieben dabei grün. Gefunden hat es ein Mensch, der
+	# hingesehen hat. Genau deshalb steht die Prüfung jetzt hier.
+	for setup in [
+			{n = "stehend", a = false, c = false, s = false, v = 0.0},
+			{n = "zielend", a = true, c = false, s = false, v = 0.0},
+			{n = "geduckt", a = true, c = true, s = false, v = 0.0},
+			{n = "rennend", a = false, c = false, s = true, v = 5.2},
+		]:
+		var probe := HumanoidTarget.new()
+		probe.weapon_id = &"weapon_rifle_ar15"
+		probe.wears_vest = true
+		root.add_child(probe)
+		await process_frame
+		probe.aiming = setup.a
+		probe.crouching = setup.c
+		probe.sprinting = setup.s
+		probe._animation.speed = setup.v
+		for i in range(150):
+			await process_frame
+
+		var right := probe.hand_of(HealthSystem.Part.RIGHT_ARM)
+		var left := probe.hand_of(HealthSystem.Part.LEFT_ARM)
+		var to_grip := right.global_position.distance_to(
+			probe._animation.grip_target.global_position)
+		var to_fore := left.global_position.distance_to(
+			probe._animation.support_target.global_position)
+		# 5 cm Spielraum: Bei gesenkter Waffe im Sprint kommt der Stützarm
+		# knapp an seine Reichweite, gemessene 24 mm. Alles darüber heisst,
+		# dass die Hand die Waffe verloren hat.
+		_check(to_grip < 0.05 and to_fore < 0.05,
+			"%s hält die Waffe mit beiden Händen (%.0f / %.0f mm)"
+				% [setup.n, to_grip * 1000.0, to_fore * 1000.0])
+		probe.queue_free()
+		await process_frame
 
 
 ## Tiefster Punkt des linken Beins, entlang der Richtung des Unterschenkels.
