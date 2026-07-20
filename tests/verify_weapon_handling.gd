@@ -27,6 +27,8 @@ func _initialize() -> void:
 	_test_jamming()
 	_test_jam_chance_grows_with_wear()
 	_test_jam_never_loses_ammo()
+	_test_jam_survives_weapon_switch()
+	_test_chamber_only_reload()
 	_test_aiming_reduces_spread()
 	_test_generated_meshes_are_closed()
 	_test_every_weapon_builds()
@@ -305,6 +307,88 @@ func _count_jams(weapon: Weapon, samples: int) -> int:
 
 
 ## Zielen muss messbar praeziser sein, nicht nur optisch anders.
+## Eine Ladehemmung darf den Waffenwechsel ueberleben.
+##
+## ---------------------------------------------------------------------------
+## SONST IST WEGSTECKEN DER BILLIGSTE AUSWEG
+##
+## `is_jammed` stand nicht im Magazingedaechtnis des Spielers. Taste 2, Taste 1
+## — und die Waffe war sauber, waehrend das richtige Beheben `jam_clear_time`
+## kostet. Gemeldet wurde nicht der Exploit, sondern seine Folge: das
+## seltsame Nachladen danach, siehe _test_chamber_only_reload().
+func _test_jam_survives_weapon_switch() -> void:
+	_section("Hemmung ueberlebt den Waffenwechsel")
+
+	var weapon := _make_weapon()
+	weapon.rounds_in_magazine = 30
+	weapon.round_chambered = false
+	weapon.is_jammed = true
+
+	# Genau das tut player_controller beim Wechsel.
+	var remembered := {
+		"rounds": weapon.rounds_in_magazine,
+		"chambered": weapon.round_chambered,
+		"jammed": weapon.is_jammed,
+	}
+	weapon.restore_magazine(int(remembered["rounds"]),
+		bool(remembered["chambered"]), bool(remembered["jammed"]))
+
+	_check(weapon.is_jammed, "nach dem Zurueckwechseln klemmt sie weiterhin")
+	_check(not weapon.request_reload(),
+		"und laesst sich nicht einfach nachladen")
+
+	# Ohne den gemerkten Wert muss der Standard weiter sauber sein: Wer
+	# restore_magazine ohne dritten Wert ruft, bekommt keine Hemmung
+	# geschenkt.
+	weapon.restore_magazine(30, true)
+	_check(not weapon.is_jammed, "ohne Angabe bleibt sie hemmungsfrei")
+
+
+## Volles Magazin, leere Kammer: Es wird nur durchgeladen.
+##
+## ---------------------------------------------------------------------------
+## DIE ANIMATION DARF NICHTS ZEIGEN, WAS NICHT PASSIERT
+##
+## Gemeldet beim Spielen: "wechselt manchmal gar nicht das Magazin, sondern
+## zieht nur den Stift nach hinten, und dann hat man wieder Munition."
+##
+## Genau so war es. Nach einer Hemmung ist das Magazin voll und der Lauf leer.
+## Nachladen liess dann den vollen Magazinwechsel abspielen, fuellte nichts
+## nach (`get_missing_rounds()` ist null) und schob am Ende eine Patrone aus
+## dem Magazin in die Kammer — 30 wurden zu 29.
+func _test_chamber_only_reload() -> void:
+	_section("Durchladen statt Magazinwechsel")
+
+	var weapon := _make_weapon()
+	var size: int = weapon.data.magazine_size
+
+	var reported := [false]
+	weapon.reload_started.connect(
+		func(_d: float, _empty: bool, only: bool) -> void: reported[0] = only)
+
+	# --- Volles Magazin, leerer Lauf ---
+	weapon.rounds_in_magazine = size
+	weapon.round_chambered = false
+	_check(weapon.request_reload(), "nachladen ist moeglich")
+	_check(weapon._reload_chamber_only, "es gilt als blosses Durchladen")
+	_check(reported[0], "und wird so gemeldet, damit die Animation es weiss")
+
+	while weapon.is_reloading():
+		weapon._advance_reload(1.0 / 60.0)
+	_check(weapon.round_chambered, "danach steckt eine Patrone im Lauf")
+	_check(weapon.get_total_rounds() == size,
+		"und es ist keine verschwunden (%d von %d)"
+			% [weapon.get_total_rounds(), size])
+
+	# --- Ein echter Wechsel bleibt ein echter Wechsel ---
+	weapon.rounds_in_magazine = 3
+	weapon.round_chambered = false
+	weapon.request_reload()
+	_check(not weapon._reload_chamber_only,
+		"ein halbleeres Magazin wird weiterhin gewechselt")
+	_check(not reported[0], "und auch so gemeldet")
+
+
 func _test_aiming_reduces_spread() -> void:
 	_section("Zielen verringert die Streuung")
 

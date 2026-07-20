@@ -15,7 +15,9 @@ signal reloaded(rounds: int)
 signal dry_fire()
 signal recoil_kick(vertical: float, horizontal: float)
 
-signal reload_started(duration: float, from_empty: bool)
+## `chamber_only` heisst: Das Magazin bleibt drin, es wird nur durchgeladen.
+## Siehe `_reload_chamber_only`.
+signal reload_started(duration: float, from_empty: bool, chamber_only: bool)
 signal reload_finished(rounds: int)
 signal reload_cancelled()
 signal jammed()
@@ -92,14 +94,32 @@ var _dry_fired_since_release: bool = false
 var _reload_time_left: float = 0.0
 var _reload_from_empty: bool = false
 
+## Volles Magazin, aber leere Kammer — dann wird nur durchgeladen.
+##
+## ---------------------------------------------------------------------------
+## SONST ZEIGT DIE ANIMATION EINEN WECHSEL, DEN ES NICHT GIBT
+##
+## Dieser Zustand entsteht nach einer Ladehemmung: Der Verschluss hat die
+## verschossene Patrone ausgeworfen, aber keine neue zugefuehrt. Magazin voll,
+## Lauf leer.
+##
+## Wer dann nachlaedt, bekam bisher den vollen Magazinwechsel zu sehen — obwohl
+## `get_missing_rounds()` null ist, also gar nichts nachgefuellt wird. Am Ende
+## wanderte lediglich eine Patrone aus dem Magazin in die Kammer, 30 wurden zu
+## 29. Beim Spielen sah das aus, als bliebe das Magazin einfach stecken.
+var _reload_chamber_only: bool = false
+
 ## Nachladegeraeusche und ihre Stelle im Ablauf (0 = Anfang, 1 = fertig).
 ##
 ## Der Verschluss kommt nur bei leergeschossener Waffe vor: Steckt noch eine
 ## Patrone im Lauf, bleibt er vorn und es gibt nichts vorzulassen.
+## `needs_swap` heisst: Das Geraeusch gehoert zum Magazinwechsel und bleibt
+## still, wenn nur durchgeladen wird. Ohne das hoerte man ein Magazin fallen
+## und einrasten, das die Waffe nie verlassen hat.
 const RELOAD_CUES := [
-	{at = 0.08, sound = "nachladen_magazin_raus", only_empty = false},
-	{at = 0.52, sound = "nachladen_magazin_rein", only_empty = false},
-	{at = 0.88, sound = "nachladen_verschluss", only_empty = true},
+	{at = 0.08, sound = "nachladen_magazin_raus", only_empty = false, needs_swap = true},
+	{at = 0.52, sound = "nachladen_magazin_rein", only_empty = false, needs_swap = true},
+	{at = 0.88, sound = "nachladen_verschluss", only_empty = true, needs_swap = false},
 ]
 
 var _reload_total: float = 0.0
@@ -569,10 +589,12 @@ func request_reload() -> bool:
 		return false
 
 	_reload_from_empty = not round_chambered
+	# Nichts nachzufuellen, nur durchzuladen — siehe `_reload_chamber_only`.
+	_reload_chamber_only = get_missing_rounds() <= 0
 	_reload_time_left = data.get_reload_duration(_reload_from_empty)
 	_reload_total = _reload_time_left
 	_next_cue = 0
-	reload_started.emit(_reload_time_left, _reload_from_empty)
+	reload_started.emit(_reload_time_left, _reload_from_empty, _reload_chamber_only)
 	return true
 
 
@@ -605,6 +627,8 @@ func _play_reload_cues() -> void:
 			break
 		_next_cue += 1
 		if bool(cue.only_empty) and not _reload_from_empty:
+			continue
+		if bool(cue.get("needs_swap", false)) and _reload_chamber_only:
 			continue
 		_play(WeaponAudio.get_sound(base_data, String(cue.sound)), randf_range(0.97, 1.03))
 
@@ -702,11 +726,14 @@ func load_rounds(count: int) -> int:
 ## Und das Geraeusch gehoert zum Nachladen, nicht zum Griff an die Schulter.
 ##
 ## Diese Funktion setzt den Zustand deshalb schlicht, ohne Nebenwirkung.
-func restore_magazine(rounds: int, chambered: bool) -> void:
+func restore_magazine(rounds: int, chambered: bool, jammed: bool = false) -> void:
 	if data == null:
 		return
 	rounds_in_magazine = clampi(rounds, 0, data.magazine_size)
 	round_chambered = chambered
+	# Eine Hemmung ueberlebt den Waffenwechsel. Sonst waere Wegstecken und
+	# Hervorholen der billigste Weg, sie loszuwerden.
+	is_jammed = jammed
 	_shots_since_release = 0
 
 

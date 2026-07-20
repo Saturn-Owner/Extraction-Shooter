@@ -283,8 +283,13 @@ func notify_action_locked(locked: bool) -> void:
 
 
 ## Nachladen laeuft. progress geht von 0 auf 1.
-func notify_reload(progress: float, from_empty: bool) -> void:
-	_animate_magazine_swap(progress)
+func notify_reload(progress: float, from_empty: bool,
+		chamber_only: bool = false) -> void:
+	# Beim blossen Durchladen bleibt das Magazin, wo es ist. Sonst faellt hier
+	# ein Magazin heraus, das gleich darauf wieder erscheint, obwohl es die
+	# Waffe nie verlassen hat — siehe Weapon._reload_chamber_only.
+	if not chamber_only:
+		_animate_magazine_swap(progress)
 	# Bei leergeschossener Waffe muss der Verschluss zum Schluss vor.
 	if from_empty and progress > 0.85:
 		_handle_pull = _ramp(progress, 0.85, 1.0)

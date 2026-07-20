@@ -116,6 +116,9 @@ var _sequence_duration: float = 0.0
 var _sequence_kind: StringName = &""
 var _sequence_from_empty: bool = false
 
+## Magazin bleibt drin, es wird nur durchgeladen — siehe Weapon.
+var _sequence_chamber_only: bool = false
+
 
 func _ready() -> void:
 	_build_hierarchy()
@@ -381,7 +384,8 @@ func _update_sequence(delta: float) -> void:
 	if _viewmodel != null:
 		match _sequence_kind:
 			&"reload":
-				_viewmodel.notify_reload(progress, _sequence_from_empty)
+				_viewmodel.notify_reload(progress, _sequence_from_empty,
+					_sequence_chamber_only)
 			&"unjam":
 				_viewmodel.notify_unjam(progress)
 
@@ -429,9 +433,10 @@ func _on_dry_fire() -> void:
 		_viewmodel.notify_shot_dry()
 
 
-func _on_reload_started(duration: float, from_empty: bool) -> void:
+func _on_reload_started(duration: float, from_empty: bool, chamber_only: bool) -> void:
 	_sequence_kind = &"reload"
 	_sequence_from_empty = from_empty
+	_sequence_chamber_only = chamber_only
 	_sequence_duration = duration
 	_sequence_time_left = duration
 

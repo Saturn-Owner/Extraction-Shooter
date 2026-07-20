@@ -333,9 +333,18 @@ func _remember_magazine() -> void:
 		return
 	# Die Patrone im Lauf gehoert mit gemerkt. Ohne sie ginge bei jedem
 	# Waffenwechsel genau eine verloren — siehe Weapon.restore_magazine().
+	# Die Ladehemmung gehoert mit gemerkt.
+	#
+	# Ohne sie war Waffenwechseln die schnellste Art, eine Hemmung
+	# loszuwerden: Taste 2, Taste 1, Waffe wieder sauber — waehrend das
+	# richtige Beheben `jam_clear_time` kostet. Dazu kam ein Folgefehler:
+	# Eine Hemmung laesst die Kammer leer und das Magazin voll. Nach dem
+	# Zuruecksetzen der Hemmung stand die Waffe genau so da, und das
+	# naechste Nachladen wechselte dann ein volles Magazin gegen sich selbst.
 	_magazines[held.instance_id] = {
 		"rounds": weapon.rounds_in_magazine,
 		"chambered": weapon.round_chambered,
+		"jammed": weapon.is_jammed,
 		"ammo": weapon.ammo_id,
 	}
 
@@ -361,7 +370,8 @@ func _put_in_hand(stack: ItemStack) -> void:
 	if (saved_rounds > 0 or saved_chambered) and saved_ammo != &"":
 		weapon.setup(stack.item_id, saved_ammo)
 		_load_condition(stack)
-		weapon.restore_magazine(saved_rounds, saved_chambered)
+		weapon.restore_magazine(saved_rounds, saved_chambered,
+			bool(saved.get("jammed", false)))
 		return
 
 	var compatible := inventory.get_compatible_ammo(weapon_data)
