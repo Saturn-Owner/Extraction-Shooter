@@ -402,12 +402,22 @@ const OWN_BODY_LAYER := 2
 ##
 ## Wer die eigenen Arme wirklich sehen will, braucht sie AM KAMERAMODELL,
 ## nicht am Weltkoerper. Das ist Modellierarbeit, keine Sichtbarkeitsfrage.
+## ---------------------------------------------------------------------------
+## DIE ARME SIND DIE AUSNAHME
+##
+## Sie bleiben sichtbar, damit man beim Nachladen die eigene Hand zum Magazin
+## greifen sieht. Damit sie dabei nicht ins Leere fassen, greifen sie NICHT
+## die Waffe des Koerpers, sondern das Modell im Kameraraum — siehe
+## `_arm_body()`. Die Hand geht dorthin, wo die Waffe wirklich ist.
+##
+## Alles andere bleibt versteckt: Kopf und Brust stehen der Kamera im Weg,
+## Bauch und Beine haben in der ersten Person nichts verloren, solange man
+## nach unten schauen kann. Sichtbar sind sie in der dritten Person (F5) und
+## spaeter fuer Mitspieler.
 const HIDDEN_FROM_SELF := [
 	HealthSystem.Part.HEAD,
 	HealthSystem.Part.CHEST,
 	HealthSystem.Part.STOMACH,
-	HealthSystem.Part.LEFT_ARM,
-	HealthSystem.Part.RIGHT_ARM,
 	HealthSystem.Part.LEFT_LEG,
 	HealthSystem.Part.RIGHT_LEG,
 ]
@@ -490,11 +500,34 @@ func _arm_body() -> void:
 
 	# Die Arme gehoeren jetzt an die Waffe statt in den Gehzyklus.
 	_body_animation.holding_weapon = true
-	if body_weapon.viewmodel != null:
-		_body_animation.grip_target = body_weapon.viewmodel.grip_point
-		_body_animation.support_target = body_weapon.viewmodel.support_point
-		_body_animation.magwell_target = body_weapon.viewmodel.magwell_point
-		_body_animation.charge_target = body_weapon.viewmodel.charging_handle
+
+	# ---------------------------------------------------------------------
+	# DIE HAENDE GREIFEN DAS MODELL IM KAMERARAUM, NICHT DAS AM KOERPER
+	#
+	# Beides existiert: Am Koerper haengt die Waffe, die andere sehen; vor der
+	# Kamera die, die der Spieler sieht. Beide zeigen dasselbe Gewehr, stehen
+	# aber an verschiedenen Stellen — die eine an der Schulter, die andere auf
+	# der Blickachse.
+	#
+	# Sichtbar sind die eigenen Arme. Griffen sie nach der Koerperwaffe,
+	# fassten sie sichtbar neben das Gewehr, das der Spieler vor sich sieht.
+	# Sie greifen deshalb das Kameramodell — die inverse Kinematik loest auf
+	# WELTPOSITIONEN, ihr ist es also gleich, an welchem Knoten das Ziel
+	# haengt.
+	#
+	# Fuer die dritte Person bleibt es trotzdem stimmig: Dort ist das
+	# Kameramodell ausgeblendet, und die Koerperwaffe steht dicht genug an
+	# derselben Stelle.
+	var view_model: WeaponViewmodel = null
+	if weapon_view != null:
+		view_model = weapon_view.get_viewmodel()
+	if view_model == null:
+		view_model = body_weapon.viewmodel
+	if view_model != null:
+		_body_animation.grip_target = view_model.grip_point
+		_body_animation.support_target = view_model.support_point
+		_body_animation.magwell_target = view_model.magwell_point
+		_body_animation.charge_target = view_model.charging_handle
 
 	# Die echte Waffe treibt die sichtbare an.
 	weapon.fired.connect(_on_body_weapon_fired)
