@@ -8,6 +8,85 @@ Begründungen im Einzelnen stehen weiterhin in den Commits.
 
 ---
 
+## 20.07.2026 — Waffenwerkstatt: Modelle, Anbauteile, Werkbank, Ton
+
+Merge von `feature/waffen-werkstatt` nach `main`.
+**32 Commits, 193 Dateien.**
+
+Aus der Waffe wird ein sichtbares, hörbares und anpassbares Ding. Vorher war
+sie eine Zahl im Inventar, die beim Klicken einen Zähler heruntersetzte.
+
+### Waffenmodelle
+
+- **Jede Waffe hat ihr eigenes Modell und ihre eigene Mechanik.** Eine Pistole
+  hat einen Schlitten, eine Flinte eine Pumpe, ein Sturmgewehr einen
+  Verschluss — das sind verschiedene Bewegungen, keine Varianten derselben.
+  Verknüpft über das Feld `viewmodel` in der `.tres`.
+- Die **AR-15 kommt als zehn `.glb`-Dateien aus Blender**, ein Teil je Datei.
+  Verschluss, Ladehebel, Abzug, Feuerwahlhebel und Magazin bewegen sich.
+- AKM, Glock und M870 laufen weiter auf Geometrie aus dem Code.
+  `verify_weapon_handling` listet bei jedem Lauf auf, welche Waffen noch am
+  Platzhalter hängen.
+
+### Anbauteile und Werkbank
+
+- Steckplätze für Visier, Mündung, Vorderschaft und Griff. Ein Teil passt nur,
+  wenn die Waffe den Platz **und** dieselbe Schnittstelle hat — ein
+  9-mm-Dämpfer geht nicht auf ein 5,56er Gewehr.
+- **Werkbank im Testgelände**: 3D-Vorschau mit Drehteller, Wertevergleich beim
+  Überfahren, Instandsetzung gegen Zustandsverlust.
+- Bestückung und Verschleiss gehören zum **Exemplar**, nicht zum Waffentyp.
+  Zwei AR-15 im selben Rucksack können verschieden bestückt und verschieden
+  abgenutzt sein.
+
+### Ton
+
+- Echte AR-15-Aufnahmen statt Synthese, dazu 20 Nachladegeräusche.
+- **Sechs Stimmen statt einer.** Mit einer klang Dauerfeuer wie Klicken: Bei
+  750 Schuss/min liegen 80 ms zwischen den Schüssen, die Aufnahme ist 2,6 s
+  lang — zu hören war immer nur der Anschlag.
+- **Zwei Audio-Busse**, zur Laufzeit angelegt statt in `project.godot`, damit
+  die Projekteinstellungen keine Konfliktquelle werden.
+
+### Mündungsknall
+
+Dauerfeuer ohne Schalldämpfer blendet, vernebelt, rüttelt und lässt die Ohren
+pfeifen. **Einzelschüsse bleiben folgenlos** — unterhalb der Schwelle passiert
+exakt nichts.
+
+- Vier Effekte aus einer Quelle, aber mit verschiedenem Gedächtnis: Blendung
+  vergeht in gut einer Sekunde, ein Pfeifen im Ohr bleibt zwölf.
+- Der **Pulverdampf bleibt in der Welt stehen**, nicht an der Kamera. Er steht
+  in der Ziellinie, solange man draufhält — tritt man zur Seite, sieht man
+  wieder.
+- **Gedämpft qualmt es mehr**, nicht weniger. Ein Dämpfer fängt die Gase ab und
+  lässt sie langsam austreten, statt sie in einem Schlag auszublasen. Damit hat
+  er zwei Seiten: Er nimmt Knall und Blendung und handelt sich eine Wolke vor
+  dem eigenen Lauf ein.
+- Einschusslöcher bleiben stehen, höchstens 96 gleichzeitig.
+
+### Beim Mergen gefunden
+
+Drei Fehler, die **keiner der beiden Branches allein hatte** — sie entstanden
+erst durch die Kombination. Die Patrone im Lauf ging bei jedem Waffenwechsel
+und bei jeder Extraction verloren, und die Laufgeschwindigkeit kannte je Seite
+nur die eigenen Bremsen.
+
+Der ganze Merge ist in `docs/merge-waffen-werkstatt.md` aufgeschrieben:
+sieben Konflikte, jede Entscheidung mit Begründung, und was ein Mensch
+trotzdem noch prüfen muss.
+
+### Bewusst nicht dabei
+
+- Innen-/Aussen- und Entfernungston. Drei Aufnahmen liegen ungenutzt unter
+  `assets/audio/weapons/ar15/` — dafür braucht es ein System, das Räume kennt.
+- Blender-Modelle für Glock, AKM und M870.
+- Der Gehör-Nachteil **verpufft vorerst**: Die Waffe ist die einzige Tonquelle
+  im Spiel, es gibt keine Schritte und keine Gegner, die man überhören könnte.
+  Heute ist es Stimmung.
+
+---
+
 ## 20.07.2026 — Extraction-Schleife, Inventar, Charakterfenster
 
 Merge von `feature/extraction-schleife` (PR #4) nach `main`.
