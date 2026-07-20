@@ -26,8 +26,22 @@ signal exhausted()
 ## in der der Spieler die meiste Zeit unterwegs ist.
 @export var walk_speed: float = 2.4
 
+## ---------------------------------------------------------------------------
+## MASSE, DIE AUCH DIE SICHTBARE FIGUR BRAUCHT
+##
+## `CharacterAnimation` leitet daraus ab, wie tief sich eine Figur duckt und
+## ab welchem Tempo sie voll ausschwingt. Vorher standen dort abgeschriebene
+## Zahlen — und der Kommentar „entspricht etwa dem Sprint des Spielers" war
+## bereits falsch, weil hier inzwischen 5,2 steht und dort noch 4,5.
+##
+## Deshalb Konstanten statt nackter Zahlen: Der Spieler ist die Quelle, die
+## Figur liest mit. Wer hier dreht, dreht die Figur mit.
+const STAND_HEIGHT := 1.8
+const CROUCH_HEIGHT := 1.2
+const SPRINT_SPEED := 5.2
+
 ## Sprint. Kostet Ausdauer und macht laut.
-@export var sprint_speed: float = 5.2
+@export var sprint_speed: float = SPRINT_SPEED
 
 ## Geduckt. Langsam, aber leise und schwerer zu treffen.
 @export var crouch_speed: float = 1.2
@@ -774,7 +788,7 @@ func _update_crouch(delta: float) -> void:
 
 	var shape := _collision.shape as CapsuleShape3D
 	if shape != null:
-		var target_shape_height := 1.2 if is_crouching else 1.8
+		var target_shape_height := CROUCH_HEIGHT if is_crouching else STAND_HEIGHT
 		shape.height = move_toward(shape.height, target_shape_height, 4.0 * delta)
 
 

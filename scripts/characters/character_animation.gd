@@ -174,9 +174,14 @@ const HOLD_RIGHT_ELBOW := Vector3(74.0, 0.0, 0.0)
 ## ruhig wirken, aber nicht wie festgeschraubt.
 const HOLD_SWAY := 5.0
 
-## Ab diesem Tempo gilt die volle Ausschlagsweite. Entspricht etwa dem
-## Sprint des Spielers.
-const FULL_SWING_SPEED := 4.5
+## Ab diesem Tempo gilt die volle Ausschlagsweite: das Sprinttempo des
+## Spielers.
+##
+## Hier stand 4,5 mit dem Kommentar „entspricht etwa dem Sprint des Spielers".
+## Das stimmte einmal; inzwischen sprintet er 5,2. Die Figur schwang deshalb
+## schon bei 4,5 voll aus und legte bis 5,2 nur noch Frequenz zu — sie
+## trippelte im Sprint. Jetzt kommt der Wert von dort, wo er hingehört.
+const FULL_SWING_SPEED := PlayerController.SPRINT_SPEED
 
 ## Wie weit die Figur bei einem vollen Doppelschritt kommt.
 ##
@@ -246,20 +251,26 @@ const SETTLE_SPEED := 6.0
 ## Wie tief der Körper sinkt, in Metern. Der EINZIGE Wert, an dem man dreht —
 ## der Kniewinkel folgt daraus, siehe `_crouch_knee_angle()`.
 ##
-## WARUM NICHT DIE 0,70 m DES SPIELERS: Dessen Augenhöhe fällt von 1,65 auf
-## 0,95. Übertrüge man das eins zu eins, sässe die Figur auf den Fersen —
-## rechnerisch bräuchte es 86 Grad Oberschenkelbeugung. Das ist eine Hocke,
-## keine Gefechtsstellung. Hier steht ein Wert, der wie Ducken aussieht; ob
-## Spieler und Figur am Ende gleich tief gehen sollen, ist eine Frage an
-## Lucas, sobald der Spieler einen sichtbaren Körper hat.
+## ---------------------------------------------------------------------------
+## DER WERT KOMMT VOM SPIELER, NICHT VON HIER
 ##
-## WARUM NICHT TIEFER: Hier standen erst 0,32 m. Im Rendering las sich das
-## nicht als Ducken, sondern als Hocke — 55 Grad Oberschenkel, 110 Grad Knie,
-## die Knie weit vor dem Körper. Die Figur hat kein Fussgelenk, das so eine
-## Beugung auffangen könnte; der Unterschenkel steht dann schräg nach hinten
-## und das Bein sieht geknickt aus. Bei 0,22 m sind es 45 Grad, und der Kopf
-## sinkt von 1,80 auf 1,58 m — sichtbar geduckt, ohne dass das Bein bricht.
-const CROUCH_DROP := 0.22
+## Die Kollisionskapsel des Spielers schrumpft beim Ducken von 1,80 auf
+## 1,20 m. Die Figur sinkt jetzt um genau dieselben 0,60 m — sie soll ja
+## darstellen, was der Spieler tut, und spätestens wenn der Spieler einen
+## sichtbaren Körper bekommt, wäre jeder Unterschied eine Lüge: Der Körper
+## sähe anders geduckt aus, als die Kapsel es ist, und Treffer lägen woanders
+## als das Bild sie erwarten lässt.
+##
+## Hier standen nacheinander 0,32 und 0,22 m — beides von Hand gewählt, weil
+## mir 0,60 im Rendering zu tief vorkam. Das war meine Meinung gegen eine
+## Zahl, die es schon gab.
+##
+## PREIS: 0,60 m bei 0,75 m Beinlänge sind 78 Grad Oberschenkelbeugung, also
+## eine echte Hocke mit weit vorstehenden Knien. Die Figur hat kein
+## Fussgelenk, das davon etwas auffangen könnte. Sieht das falsch aus, ist
+## nicht dieser Wert schuld, sondern die Ducktiefe des Spielers — und die
+## gehört dann dort geändert, nicht hier.
+const CROUCH_DROP := PlayerController.STAND_HEIGHT - PlayerController.CROUCH_HEIGHT
 
 ## Wie schnell zwischen Stehen und Ducken gewechselt wird.
 const STANCE_SPEED := 7.0

@@ -154,7 +154,8 @@ const HUMANOID_PLACES := [
 	# Der Renner laeuft wirklich, sonst sieht man nur die Neigung und nicht,
 	# dass Schrittzyklus und Haltung zusammenpassen.
 	{
-		distance = 20.0, x = 12.0, patrol = 12.0, speed = 5.2, label = "rennt mit Waffe",
+		distance = 20.0, x = 12.0, patrol = 12.0,
+		speed = PlayerController.SPRINT_SPEED, label = "rennt mit Waffe",
 		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
 		sprinting = true,
 	},

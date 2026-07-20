@@ -935,9 +935,18 @@ func _test_stances() -> void:
 
 	var crouched_head := head.global_position.y
 	var crouched_foot := _foot_height(figure)
-	_check(crouched_head < standing_head - 0.15,
-		"geduckt sinkt der Kopf spürbar (%.2f auf %.2f m)"
-			% [standing_head, crouched_head])
+	# Die Figur duckt sich GENAU SO TIEF WIE DER SPIELER.
+	#
+	# Nicht „ungefähr" und nicht nach Augenmass: Sobald der Spieler einen
+	# sichtbaren Körper bekommt, ist jeder Unterschied eine Lüge — der Körper
+	# sähe anders geduckt aus, als seine Kollisionskapsel es ist. Hier standen
+	# vorher von Hand gewählte 0,22 m, und die passten zu nichts.
+	_check(absf(crouched_head - PlayerController.CROUCH_HEIGHT) < 0.02,
+		"geduckt ist die Figur so hoch wie die Spielerkapsel (%.2f gegen %.2f m)"
+			% [crouched_head, PlayerController.CROUCH_HEIGHT])
+	_check(absf(standing_head - PlayerController.STAND_HEIGHT) < 0.02,
+		"stehend ebenso (%.2f gegen %.2f m)"
+			% [standing_head, PlayerController.STAND_HEIGHT])
 	_check(absf(crouched_foot) < 0.005,
 		"und der Fuss bleibt trotzdem am Boden (%.4f m)" % crouched_foot)
 
