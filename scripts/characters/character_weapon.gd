@@ -100,10 +100,23 @@ const RELOAD_SHIFT := Vector3(-0.16, -0.02, 0.10)
 ## Spieler winzig, weil die Waffe ohnehin dicht vor der Kamera hängt. Die
 ## Figur muss sie dagegen wirklich an sich heranziehen, sonst kommt der
 ## linke Arm nicht an den Schacht.
+##
+## ---------------------------------------------------------------------------
+## NUR DIE NEIGUNG, NICHT DAS KIPPEN ZUR SEITE
+##
+## Der Spieler kippt die Waffe beim Nachladen zusätzlich um 34 Grad und dreht
+## sie ein. Das hat im Kameraraum einen Zweck: Es dreht den Magazinschacht ins
+## Bild, damit man den Wechsel überhaupt sieht.
+##
+## Von aussen betrachtet gibt es diesen Zweck nicht — dort liest sich dasselbe
+## Kippen, als liesse die Figur die Waffe zur Seite wegsacken. Übernommen wird
+## deshalb nur die Neigung nach oben; sie ist die Bewegung, die auch ein
+## Zuschauer als "Waffe hochnehmen zum Wechseln" erkennt.
 func _reload_rotation() -> Vector3:
 	if viewmodel == null:
 		return Vector3.ZERO
-	return viewmodel.reload_rotation_degrees - viewmodel.hip_rotation_degrees
+	var pitch := viewmodel.reload_rotation_degrees.x - viewmodel.hip_rotation_degrees.x
+	return Vector3(pitch, 0.0, 0.0)
 
 ## In diesem Abschnitt wird herangezogen bzw. wieder ausgerichtet.
 const BRING_IN_END := 0.12
