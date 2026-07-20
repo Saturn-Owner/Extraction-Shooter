@@ -1,90 +1,56 @@
 # Herkunft der Umgebungsmodelle
 
 Nach dem Muster von `assets/audio/player/QUELLEN.md`: Wer etwas ins Repo legt,
-schreibt dazu, woher es kommt und was damit gemacht wurde. Sonst rät ein Jahr
-später niemand mehr, ob man es weitergeben darf.
+schreibt dazu, woher es kommt.
 
-## container_20ft
+## container.res
 
 | | |
 | --- | --- |
-| **Datei im Repo** | `container_20ft.res` + drei `.webp` |
-| **Quelle** | `container_pack.glb` — **fremdes Modell**, nicht selbst erstellt |
-| **Generator laut Datei** | `Sketchfab-14.68.0` |
-| **Nutzungsrecht** | Lucas gibt an, es benutzen zu dürfen |
-| **Weitergaberecht** | **ungeklärt — siehe unten** |
-| **Material im Paket** | `20Ft_Generic_Old` |
+| **Datei** | `container.res` — eine ArrayMesh mit zwei Flächen (Anstrich, Rahmen) |
+| **Herkunft** | **Lucas' eigener Entwurf**, in Godot nachgebaut |
+| **Lizenz** | uneingeschränkt, es ist Eigenarbeit |
+| **Erzeugt von** | `tools/build_container.gd` |
 
-### Warum das noch nicht gepusht werden darf
+### Wie er entstand
 
-Benutzen und weitergeben sind zwei verschiedene Rechte. Ein öffentliches
-Repository ist **Weitergabe**: Jeder, der es klont, bekommt `container_20ft.res`
-und die Texturen und kann sie herausziehen.
+Lucas hat den Container in einer three.js-Seite entworfen: geriffelte Wände
+(42 Rippen an den Langseiten, 14 an den Stirnseiten), ein dunkler Stahlrahmen
+mit acht Eckbeschlägen, kräftige Farbe (`#2f6b8f`).
 
-Die meisten Asset-Lizenzen (Sketchfab Standard, die üblichen Store-Lizenzen)
-erlauben den Einsatz im fertigen Spiel, verbieten aber genau das — die Datei so
-abzulegen, dass sie sich wieder entnehmen lässt.
+`tools/build_container.gd` baut **genau diese Vorlage** in Godot nach —
+dieselben Maße, dieselbe Rippenzahl, dieselben Farbrollen — und fügt die über
+hundert Quader zu **einer** Mesh zusammen. Das ist wichtig: Als einzelne Knoten
+wären das bei vierhundert Containern zehntausende, und das Spiel würde stehen.
+So liegt der Container vierhundertmal als dieselbe Ressource vor.
 
-**Zu klären, bevor dieser Ordner gepusht wird:**
+Die Mesh hat zwei Flächen — Anstrich und Rahmen —, damit jeder Container seinen
+Anstrich umfärben kann (rot, gelb, blau, grün, grau), während der Stahlrahmen
+immer dunkel bleibt.
 
-1. Woher stammt `container_pack.glb` genau (Seite, Autor, Titel)?
-2. Erlaubt die Lizenz die Weitergabe der Quelldatei in einem Repository?
+### Kein fremdes Modell mehr
 
-Falls nein, gibt es einen sauberen Ausweg: Die Dateien bleiben lokal und
-kommen in die `.gitignore`. `WorldParts.has_container_model()` prüft das
-bereits — ohne die Modelldateien baut die Karte wieder Quader statt roter
-Fehler. Der Kollege sähe dann Kisten, wo Lucas Container sieht; unschön, aber
-lauffähig.
+Eine frühere Fassung nutzte ein heruntergeladenes Modell (`container_pack.glb`,
+Generator „Sketchfab"), dessen Weitergaberecht ungeklärt war. Das ist
+**vollständig entfernt** — Mesh und Texturen. Der Container ist jetzt reine
+Eigenarbeit, und die Lizenzfrage stellt sich nicht mehr.
 
-### Nachbearbeitung
+Die Maße sind auf **6,0 × 2,6 × 2,4 m** gerundet (statt der echten 6,058 ×
+2,591 × 2,438), damit sich Container im Editor bündig aneinanderschieben
+lassen — das geht restlos in einem 0,2-m-Raster auf.
 
-Das Original ist **675 MB** groß — fast ausschließlich Texturen: 40 PNGs zu je
-rund 28 MB bei 4096 × 4096. GitHub weist jede Datei über 100 MB beim Push ab,
-also war ein Auszug nötig.
+## Snow006
 
-`tools/extract_containers.gd` macht daraus:
+| | |
+| --- | --- |
+| **Dateien** | `assets/textures/snow/snow_*.jpg` |
+| **Quelle** | ambientCG, Set `Snow006`, 1K |
+| **Lizenz** | **CC0** (gemeinfrei, keine Auflagen) |
 
-| Datei | Was | Größe |
-| --- | --- | --- |
-| `container_20ft.res` | nur die eine Mesh, ohne Texturen | 111 KB |
-| `container_20ft_basecolor.webp` | **entfärbt**, 4096 → 2048 | 692 KB |
-| `container_20ft_orm.webp` | Occlusion/Roughness/Metallic, 4096 → 2048 | 1077 KB |
-| `container_20ft_normal.webp` | Normalenkarte, 4096 → 2048 | 1340 KB |
+Vollständiger PBR-Satz: Farbe, Normalenkarte (die OpenGL-Fassung, die Godot
+erwartet), Rauigkeit, Ambient Occlusion. Liegt auf dem Boden — der größten
+Fläche der Karte. Verdrahtet in `WorldParts.snow_material()` mit Triplanar in
+Weltkoordinaten, weil die Landflächen bis zu 330 m lang sind.
 
-**Zusammen 3,2 MB statt 675 MB.**
-
-Zwei Entscheidungen dabei:
-
-- **Die BaseColor ist entfärbt** (Luminanz nach Rec. 709). Die Containerfarbe
-  war in der Textur eingebacken; Rot über einen bereits rostroten Container
-  multipliziert gibt Matsch. Jetzt trägt eine einzige Textur alle Farben —
-  Rost, Dellen und Streifen bleiben, die Farbe kommt aus dem Material.
-- **WebP statt JPEG.** Bei Normalenkarten sind JPEG-Artefakte als Griesel auf
-  der Oberfläche sichtbar, weil die Kanäle Richtungen sind und kein Bild.
-
-### Maße
-
-Das Modell ist roh **6,405 × 2,924 × 2,416 m** — ein High-Cube, und lauter
-krumme Zahlen. Im Spiel wird es auf **6,0 × 2,6 × 2,4** normiert
-(`WorldParts.CONTAINER_SIZE`). Das geht restlos in einem 0,2-m-Raster auf,
-damit sich Container im Editor bündig aneinanderschieben lassen. Die Rechnung
-dafür steht in `WorldParts.container_mesh_transform()` und passt sich an, wenn
-jemand eine andere Variante extrahiert.
-
-## Snow006 (noch nicht eingebaut)
-
-In `Weathered Shipping Container Model.zip` — **von Lucas selbst erstellt**,
-eine three.js-Seite, die einen Container aus 16 Quadern zeichnet — lag ein
-Schnee-Texturensatz von **ambientCG** (`Snow006`, 1K JPG, **CC0**): Color,
-NormalGL, NormalDX, Roughness, Ambient Occlusion, dazu eine fertige `.tres`.
-
-Ein Containermodell war in dem Zip **nicht** enthalten; die Geometrie dort ist
-three.js-Code, keine Mesh.
-
-Die mitgelieferte `.tres` ist nicht direkt verwendbar: Sie verweist auf eine
-`Displacement`-Karte, die im Zip fehlt, und sie hat kein Triplanar — auf der
-330 m langen Bodenplatte würde die Textur zu Matsch gezogen.
-
-Bisher nicht eingebaut: Der Schnee läuft über prozedurales Rauschen mit
-Triplanar (`WorldParts._surface()`). Wäre der nächste Kandidat, wenn der Boden
-zu gleichförmig wirkt.
+Kam aus einem Zip, das Lucas selbst erstellt hat (eine three.js-Seite mit dem
+Container-Entwurf oben); der Schneesatz stammt ursprünglich von ambientCG.

@@ -124,85 +124,59 @@ static func snow_material() -> BaseMaterial3D:
 
 # ---------------------------------------------------------------------------
 # Das Containermodell
+#
+# Lucas' eigener Entwurf, aus tools/build_container.gd. Die Mesh hat zwei
+# Flaechen: der Anstrich (0) und der dunkle Stahlrahmen (1). So faerbt jeder
+# Container seinen Anstrich um, waehrend der Rahmen immer dunkel bleibt.
 # ---------------------------------------------------------------------------
 
-const CONTAINER_MESH := "res://assets/models/world/container_20ft.res"
-const CONTAINER_ALBEDO := "res://assets/models/world/container_20ft_basecolor.webp"
-const CONTAINER_ORM := "res://assets/models/world/container_20ft_orm.webp"
-const CONTAINER_NORMAL := "res://assets/models/world/container_20ft_normal.webp"
+const CONTAINER_MESH := "res://assets/models/world/container.res"
 
 
-## Ein Container, wie ihn das Spiel benutzt.
+## Masse wie ein 20-Fuss-Container, gerundet auf unser 0,2-m-Raster: L x H x W.
 ##
-## BEWUSST RASTERFREUNDLICH statt masszahlengetreu. Ein echter 20-Fuss-Container
-## ist 6,058 x 2,591 x 2,438 — lauter krumme Zahlen, an denen man sich beim
-## Bauen im Editor die Finger bricht: Zwei Container buendig nebeneinander
-## schieben scheitert, weil das Raster 6,0 anbietet und 6 cm Spalt bleiben.
-##
-## 6,0 x 2,6 x 2,4 geht restlos in einem 0,2-m-Raster auf. Der Unterschied ist
-## im Spiel unsichtbar, beim Bauen ist er der Unterschied zwischen flutschen
-## und fummeln.
+## BEWUSST RASTERFREUNDLICH statt masszahlengetreu. Echt waeren es 6,058 x
+## 2,591 x 2,438 — lauter krumme Zahlen, an denen zwei Container im Editor
+## nie buendig zusammenkommen. 6,0 x 2,6 x 2,4 geht restlos in 0,2 m auf.
 const CONTAINER_SIZE := Vector3(6.0, 2.6, 2.4)
 
 
-## Die eingefaerbten Containermaterialien.
+## Der Anstrich in fuenf Farben. Der Rahmen ist immer derselbe.
 ##
-## Die Textur ist ENTFAERBT — Rost, Dellen und Streifen ohne eigene Farbe.
-## Deshalb kann dieselbe Textur jede Farbe tragen, und alle fuenf Materialien
-## teilen sich ein einziges Bild statt fuenf eigene zu brauchen.
-##
-## Die Farben sind kraeftiger, als man auf den ersten Blick denkt: Die
-## Graustufentextur liegt im Mittel bei etwa der Haelfte, und multiplizieren
-## macht alles dunkler. Ein zurueckhaltendes Rot waere im Schnee braun.
+## Die Farben sind kraeftig gewaehlt: Im Schnee, unter grauem Himmel, saufen
+## zurueckhaltende Toene ab. Das Blau ist Lucas' Originalfarbe aus dem Entwurf
+## (#2f6b8f), die anderen dazu abgestimmt.
 static func container_materials() -> Dictionary:
 	return {
-		"container_red": _container_material(Color(0.72, 0.20, 0.16)),
-		"container_blue": _container_material(Color(0.17, 0.36, 0.64)),
-		"container_green": _container_material(Color(0.21, 0.46, 0.27)),
-		"container_yellow": _container_material(Color(0.86, 0.66, 0.14)),
-		"container_grey": _container_material(Color(0.60, 0.62, 0.64)),
+		"container_red": _paint_material(Color(0.62, 0.17, 0.14)),
+		"container_blue": _paint_material(Color(0.184, 0.42, 0.56)),
+		"container_green": _paint_material(Color(0.20, 0.44, 0.26)),
+		"container_yellow": _paint_material(Color(0.80, 0.60, 0.13)),
+		"container_grey": _paint_material(Color(0.55, 0.57, 0.60)),
 	}
 
 
-## Ob das Modell ueberhaupt da ist.
+## Das gemeinsame Rahmenmaterial — dunkler Stahl, aus dem Entwurf.
 ##
-## Ohne diese Pruefung wuerde ein frischer Clone ohne die Modelldateien mit
-## roten Fehlern um sich werfen, statt einfach die Quader zu zeigen.
+## Einmal erzeugt und geteilt: Sonst haette jeder der vierhundert Container sein
+## eigenes, identisches Rahmenmaterial im Speicher.
+static var _frame_material: StandardMaterial3D = null
+
+static func container_frame_material() -> StandardMaterial3D:
+	if _frame_material == null:
+		_frame_material = _material(Color(0.29, 0.30, 0.32), 0.40, 0.60)
+	return _frame_material
+
+
+## Ob das Modell ueberhaupt da ist. Ohne faellt container() auf einen Quader
+## zurueck, statt rot zu blinken.
 static func has_container_model() -> bool:
 	return ResourceLoader.exists(CONTAINER_MESH)
 
 
-static func _container_material(tint: Color) -> BaseMaterial3D:
-	if not has_container_model():
-		return _material(tint, 0.30, 0.75)
-
-	# ORM: Occlusion, Roughness und Metallic in den drei Kanaelen eines Bildes —
-	# so liefert glTF sie, und so spart man zwei Texturen.
-	var mat := ORMMaterial3D.new()
-	mat.albedo_color = tint
-	mat.albedo_texture = load(CONTAINER_ALBEDO)
-	mat.orm_texture = load(CONTAINER_ORM)
-	mat.normal_enabled = true
-	mat.normal_texture = load(CONTAINER_NORMAL)
-	mat.normal_scale = 1.0
-	return mat
-
-
-## Wie die Modell-Mesh sitzen muss, damit sie wie ein Quader um den Ursprung
-## herum liegt und genau CONTAINER_SIZE gross ist.
-##
-## Wird AUSGERECHNET statt eingetippt: Das Modell kommt mit dem Ursprung in
-## einer Ecke und in High-Cube-Hoehe aus dem Paket. Wer es spaeter neu
-## extrahiert oder eine andere Variante nimmt, bekommt andere Rohmasse — und
-## muesste sonst von Hand nachrechnen, was hier von selbst passiert.
-static func container_mesh_transform(mesh: Mesh) -> Transform3D:
-	var box := mesh.get_aabb()
-	var scale := Vector3(
-		CONTAINER_SIZE.x / maxf(0.001, box.size.x),
-		CONTAINER_SIZE.y / maxf(0.001, box.size.y),
-		CONTAINER_SIZE.z / maxf(0.001, box.size.z))
-	var centre := (box.position + box.size * 0.5) * scale
-	return Transform3D(Basis().scaled(scale), -centre)
+## Werte aus dem Entwurf: rauer, halbmatter Anstrich mit etwas Metallglanz.
+static func _paint_material(tint: Color) -> StandardMaterial3D:
+	return _material(tint, 0.25, 0.78)
 
 
 ## Ein Festkoerper: Mesh und Kollision in einem Knoten.
@@ -295,14 +269,17 @@ const THICKNESS := 0.30
 ## Als ein Aufruf, weil das Containerfeld aus dutzenden besteht und jeder von
 ## Hand gebaute drei Zeilen kosten wuerde, die alle gleich aussehen.
 ##
-## KOLLISION BLEIBT EIN QUADER, auch wenn die Mesh Wellblech ist. Zwei Gruende:
+## KOLLISION BLEIBT EIN QUADER, auch wenn die Mesh geriffelt ist. Zwei Gruende:
 ## Ein Quader ist um Groessenordnungen billiger als eine Dreiecksform bei
-## vierhundert Containern — und an jeder Rippe des Wellblechs haengenzubleiben
-## waere im Gefecht das Letzte, was man braucht.
+## vierhundert Containern — und an jeder Rippe haengenzubleiben waere im
+## Gefecht das Letzte, was man braucht.
+##
+## `mat` faerbt nur den ANSTRICH (Flaeche 0). Der Rahmen (Flaeche 1) bekommt
+## immer das dunkle Stahlmaterial — deshalb wird nicht material_override
+## gesetzt (das faerbte alles gleich), sondern je Flaeche einzeln.
 static func container(node_name: String, pos: Vector3, mat: Material,
 		facing_deg: float = 0.0) -> StaticBody3D:
-	# Ohne Modell bleibt der Quader. Ein frischer Clone ohne die Modelldateien
-	# soll spielbar sein, nicht rot blinken.
+	# Ohne Modell bleibt der Quader. Ein frischer Clone soll spielbar sein.
 	if not has_container_model():
 		return solid(node_name, CONTAINER_SIZE,
 			pos + Vector3(0.0, CONTAINER_SIZE.y * 0.5, 0.0), mat,
@@ -319,10 +296,8 @@ static func container(node_name: String, pos: Vector3, mat: Material,
 	var view := MeshInstance3D.new()
 	view.name = "Mesh"
 	view.mesh = mesh
-	view.material_override = mat
-	# Skalieren und mittig ruecken — das Modell kommt mit dem Ursprung in einer
-	# Ecke und in High-Cube-Hoehe aus dem Paket.
-	view.transform = container_mesh_transform(mesh)
+	view.set_surface_override_material(0, mat)
+	view.set_surface_override_material(1, container_frame_material())
 	body.add_child(view)
 
 	var shape := BoxShape3D.new()

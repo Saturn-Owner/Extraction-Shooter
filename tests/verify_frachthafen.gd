@@ -129,69 +129,57 @@ func _test_container_model() -> void:
 	if not WorldParts.has_container_model():
 		return
 
-	var mesh: Mesh = load(WorldParts.CONTAINER_MESH)
-	_check(mesh != null, "container_20ft.res laedt als Mesh")
+	var mesh := load(WorldParts.CONTAINER_MESH) as ArrayMesh
+	_check(mesh != null, "container.res laedt als Mesh")
 	if mesh == null:
 		return
 
-	# Die Mesh kommt roh und schief aus dem Paket. Erst diese Rechnung macht
-	# einen Container daraus, der mittig um den Ursprung sitzt und die Groesse
-	# hat, mit der das Layout rechnet. Liegt sie daneben, stehen vierhundert
-	# Container in falscher Groesse oder halb im Boden.
-	var placed := WorldParts.container_mesh_transform(mesh) * mesh.get_aabb()
+	# Zwei Flaechen: Anstrich und Rahmen. Genau daran haengt, dass sich der
+	# Anstrich umfaerben laesst, waehrend der Rahmen dunkel bleibt. Faellt eine
+	# Flaeche weg, ist entweder die Farbe oder der Rahmen verloren.
+	_check(mesh.get_surface_count() == 2,
+		"die Mesh hat zwei Flaechen — Anstrich und Rahmen (%d)" % mesh.get_surface_count())
+
+	# Das ist Lucas' Entwurf und muss nach Container aussehen, nicht nach Kiste.
+	# Ein blanker Quader haette rund ein Dutzend Dreiecke; die Riffelung macht
+	# es zu ueber tausend. Zu wenige hiesse: Die Rippen fehlen.
+	var triangles := 0
+	for i in range(mesh.get_surface_count()):
+		triangles += mesh.surface_get_arrays(i)[Mesh.ARRAY_INDEX].size() / 3
+	_check(triangles > 800, "sie ist wirklich geriffelt (%d Dreiecke)" % triangles)
+
+	# Die Mesh kommt schon in Containergroesse aus dem Bauwerkzeug — hoechstens
+	# stehen die Rippen und Beschlaege ein paar Zentimeter ueber. Passt sie gar
+	# nicht, stimmt etwas Grundlegendes nicht.
+	var box := mesh.get_aabb()
 	var want := WorldParts.CONTAINER_SIZE
+	_check(absf(box.size.x - want.x) < 0.3 and absf(box.size.y - want.y) < 0.3
+			and absf(box.size.z - want.z) < 0.3,
+		"Groesse passt: %.2f x %.2f x %.2f (soll ~%.1f x %.1f x %.1f)" % [
+			box.size.x, box.size.y, box.size.z, want.x, want.y, want.z])
 
-	_check(placed.size.is_equal_approx(want),
-		"nach dem Zurechtruecken %.2f x %.2f x %.2f (soll %.2f x %.2f x %.2f)" % [
-			placed.size.x, placed.size.y, placed.size.z, want.x, want.y, want.z])
-
-	var centre := placed.position + placed.size * 0.5
-	_check(centre.length() < 0.01,
-		"und sitzt mittig um den Ursprung (Abweichung %.3f m)" % centre.length())
-
-	# Rasterfreundlich: Alle drei Masse muessen restlos in 0,2 m aufgehen,
-	# sonst laesst sich im Editor nichts buendig aneinanderschieben — und genau
-	# daran ist Lucas beim ersten Versuch haengengeblieben.
+	# Rasterfreundlich: Alle drei Nennmasse gehen restlos in 0,2 m auf — daran
+	# ist Lucas beim ersten Versuch mit dem Einrasten haengengeblieben.
 	for axis: float in [want.x, want.y, want.z]:
 		_check(absf(fmod(axis, 0.2)) < 0.001 or absf(fmod(axis, 0.2) - 0.2) < 0.001,
 			"%.2f m passt ins 0,2-m-Raster" % axis)
 
-	# Die entfaerbte Textur ist der Grund, warum eine Textur alle Farben traegt.
-	# Steckt die Farbe doch noch drin, kaempft sie gegen die eingestellte.
-	var albedo: Texture2D = load(WorldParts.CONTAINER_ALBEDO)
-	_check(albedo != null, "die BaseColor-Textur laedt")
-	if albedo != null:
-		var image := albedo.get_image()
-		var coloured := 0
-		for i in range(200):
-			var x := (i * 37) % image.get_width()
-			var y := (i * 53) % image.get_height()
-			var c := image.get_pixel(x, y)
-			if absf(c.r - c.g) > 0.02 or absf(c.g - c.b) > 0.02:
-				coloured += 1
-		_check(coloured == 0,
-			"sie ist wirklich entfaerbt (%d von 200 Stichproben farbig)" % coloured)
-
-	_check(load(WorldParts.CONTAINER_ORM) != null, "die ORM-Textur laedt")
-	_check(load(WorldParts.CONTAINER_NORMAL) != null, "die Normalenkarte laedt")
-
-	# Genug unterscheidbare Farben, und alle teilen sich EINE Textur.
+	# Fuenf unterscheidbare Anstrichfarben, dazu der gemeinsame Rahmen.
 	var colours := WorldParts.container_colors()
 	_check(colours.size() >= 4, "mindestens vier Farben (%d)" % colours.size())
 
 	var mats := WorldParts.container_materials()
-	var shared := true
-	var seen: Texture2D = null
+	var distinct := {}
 	for key: String in colours:
-		var mat: BaseMaterial3D = mats.get(key)
+		var mat := mats.get(key) as BaseMaterial3D
 		if mat == null:
 			_check(false, "Material '%s' fehlt" % key)
 			continue
-		if seen == null:
-			seen = mat.albedo_texture
-		elif mat.albedo_texture != seen:
-			shared = false
-	_check(shared, "alle Farben teilen sich dieselbe Textur")
+		distinct[mat.albedo_color.to_html(false)] = true
+	_check(distinct.size() == colours.size(),
+		"jede Farbe ist wirklich verschieden (%d von %d)" % [distinct.size(), colours.size()])
+
+	_check(WorldParts.container_frame_material() != null, "es gibt ein Rahmenmaterial")
 
 
 ## Der Fehler der alten Karte: Dort liegt ein Ausgang zehn Meter vom Spawn.
