@@ -1,10 +1,12 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/character_window.gd" id="1_character"]
 [ext_resource type="Script" path="res://scripts/ui/inventory_grid_view.gd" id="2_grid_view"]
 [ext_resource type="Script" path="res://scripts/ui/drag_ghost.gd" id="3_drag_ghost"]
 [ext_resource type="PackedScene" path="res://scenes/ui/split_prompt.tscn" id="4_split_prompt"]
 [ext_resource type="PackedScene" path="res://scenes/ui/item_tooltip.tscn" id="5_item_tooltip"]
+[ext_resource type="PackedScene" path="res://scenes/ui/container_window.tscn" id="6_container_window"]
+[ext_resource type="PackedScene" path="res://scenes/ui/context_menu.tscn" id="7_context_menu"]
 
 [sub_resource type="StyleBoxFlat" id="Style_panel"]
 bg_color = Color(0.042, 0.046, 0.052, 0.985)
@@ -113,16 +115,6 @@ custom_minimum_size = Vector2(350, 130)
 mouse_filter = 1
 script = ExtResource("2_grid_view")
 
-[node name="RucksackTitel" type="Label" parent="Layout/Inhalt/Mitte/Inventar"]
-text = "Rucksack"
-theme_override_colors/font_color = Color(0.6, 0.63, 0.67, 1)
-theme_override_font_sizes/font_size = 11
-
-[node name="RucksackRaster" type="Control" parent="Layout/Inhalt/Mitte/Inventar"]
-custom_minimum_size = Vector2(350, 230)
-mouse_filter = 1
-script = ExtResource("2_grid_view")
-
 [node name="Auswirkung" type="Label" parent="Layout/Inhalt"]
 custom_minimum_size = Vector2(0, 104)
 text = "..."
@@ -147,8 +139,12 @@ offset_left = -300.0
 offset_top = -46.0
 offset_right = 300.0
 offset_bottom = -22.0
-text = "[Tab] / [Esc] schliessen     Ziehen sortiert um     [R] dreht     [Strg] + Ziehen teilt"
+text = "[Tab] / [Esc] schliessen     Ziehen sortiert um     [R] dreht     [Strg] + Ziehen teilt     Rechtsklick oeffnet Behaelter"
 horizontal_alignment = 1
+
+[node name="ContainerWindow" parent="." instance=ExtResource("6_container_window")]
+
+[node name="ContextMenu" parent="." instance=ExtResource("7_context_menu")]
 
 [node name="DragGhost" type="Control" parent="."]
 anchors_preset = 15

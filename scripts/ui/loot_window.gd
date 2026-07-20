@@ -48,6 +48,9 @@ var _drag_ctrl: bool = false
 ## liegen wie vorher, sonst passt er nicht mehr auf seinen eigenen Platz.
 var _drag_original_rotated: bool = false
 
+## Worauf sich das offene Kontextmenue bezieht.
+var _menu_stack: ItemStack = null
+
 ## Was nach dem Loslassen noch auf die Mengenabfrage wartet.
 var _split_stack: ItemStack = null
 var _split_source: InventoryGridView = null
@@ -56,8 +59,8 @@ var _split_cell: Vector2i = Vector2i(-1, -1)
 
 @onready var _container_view: InventoryGridView = $Layout/Columns/Left/ContainerView
 @onready var _player_view: InventoryGridView = $Layout/Columns/Right/PlayerView
-@onready var _backpack_view: InventoryGridView = $Layout/Columns/Right/BackpackView
-@onready var _backpack_title: Label = $Layout/Columns/Right/RucksackTitel
+@onready var _context_menu: ContextMenu = $ContextMenu
+@onready var _container_window: ContainerWindow = $ContainerWindow
 @onready var _container_title: Label = $Layout/Columns/Left/ContainerTitle
 @onready var _player_title: Label = $Layout/Columns/Right/PlayerTitle
 @onready var _status: Label = $Layout/Columns/Left/Status
@@ -74,14 +77,17 @@ func _ready() -> void:
 	# immer an das Control, auf dem gedrueckt wurde. Beim Ziehen von der Kiste
 	# ins Inventar kam es also nie beim Inventar an. Das Ziel bestimmt deshalb
 	# das Fenster selbst anhand der Zeigerposition.
-	for view in [_container_view, _player_view, _backpack_view]:
+	for view in [_container_view, _player_view, _container_window.view]:
 		view.item_pressed.connect(_on_item_pressed)
 		view.item_double_clicked.connect(_on_item_double_clicked)
 		view.hidden_item_pressed.connect(_on_hidden_item_pressed)
 		view.item_hovered.connect(_on_item_hovered)
+		view.item_right_clicked.connect(_on_item_right_clicked)
 
 	_split_prompt.confirmed.connect(_on_split_confirmed)
 	_split_prompt.cancelled.connect(_on_split_cancelled)
+	_context_menu.chosen.connect(_on_menu_chosen)
+	_container_window.closed.connect(_cancel_drag)
 
 
 ## Öffnet das Fenster für eine Kiste.
@@ -97,7 +103,6 @@ func open_for(p_container: LootContainer, p_inventory: PlayerInventory) -> void:
 	_player_view.setup(player_inventory.grid, "Taschen")
 	_container_title.text = container.display_name
 	_player_title.text = "Taschen"
-	_refresh_backpack_view()
 
 	show()
 	_update_status()
@@ -109,6 +114,11 @@ func close() -> void:
 		container.pause_search()
 	if _split_prompt != null and _split_prompt.is_open():
 		_split_prompt.cancel()
+	if _context_menu != null:
+		_context_menu.close()
+	# Das schwebende Fenster gehoert diesem hier und geht mit ihm zu.
+	if _container_window != null:
+		_container_window.close()
 	if _tooltip != null:
 		_tooltip.clear()
 	_cancel_drag()
@@ -204,8 +214,9 @@ func _update_status() -> void:
 # ---------------------------------------------------------------------------
 
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
-	# Solange die Mengenabfrage offen ist, wird nichts Neues angefasst.
-	if _split_prompt.is_open():
+	# Solange Mengenabfrage oder Kontextmenue offen sind, wird nichts Neues
+	# angefasst.
+	if _split_prompt.is_open() or _context_menu.is_open():
 		return
 
 	_drag_stack = stack
@@ -490,41 +501,41 @@ func _cancel_drag() -> void:
 func _notify_changed() -> void:
 	if player_inventory != null:
 		player_inventory.changed.emit()
-	_refresh_backpack_view()
 	for v in _views():
 		v.queue_redraw()
 
 
-## Die Raster, zwischen denen gerade gezogen werden darf.
-## Ohne angelegten Rucksack sind es zwei, mit Rucksack drei.
+## Die Raster, zwischen denen gerade gezogen werden darf: Kiste und Taschen
+## immer, das schwebende Behaelterfenster nur, solange es offen ist.
 func _views() -> Array[InventoryGridView]:
 	var views: Array[InventoryGridView] = [_container_view, _player_view]
-	if _backpack_view != null and _backpack_view.visible and _backpack_view.grid != null:
-		views.append(_backpack_view)
+	if _container_window != null and _container_window.is_open() \
+			and _container_window.view.grid != null:
+		views.append(_container_window.view)
 	return views
 
 
-## Zeigt das Innenraster des angelegten Rucksacks — oder blendet es aus.
-func _refresh_backpack_view() -> void:
-	if _backpack_view == null or _backpack_title == null:
+## Rechtsklick auf einen Gegenstand — in der Kiste wie in den Taschen.
+func _on_item_right_clicked(stack: ItemStack, _view: InventoryGridView,
+		at_position: Vector2) -> void:
+	if stack == null:
+		return
+	var entries := ContextMenu.entries_for(stack)
+	if entries.is_empty():
 		return
 
-	var backpack: InventoryGrid = null
-	if player_inventory != null:
-		backpack = player_inventory.get_backpack_grid()
+	_cancel_drag()
+	_tooltip.clear()
+	_menu_stack = stack
+	_context_menu.open(entries, at_position)
 
-	var has_pack := backpack != null
-	_backpack_view.visible = has_pack
-	_backpack_title.visible = has_pack
 
-	if not has_pack:
-		_backpack_view.grid = null
+func _on_menu_chosen(id: StringName) -> void:
+	var stack := _menu_stack
+	_menu_stack = null
+	if stack == null or id != &"oeffnen":
 		return
-
-	if _backpack_view.grid != backpack:
-		_backpack_view.setup(backpack, "Rucksack")
-	_backpack_title.text = "Rucksack  —  %d von %d Feldern frei" % [
-		backpack.get_free_cell_count(), backpack.width * backpack.height]
+	_container_window.open_for(stack, get_global_mouse_position())
 
 
 ## Nimmt alles Aufgedeckte mit, was passt.

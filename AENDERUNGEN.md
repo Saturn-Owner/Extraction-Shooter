@@ -35,16 +35,30 @@ aber nichts, was mehr Platz schafft.
 - Durchsuchzeit auf 0,6 gekürzt — direkt beim Start soll man nicht drei
   Sekunden stehen.
 
-### Zweites Raster im Inventar
+### Rechtsklick → Öffnen → schwebendes Fenster
 
-- Sowohl das **Charakterfenster** als auch das **Loot-Fenster** zeigen unter
-  den Taschen das Innenraster des angelegten Rucksacks. Ziehen funktioniert
-  zwischen allen Rastern, mit Strg auch geteilt.
-- Ohne angelegten Rucksack ist beides **ausgeblendet** — ein leeres Feld mit
-  der Aufschrift "Rucksack" sähe aus wie ein Fehler.
+- **Rechtsklick auf einen Rucksack** öffnet ein kleines Menü mit dem Eintrag
+  **"Oeffnen"**. Der Inhalt erscheint in einem eigenen Fenster, das man an der
+  **Titelleiste verschieben** und mit dem **X schliessen** kann.
+- Der Rechtsklick funktioniert **überall**, wo ein Behälter liegt: auf dem
+  Ausrüstungsplatz, auf einem Rucksack in den Taschen und auf einem in der
+  Loot-Kiste. Damit kann man in eine gefundene Tasche hineinsehen, **bevor**
+  man sie mitnimmt — genau die Entscheidung, um die es beim Looten geht.
+- **Nicht auf einem unaufgedeckten Umriss.** Ein Menü mit "Oeffnen" würde
+  verraten, dass dort ein Behälter liegt, und die Frage "warte ich das ab?"
+  wäre entwertet.
+- Zwei neue, bewusst allgemein gehaltene Bausteine: `ContextMenu` (Einträge
+  kommen von aussen — "Ablegen", "Anlegen", "Aufteilen" sind absehbar) und
+  `ContainerWindow`. Beide gab es im Projekt vorher nicht: **kein `PopupMenu`,
+  kein `Window`, kein verschiebbares Panel und kein einziger Rechtsklick.**
+- Das Fenster lässt sich **nicht aus dem Bild schieben** — es bleibt immer ein
+  Streifen Titelleiste greifbar. Sonst bekäme man es nie wieder zu fassen und
+  auch nicht mehr zu.
+- Es gehört seinem Wirtfenster und geht mit ihm zu. Ein Rucksackfenster, das
+  offen bleibt, während man weiterläuft, wäre ein zweiter Bildschirm mitten im
+  Raid.
 - Das linke Raster heisst jetzt **"Taschen"** statt "Ausruestung". Es zeigte
-  noch nie die Ausrüstung, und mit dem Rucksack daneben wäre der Name endgültig
-  irreführend.
+  noch nie die Ausrüstung, und der Name war schon vorher irreführend.
 
 ### Drei stille Verluste, die dabei aufgefallen sind
 
@@ -64,12 +78,13 @@ etwas weg ist:
 
 ### Verifikation
 
-Neue Suite `tests/verify_backpack.gd`, **25 Prüfungen**. Alle 14 Suiten grün,
-zusammen 1.099 Prüfungen.
+Zwei neue Suiten: `tests/verify_backpack.gd` (**25 Prüfungen**) und
+`tests/verify_container_window.gd` (**29 Prüfungen**). Alle 15 Suiten grün,
+zusammen 1.128 Prüfungen.
 
-**Von einem Menschen zu prüfen:** ob das zweite Raster im Fenster gut
-aussieht, ob 24 Felder die richtige Grösse sind und ob die Kiste an der
-richtigen Stelle steht.
+**Von einem Menschen zu prüfen:** ob sich das Fenster gut anfassen und
+verschieben lässt, ob das Menü an der richtigen Stelle aufgeht, ob 24 Felder
+die richtige Grösse sind und ob die Kiste an der richtigen Stelle steht.
 
 ---
 

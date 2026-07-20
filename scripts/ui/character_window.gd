@@ -82,6 +82,9 @@ var _drag_target_slot: ItemData.EquipSlot = ItemData.EquipSlot.NONE
 ## Ob beim Anfassen Strg gedrueckt war — dann wird nach der Menge gefragt.
 var _drag_ctrl: bool = false
 
+## Worauf sich das offene Kontextmenue bezieht.
+var _menu_stack: ItemStack = null
+
 var _split_stack: ItemStack = null
 var _split_target: InventoryGridView = null
 var _split_cell: Vector2i = Vector2i(-1, -1)
@@ -102,8 +105,8 @@ var _slot_buttons: Dictionary = {}
 @onready var _inventory_column: VBoxContainer = $Layout/Inhalt/Mitte/Inventar
 @onready var _inventory_view: InventoryGridView = $Layout/Inhalt/Mitte/Inventar/Raster
 @onready var _inventory_title: Label = $Layout/Inhalt/Mitte/Inventar/Titel
-@onready var _backpack_view: InventoryGridView = $Layout/Inhalt/Mitte/Inventar/RucksackRaster
-@onready var _backpack_title: Label = $Layout/Inhalt/Mitte/Inventar/RucksackTitel
+@onready var _context_menu: ContextMenu = $ContextMenu
+@onready var _container_window: ContainerWindow = $ContainerWindow
 @onready var _stats: HBoxContainer = $Layout/Inhalt/Werte
 @onready var _effects: Label = $Layout/Inhalt/Auswirkung
 @onready var _ghost: DragGhost = $DragGhost
@@ -120,10 +123,14 @@ func _ready() -> void:
 
 	# cell_released bleibt ungenutzt — siehe LootWindow: das Loslassen geht
 	# immer an das Control, auf dem gedrueckt wurde.
-	for view: InventoryGridView in [_inventory_view, _backpack_view]:
+	for view: InventoryGridView in [_inventory_view, _container_window.view]:
 		view.item_pressed.connect(_on_item_pressed)
 		view.item_double_clicked.connect(_on_item_double_clicked)
 		view.item_hovered.connect(_on_item_hovered)
+		view.item_right_clicked.connect(_on_item_right_clicked)
+
+	_context_menu.chosen.connect(_on_menu_chosen)
+	_container_window.closed.connect(_cancel_drag)
 	_split_prompt.confirmed.connect(_on_split_confirmed)
 	_split_prompt.cancelled.connect(_on_split_cancelled)
 
@@ -137,7 +144,6 @@ func open_for(p_player: PlayerController) -> void:
 	# man dabeihat, gehoert auf einen Blick zusammen.
 	if player.inventory != null:
 		_inventory_view.setup(player.inventory.grid, "Inventar")
-	_refresh_backpack_view()
 	show()
 	_refresh()
 	opened.emit()
@@ -146,6 +152,12 @@ func open_for(p_player: PlayerController) -> void:
 func close() -> void:
 	if _split_prompt != null and _split_prompt.is_open():
 		_split_prompt.cancel()
+	if _context_menu != null:
+		_context_menu.close()
+	# Das schwebende Fenster gehoert diesem hier und geht mit ihm zu. Sonst
+	# stuende der Rucksackinhalt noch auf dem Bild, waehrend man weiterlaeuft.
+	if _container_window != null:
+		_container_window.close()
 	if _tooltip != null:
 		_tooltip.clear()
 	_cancel_drag()
@@ -233,6 +245,11 @@ func _make_slot(slot: ItemData.EquipSlot) -> Control:
 	button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	button.add_theme_font_size_override("font_size", 12)
 	button.pressed.connect(_on_slot_pressed.bind(slot))
+	# Rechtsklick geht an `gui_input` vorbei an `pressed` — ein Button hoert
+	# von sich aus nur auf die linke Taste. Die Maske zu erweitern waere der
+	# falsche Weg: Dann wuerde ein Rechtsklick auch `button_down` ausloesen
+	# und damit ein Ziehen starten.
+	button.gui_input.connect(_on_slot_gui_input.bind(slot))
 	# Gedrueckt halten und ziehen holt den Gegenstand heraus. Der Klick
 	# (pressed) kommt erst beim Loslassen und weiss dann schon, ob gezogen
 	# wurde — siehe _on_slot_pressed.
@@ -245,7 +262,8 @@ func _make_slot(slot: ItemData.EquipSlot) -> Control:
 
 ## Anfassen: Gedrueckt halten und ziehen holt heraus, was im Platz steckt.
 func _on_slot_grabbed(slot: ItemData.EquipSlot) -> void:
-	if player == null or player.equipment == null or _split_prompt.is_open():
+	if player == null or player.equipment == null \
+			or _split_prompt.is_open() or _context_menu.is_open():
 		return
 
 	var worn := player.equipment.get_item(slot)
@@ -263,6 +281,48 @@ func _on_slot_grabbed(slot: ItemData.EquipSlot) -> void:
 	# Feld, an dem man ihn "angefasst" haette.
 	var step := InventoryGridView.CELL_SIZE + InventoryGridView.CELL_GAP
 	_ghost.show_stack(worn, Vector2(worn.get_size()) * step * 0.5)
+
+
+## Rechtsklick auf einen Ausruestungsplatz: Menue fuer das, was darin steckt.
+func _on_slot_gui_input(event: InputEvent, slot: ItemData.EquipSlot) -> void:
+	var button := event as InputEventMouseButton
+	if button == null or not button.pressed \
+			or button.button_index != MOUSE_BUTTON_RIGHT:
+		return
+	if player == null or player.equipment == null:
+		return
+	_open_menu_for(player.equipment.get_item(slot), button.global_position)
+
+
+## Rechtsklick auf einen Gegenstand im Raster.
+func _on_item_right_clicked(stack: ItemStack, _view: InventoryGridView,
+		at_position: Vector2) -> void:
+	_open_menu_for(stack, at_position)
+
+
+## Oeffnet das Kontextmenue — oder gar nichts, wenn es fuer diesen Gegenstand
+## nichts anzubieten gibt.
+func _open_menu_for(stack: ItemStack, at_position: Vector2) -> void:
+	if stack == null:
+		return
+	var entries := ContextMenu.entries_for(stack)
+	if entries.is_empty():
+		return
+
+	# Ein Menue mitten im Ziehen waere ein Gegenstand, der am Zeiger klebt,
+	# waehrend man etwas anderes anklickt.
+	_cancel_drag()
+	_tooltip.clear()
+	_menu_stack = stack
+	_context_menu.open(entries, at_position)
+
+
+func _on_menu_chosen(id: StringName) -> void:
+	var stack := _menu_stack
+	_menu_stack = null
+	if stack == null or id != &"oeffnen":
+		return
+	_container_window.open_for(stack, get_global_mouse_position())
 
 
 ## Klick auf einen belegten Platz legt ab — zurueck ins Inventar.
@@ -492,13 +552,6 @@ func _refresh() -> void:
 			grid.get_free_cell_count(), grid.width * grid.height]
 		_inventory_view.queue_redraw()
 
-	_refresh_backpack_view()
-	if _backpack_view.visible and _backpack_view.grid != null:
-		var pack := _backpack_view.grid
-		_backpack_title.text = "Rucksack  —  %d von %d Feldern frei" % [
-			pack.get_free_cell_count(), pack.width * pack.height]
-		_backpack_view.queue_redraw()
-
 	if _tab == Tab.GESUNDHEIT:
 		_effects.text = _describe_condition()
 
@@ -588,7 +641,7 @@ func _on_item_hovered(stack: ItemStack, _source: InventoryGridView) -> void:
 
 
 func _on_item_pressed(stack: ItemStack, view: InventoryGridView) -> void:
-	if _split_prompt.is_open():
+	if _split_prompt.is_open() or _context_menu.is_open():
 		return
 
 	_drag_stack = stack
@@ -883,38 +936,14 @@ func _cancel_drag() -> void:
 		v.queue_redraw()
 
 
-## Die Raster, in denen gerade gezogen werden darf. Ohne angelegten Rucksack
-## ist das nur eines — sein Raster ist dann gar nicht sichtbar.
+## Die Raster, in denen gerade gezogen werden darf. Das Taschenraster immer,
+## das schwebende Behaelterfenster nur, solange es offen ist.
 func _grid_views() -> Array[InventoryGridView]:
 	var views: Array[InventoryGridView] = []
 	if _inventory_view != null:
 		views.append(_inventory_view)
-	if _backpack_view != null and _backpack_view.visible and _backpack_view.grid != null:
-		views.append(_backpack_view)
+	if _container_window != null and _container_window.is_open() \
+			and _container_window.view.grid != null:
+		views.append(_container_window.view)
 	return views
-
-
-## Zeigt das Innenraster des angelegten Rucksacks — oder blendet beides aus,
-## solange keiner getragen wird. Ein leeres Feld mit der Aufschrift "Rucksack"
-## saehe aus wie ein Fehler.
-func _refresh_backpack_view() -> void:
-	if _backpack_view == null or _backpack_title == null:
-		return
-
-	var backpack: InventoryGrid = null
-	if player != null and player.inventory != null:
-		backpack = player.inventory.get_backpack_grid()
-
-	var visible_now := backpack != null
-	_backpack_view.visible = visible_now
-	_backpack_title.visible = visible_now
-
-	if not visible_now:
-		# Nicht nur ausblenden: Ein zurueckgebliebenes Raster wuerde beim
-		# naechsten Ziehen weiter als Ziel gelten, obwohl der Rucksack weg ist.
-		_backpack_view.grid = null
-		return
-
-	if _backpack_view.grid != backpack:
-		_backpack_view.setup(backpack, "Rucksack")
 

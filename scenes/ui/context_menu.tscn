@@ -1,0 +1,34 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/context_menu.gd" id="1_context_menu"]
+
+[sub_resource type="StyleBoxFlat" id="Style_panel"]
+bg_color = Color(0.11, 0.12, 0.14, 0.99)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.45, 0.48, 0.53, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+
+[node name="ContextMenu" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_context_menu")
+
+[node name="Panel" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(160, 0)
+offset_right = 160.0
+offset_bottom = 36.0
+theme_override_styles/panel = SubResource("Style_panel")
+
+[node name="Eintraege" type="VBoxContainer" parent="Panel"]
+theme_override_constants/separation = 2
