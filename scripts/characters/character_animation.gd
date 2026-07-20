@@ -50,6 +50,43 @@ var holding_weapon: bool = false
 var grip_target: Node3D
 var support_target: Node3D
 
+## Der Magazinschacht der Waffe. Dorthin greift die Stützhand beim Nachladen.
+var magwell_target: Node3D
+
+## Fortschritt des Nachladens, 0 bis 1. Negativ heisst: wird nicht nachgeladen.
+var reload_progress: float = -1.0
+
+## Wo die Magazintaschen sitzen — vorn am linken Hüftknochen.
+##
+## In Figurkoordinaten, weil die Hand dorthin greift, egal wie die Figur
+## steht oder gedreht ist.
+const POUCH := Vector3(-0.24, 0.95, -0.14)
+
+## Der Ablauf des Nachladens, als Wegmarken der Stützhand.
+##
+## ---------------------------------------------------------------------------
+## DIE HAND GREIFT AN DEN SCHACHT, NICHT AN DAS FALLENDE MAGAZIN
+##
+## Naheliegend wäre, das Magazin selbst zum Ziel zu machen — die Waffe
+## animiert es ja bereits, und die Hand würde von selbst synchron laufen.
+## Gerechnet geht das aber nicht auf: Das Magazin fällt 34 cm, und der linke
+## Arm ist 0,64 m lang bei 0,57 m Abstand zur Waffe. Die Hand käme nicht
+## hinterher und bliebe mit gestrecktem Arm in der Luft hängen.
+##
+## Es wäre auch falsch. Niemand begleitet ein fallendes Magazin zu Boden: Man
+## greift an den Schacht, löst es, und es fällt von allein. Genau das machen
+## die Wegmarken unten — die Hand bleibt am Schacht, während das Magazin
+## darunter wegfällt.
+##
+## Die Zeiten sind auf `WeaponViewmodel._animate_magazine_swap` abgestimmt:
+## Dort fällt das Magazin bis 0,30, ist bis 0,45 verschwunden und sitzt bei
+## 0,85 wieder.
+const RELOAD_REACH := 0.12   ## bis hierhin: vom Schaft zum Schacht
+const RELOAD_RELEASE := 0.30 ## bis hierhin: am Schacht, das Magazin fällt
+const RELOAD_FETCH := 0.44   ## bis hierhin: zur Tasche, neues holen
+const RELOAD_CARRY := 0.58   ## bis hierhin: zurück an den Schacht
+const RELOAD_SEAT := 0.86    ## bis hierhin: am Schacht, Magazin geht hinein
+
 
 ## Haltung mit Waffe. Werte in Grad.
 ##
@@ -274,9 +311,13 @@ func _pose_weapon_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 	var left := part == HealthSystem.Part.LEFT_ARM
 
 	# Die linke Hand stützt vorn am Schaft, die rechte hält den Griff.
-	var target := support_target if left else grip_target
-	if target != null and hinge != null and _solve_arm(part, joint, hinge, target):
-		return
+	# Beim Nachladen wandert die linke zum Magazin — die rechte bleibt am
+	# Griff, denn die Waffe hält man dabei fest.
+	var anchor := support_target if left else grip_target
+	if anchor != null and hinge != null:
+		var goal := _support_hand_goal() if left else anchor.global_position
+		if _solve_arm(part, joint, hinge, goal):
+			return
 
 	# Rückfallebene: feste Winkel, wenn die Waffe keine Griffpunkte nennt.
 	var shoulder := HOLD_LEFT_SHOULDER if left else HOLD_RIGHT_SHOULDER
@@ -286,6 +327,34 @@ func _pose_weapon_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 	joint.rotation_degrees = shoulder + Vector3(sway, 0.0, 0.0)
 	if hinge != null:
 		hinge.rotation_degrees = elbow
+
+
+## Wohin die Stützhand gerade greift.
+##
+## Ausserhalb des Nachladens ist das schlicht der Vorderschaft. Während des
+## Wechsels läuft sie die Wegmarken oben ab — siehe deren Kommentar.
+func _support_hand_goal() -> Vector3:
+	var handguard := support_target.global_position
+	if reload_progress < 0.0 or magwell_target == null:
+		return handguard
+
+	var magwell := magwell_target.global_position
+	var pouch := character.global_transform * POUCH
+	var p := reload_progress
+
+	if p < RELOAD_REACH:
+		# Hinuntergreifen. smoothstep statt lerp, damit die Hand anfährt und
+		# abbremst, statt ruckartig loszuschnellen.
+		return handguard.lerp(magwell, smoothstep(0.0, RELOAD_REACH, p))
+	if p < RELOAD_RELEASE:
+		return magwell
+	if p < RELOAD_FETCH:
+		return magwell.lerp(pouch, smoothstep(RELOAD_RELEASE, RELOAD_FETCH, p))
+	if p < RELOAD_CARRY:
+		return pouch.lerp(magwell, smoothstep(RELOAD_FETCH, RELOAD_CARRY, p))
+	if p < RELOAD_SEAT:
+		return magwell
+	return magwell.lerp(handguard, smoothstep(RELOAD_SEAT, 1.0, p))
 
 
 ## Stellt einen Arm so, dass die Hand auf dem Zielpunkt liegt.
@@ -310,7 +379,7 @@ func _pose_weapon_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 ##
 ## Gibt false zurück, wenn der Arm zu kurz ist — dann greift die feste Haltung.
 func _solve_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
-		target: Node3D) -> bool:
+		target: Vector3) -> bool:
 	if character == null:
 		return false
 
@@ -322,7 +391,7 @@ func _solve_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
 	# Rechnung unabhängig davon, wo und wie gedreht die Figur steht.
 	var to_local := character.global_transform.affine_inverse()
 	var shoulder := joint.position
-	var goal := to_local * target.global_position
+	var goal := to_local * target
 
 	var delta := goal - shoulder
 	var distance := delta.length()

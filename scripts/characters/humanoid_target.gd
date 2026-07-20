@@ -109,6 +109,7 @@ func _arm_with_weapon() -> void:
 	if weapon.viewmodel != null:
 		_animation.grip_target = weapon.viewmodel.grip_point
 		_animation.support_target = weapon.viewmodel.support_point
+		_animation.magwell_target = weapon.viewmodel.magwell_point
 
 
 ## Läuft hin und her, falls patrol_width gesetzt ist.
@@ -120,6 +121,13 @@ func _arm_with_weapon() -> void:
 func _process(delta: float) -> void:
 	if _animation == null:
 		return
+
+	# Vor allem anderen: Die Hand muss dem Magazin folgen, auch wenn die
+	# Figur stillsteht. Stünde das weiter unten, bekämen genau die drei
+	# bewaffneten Figuren nie einen Wert — sie patrouillieren nicht, und die
+	# Funktion steigt gleich darunter aus.
+	if weapon != null:
+		_animation.reload_progress = weapon.reload_progress()
 
 	# DIE AUSGANGSPOSITION ERST HIER MERKEN, NICHT IN _ready().
 	#

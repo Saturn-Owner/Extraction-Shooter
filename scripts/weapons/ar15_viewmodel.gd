@@ -140,6 +140,10 @@ func _build_points() -> void:
 	add_child(GlbParts.pivot("GripPoint", Vector3(0.0, -0.085, -0.050)))
 	add_child(GlbParts.pivot("SupportPoint", Vector3(0.0, -0.020, -0.290)))
 
+	# Der Magazinschacht: am unteren Drittel des sitzenden Magazins, das von
+	# y = -0,007 bis -0,236 reicht und bei z = -0,181 sitzt.
+	add_child(GlbParts.pivot("MagwellPoint", Vector3(0.0, -0.185, -0.181)))
+
 
 ## Die vier Steckplaetze.
 ##

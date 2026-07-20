@@ -238,6 +238,17 @@ func _play(stream: AudioStream, pitch: float, volume_db: float) -> void:
 	voice.play()
 
 
+## Wie weit das Nachladen ist, 0 bis 1. Negativ, wenn gerade nicht
+## nachgeladen wird.
+##
+## Die Figur greift danach: Ihre Stützhand folgt dem Magazin, statt eine
+## eigene Zeitleiste zu haben, die man synchron halten müsste.
+func reload_progress() -> float:
+	if not _reloading:
+		return -1.0
+	return 1.0 - clampf(_reload_left / maxf(0.01, reload_seconds), 0.0, 1.0)
+
+
 ## Setzt Magazin und Ablauf zurück.
 func reset() -> void:
 	_rounds = magazine_size

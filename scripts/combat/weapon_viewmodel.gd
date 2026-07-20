@@ -110,6 +110,14 @@ var muzzle_point: Node3D
 var grip_point: Node3D
 var support_point: Node3D
 
+## Wo die Hand beim Nachladen hingreift: an den Magazinschacht.
+##
+## NICHT AN DAS MAGAZIN SELBST. Das faellt beim Wechsel 34 cm nach unten, und
+## dorthin reicht kein Arm — die Hand haenge dem Magazin hinterher, statt es
+## zu wechseln. So laedt auch niemand nach: Man greift an den Schacht, loest
+## das Magazin, und es faellt von allein.
+var magwell_point: Node3D
+
 var _action_home: Vector3
 var _magazine_home: Vector3
 var _charging_handle_home: Vector3
@@ -363,6 +371,7 @@ func _collect_parts() -> void:
 	muzzle_point = get_node_or_null("MuzzlePoint") as Node3D
 	grip_point = get_node_or_null("GripPoint") as Node3D
 	support_point = get_node_or_null("SupportPoint") as Node3D
+	magwell_point = get_node_or_null("MagwellPoint") as Node3D
 
 	if action != null:
 		_action_home = action.position

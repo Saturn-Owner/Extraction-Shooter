@@ -654,6 +654,63 @@ func _test_weapon_in_hand() -> void:
 		"und pendeln beim Laufen nicht frei mit (%.1f Grad Unterschied)"
 			% arm.rotation_degrees.distance_to(before))
 
+	# --- DIE HAND MUSS DIE GANZE NACHLADEBAHN ERREICHEN ---
+	#
+	# Der Arm ist 0,64 m lang. Liegt eine Wegmarke weiter weg, streckt er
+	# sich und die Hand bleibt davor in der Luft stehen — sichtbar als
+	# Greifen ins Leere. Genau daran ist der erste Entwurf gescheitert, der
+	# dem fallenden Magazin folgen wollte: Das faellt 34 cm.
+	#
+	# Geprüft wird deshalb der ganze Ablauf in Schritten, nicht nur Anfang
+	# und Ende.
+	var support := figure.weapon.viewmodel.support_point
+	_check(figure.weapon.viewmodel.magwell_point != null,
+		"die Waffe nennt ihren Magazinschacht")
+
+	var worst := 0.0
+	var worst_at := 0.0
+	for step in range(41):
+		var progress := float(step) / 40.0
+		figure._animation.reload_progress = progress
+		figure._animation._process(1.0 / 60.0)
+
+		var goal := figure._animation._support_hand_goal()
+		var hand_now := figure.hand_of(HealthSystem.Part.LEFT_ARM)
+		var gap := hand_now.global_position.distance_to(goal)
+		if gap > worst:
+			worst = gap
+			worst_at = progress
+
+	_check(worst < 0.03,
+		"die linke Hand erreicht jede Stelle des Nachladens (%.0f mm bei %.2f)"
+			% [worst * 1000.0, worst_at])
+
+	# Und sie muss sich dabei WIRKLICH bewegen — eine Hand, die stur am
+	# Schaft klebt, bestünde die Prüfung darüber mühelos.
+	figure._animation.reload_progress = -1.0
+	figure._animation._process(1.0 / 60.0)
+	var resting_hand := figure.hand_of(HealthSystem.Part.LEFT_ARM).global_position
+
+	figure._animation.reload_progress = 0.5
+	figure._animation._process(1.0 / 60.0)
+	var fetching_hand := figure.hand_of(HealthSystem.Part.LEFT_ARM).global_position
+
+	_check(resting_hand.distance_to(fetching_hand) > 0.15,
+		"und wandert dabei zur Magazintasche (%.2f m)"
+			% resting_hand.distance_to(fetching_hand))
+
+	# Die rechte Hand bleibt derweil am Griff — die Waffe hält man fest.
+	var right_hand := figure.hand_of(HealthSystem.Part.RIGHT_ARM)
+	_check(right_hand.global_position.distance_to(
+		figure.weapon.viewmodel.grip_point.global_position) < 0.02,
+		"die rechte Hand bleibt beim Nachladen am Griff")
+
+	figure._animation.reload_progress = -1.0
+	figure._animation._process(1.0 / 60.0)
+	_check(figure.hand_of(HealthSystem.Part.LEFT_ARM).global_position
+		.distance_to(support.global_position) < 0.02,
+		"danach liegt sie wieder am Vorderschaft")
+
 	figure.queue_free()
 
 	# --- Nachladen und Schiessen laufen ohne Fehler durch ---
