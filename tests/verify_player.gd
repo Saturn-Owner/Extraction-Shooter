@@ -107,49 +107,34 @@ func _test_visible_body() -> void:
 		_check(hidden, "%s ist vor der eigenen Kamera versteckt"
 			% BlockyCharacter.part_name(part))
 
-	# DIE ARME SIND DIE EINZIGE AUSNAHME.
+	# KEIN TEIL DES WELTKOERPERS GEHOERT IN DIE ERSTE PERSON.
 	#
-	# Sie bleiben sichtbar, damit man beim Nachladen die eigene Hand zum
-	# Magazin greifen sieht. Alles andere steht der Kamera im Weg.
-	var wrongly_hidden: Array[String] = []
-	for part: HealthSystem.Part in [HealthSystem.Part.LEFT_ARM,
-			HealthSystem.Part.RIGHT_ARM]:
-		if PlayerController.HIDDEN_FROM_SELF.has(part):
-			wrongly_hidden.append(BlockyCharacter.part_name(part))
-	_check(wrongly_hidden.is_empty(),
-		"die Arme bleiben sichtbar (versteckt waeren: %s)"
-			% ("keiner" if wrongly_hidden.is_empty() else ", ".join(wrongly_hidden)))
-
+	# Die Arme waren zwischendurch ausgenommen, damit man sich beim Nachladen
+	# greifen sieht. Im Spiel verdeckten sie beim Schwenken den halben Schirm:
+	# Ein Oberarm ist 0,24 m dick und 0,64 m lang, und aus der eigenen Kamera
+	# ist er 20 bis 40 cm entfernt. Das ist eine Frage der GROESSE, nicht der
+	# Position — deshalb steht hier jetzt wieder alles.
 	var missing: Array[String] = []
 	for part: HealthSystem.Part in BlockyCharacter.VERTICAL:
-		if part == HealthSystem.Part.LEFT_ARM or part == HealthSystem.Part.RIGHT_ARM:
-			continue
 		if not PlayerController.HIDDEN_FROM_SELF.has(part):
 			missing.append(BlockyCharacter.part_name(part))
 	_check(missing.is_empty(),
-		"alles ausser den Armen ist versteckt (fehlt: %s)"
+		"alle sieben Koerperteile stehen in der Versteckliste (fehlt: %s)"
 			% ("nichts" if missing.is_empty() else ", ".join(missing)))
 
 	# UNSICHTBAR, ABER VORHANDEN.
 	var seen_by_self := 0
 	var meshes_total := 0
-	var arms_seen := 0
 	for part: HealthSystem.Part in BlockyCharacter.VERTICAL:
-		var is_arm := (part == HealthSystem.Part.LEFT_ARM
-			or part == HealthSystem.Part.RIGHT_ARM)
 		for mesh: MeshInstance3D in player.body.meshes_of(part):
 			meshes_total += 1
 			if (mesh.layers & camera.cull_mask) != 0:
-				if is_arm:
-					arms_seen += 1
-				else:
-					seen_by_self += 1
+				seen_by_self += 1
 	_check(seen_by_self == 0,
-		"ausser den Armen sieht man nichts von sich (%d Kaesten)" % seen_by_self)
-	_check(arms_seen >= 4, "die Arme dagegen schon (%d Kaesten)" % arms_seen)
+		"kein Koerperteil ist fuer einen selbst sichtbar (%d von %d)"
+			% [seen_by_self, meshes_total])
 	_check(meshes_total >= 11,
-		"und alle %d Kaesten sind vorhanden - auch die versteckten"
-			% meshes_total)
+		"und trotzdem sind alle %d Kaesten vorhanden" % meshes_total)
 	_check(player.body.visible,
 		"der Koerper ist nicht auf unsichtbar gestellt - sonst waeren auch "
 			+ "die Trefferzonen und der eigene Schatten weg")

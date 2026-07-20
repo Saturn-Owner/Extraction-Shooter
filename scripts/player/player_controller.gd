@@ -403,21 +403,34 @@ const OWN_BODY_LAYER := 2
 ## Wer die eigenen Arme wirklich sehen will, braucht sie AM KAMERAMODELL,
 ## nicht am Weltkoerper. Das ist Modellierarbeit, keine Sichtbarkeitsfrage.
 ## ---------------------------------------------------------------------------
-## DIE ARME SIND DIE AUSNAHME
+## WARUM DER WELTKOERPER IN DER ERSTEN PERSON NICHTS ZU SUCHEN HAT
 ##
-## Sie bleiben sichtbar, damit man beim Nachladen die eigene Hand zum Magazin
-## greifen sieht. Damit sie dabei nicht ins Leere fassen, greifen sie NICHT
-## die Waffe des Koerpers, sondern das Modell im Kameraraum — siehe
-## `_arm_body()`. Die Hand geht dorthin, wo die Waffe wirklich ist.
+## Dreimal versucht, dreimal aus demselben Grund gescheitert:
 ##
-## Alles andere bleibt versteckt: Kopf und Brust stehen der Kamera im Weg,
-## Bauch und Beine haben in der ersten Person nichts verloren, solange man
-## nach unten schauen kann. Sichtbar sind sie in der dritten Person (F5) und
-## spaeter fuer Mitspieler.
+##   1. Nur Kopf versteckt   -> die Brust fuellte den Schirm.
+##   2. Kopf und Brust       -> die Arme standen als Flaechen quer im Bild.
+##   3. Nur die Arme sichtbar, greifend am Kameramodell
+##                           -> beim Geradeausschauen sah man sie gar nicht,
+##                              beim Schwenken verdeckten sie alles.
+##
+## Der Grund ist nicht die Position, sondern die GROESSE. Ein Oberarm ist
+## 0,24 m dick und 0,64 m lang — das sind Masse fuer eine Figur, die man aus
+## drei Metern sieht. Aus einer Kamera, die im selben Koerper steckt, ist er
+## 20 bis 40 cm entfernt und damit riesig. Verschieben hilft dagegen nicht.
+##
+## Shooter loesen das mit eigenen Armen im KAMERARAUM: kleiner, naeher an der
+## Waffe, an ihr festgemacht. Das ist Geometriearbeit am Waffenmodell und
+## keine Frage von Sichtbarkeitsebenen.
+##
+## Bis es die gibt, bleibt der Koerper fuer den Traeger unsichtbar — aber
+## vollstaendig vorhanden: Trefferzonen, Waffe, Bewegung, Schatten. F5 zeigt
+## ihn, und dort stimmt jede Animation.
 const HIDDEN_FROM_SELF := [
 	HealthSystem.Part.HEAD,
 	HealthSystem.Part.CHEST,
 	HealthSystem.Part.STOMACH,
+	HealthSystem.Part.LEFT_ARM,
+	HealthSystem.Part.RIGHT_ARM,
 	HealthSystem.Part.LEFT_LEG,
 	HealthSystem.Part.RIGHT_LEG,
 ]
