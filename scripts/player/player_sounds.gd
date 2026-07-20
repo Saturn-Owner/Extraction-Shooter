@@ -34,12 +34,16 @@ const STRIDE_SPRINT := 1.25
 
 ## Lautstärke je Haltung. Geduckt zu schleichen soll sich lohnen — spätestens,
 ## wenn es Gegner gibt, die einen hören können.
-const VOLUME_CROUCH_DB := -12.0
-const VOLUME_WALK_DB := -4.0
-const VOLUME_SPRINT_DB := 0.0
+##
+## Alle vier Werte wurden nach dem ersten Hören um 3 dB gesenkt — die
+## Abstände untereinander bleiben, nur das Ganze ist leiser. 3 dB sind die
+## halbe Leistung: hörbar, aber kein Sprung.
+const VOLUME_CROUCH_DB := -15.0
+const VOLUME_WALK_DB := -7.0
+const VOLUME_SPRINT_DB := -3.0
 
 ## Beim Aufkommen nach einem Sprung: ein einzelner, härterer Tritt.
-const VOLUME_LANDING_DB := 2.0
+const VOLUME_LANDING_DB := -1.0
 
 ## Etwas Tonhöhenstreuung, damit acht Dateien nach mehr klingen.
 const PITCH_SPREAD := 0.12
@@ -63,7 +67,7 @@ const BREATHING_BELOW_STAMINA := 15.0
 const BREATHING_STOPS_ABOVE := 35.0
 
 const BREATHING_FADE_SECONDS := 0.8
-const BREATHING_VOLUME_DB := -6.0
+const BREATHING_VOLUME_DB := -9.0
 
 var player: PlayerController = null
 
