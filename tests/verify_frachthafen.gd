@@ -16,6 +16,10 @@ extends SceneTree
 
 const SCENE := "res://scenes/levels/raid_frachthafen.tscn"
 
+## Der Knoten, unter dem das Layout die ganze Welt baut. Alles darunter ist
+## Geometrie; der Spieler und das HUD haengen daneben, nicht darin.
+const WORLD_NODE := "Welt"
+
 ## Godots Grenze für begehbaren Boden liegt bei 45 Grad. Wir bleiben deutlich
 ## darunter — eine Rampe, die man gerade so hochkommt, fühlt sich wie eine
 ## Rutsche an.
@@ -93,7 +97,16 @@ func _load_level() -> bool:
 	await process_frame
 	await process_frame
 
-	_collect(_level)
+	# NUR die Weltgeometrie einsammeln, nicht die ganze Szene. Seit der Spieler
+	# einen Koerper mit Trefferzonen hat, stecken unter "Player" dutzende
+	# schraege Festkoerper auf eigener Kollisionsebene — die sind kein
+	# Rampenfehler und keine falsch gelegte Wand, sondern seine Gliedmassen.
+	# Kisten und Ausgaenge baut das Layout ohnehin unter "Welt".
+	var world := _level.get_node_or_null(WORLD_NODE)
+	_check(world != null, "die Welt haengt unter '%s'" % WORLD_NODE)
+	if world == null:
+		return false
+	_collect(world)
 	return true
 
 
