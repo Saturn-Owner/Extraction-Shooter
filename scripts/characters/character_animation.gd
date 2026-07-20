@@ -59,11 +59,20 @@ var charge_target: Node3D
 ## Fortschritt des Nachladens, 0 bis 1. Negativ heisst: wird nicht nachgeladen.
 var reload_progress: float = -1.0
 
-## Wo die Magazintaschen sitzen — vorn am linken Hüftknochen.
+## Wo die Magazintaschen sitzen: vorn links am Bauch, dicht am Körper.
 ##
-## In Figurkoordinaten, weil die Hand dorthin greift, egal wie die Figur
-## steht oder gedreht ist.
-const POUCH := Vector3(-0.24, 0.95, -0.14)
+## In Figurkoordinaten, weil die Hand dorthin greift, egal wie die Figur steht
+## oder gedreht ist.
+##
+## DIESER PUNKT IST EINE ZUSAGE AN DAS WESTENMODELL. Wer eine Weste baut, muss
+## die Magazintaschen hierher setzen — sonst greift die Hand daneben, und das
+## sieht man sofort. Vorher lag er bei x = -0,24, also 6 cm NEBEN dem Rumpf;
+## dort haette eine Tasche in der Luft geschwebt.
+##
+## Der Bauch reicht von y 0,79 bis 1,09 und ist 0,36 breit, seine Vorderseite
+## liegt bei z = -0,11. Der Griff geht also an die linke vordere Ecke, eine
+## Handbreit unter dem Brustkorb.
+const POUCH := Vector3(-0.15, 0.98, -0.16)
 
 ## Der Ablauf des Nachladens, als Wegmarken der Stützhand.
 ##
