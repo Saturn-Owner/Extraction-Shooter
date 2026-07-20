@@ -98,4 +98,7 @@ func _load_arena() -> void:
 		else:
 			print("[Bootstrap] Arena-Szene fehlt noch — Server wartet leer.")
 		return
-	get_tree().change_scene_to_file(ARENA_SCENE)
+	# Aufgeschoben: _load_arena läuft beim Serverstart noch in _ready(), und
+	# mitten im Baumaufbau darf die alte Szene nicht entfernt werden —
+	# der direkte Aufruf schreibt einen Fehler ins Log (remove_child busy).
+	get_tree().change_scene_to_file.call_deferred(ARENA_SCENE)
