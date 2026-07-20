@@ -169,6 +169,21 @@ func build() -> void:
 		hitbox.name = "Trefferzone"
 		hitbox.part = part
 		hitbox.character = self
+
+		# OHNE DIESE ZEILE BLEIBEN ALLE TREFFERZONEN IM WELTURSPRUNG STEHEN.
+		#
+		# AnimatableBody3D übernimmt mit `sync_to_physics` die Hoheit über
+		# seine eigene Welttransformation und folgt seinem Elternknoten nicht
+		# mehr — gedacht ist das für bewegliche Plattformen, die man direkt
+		# verschiebt. Hier hängen die Kästen aber unter der Figur und sollen
+		# mit ihr wandern.
+		#
+		# Die Figur sah dadurch völlig richtig aus (die Meshes folgen ja),
+		# während die Trefferzonen aller Figuren übereinander im Ursprung
+		# lagen. Ein Schuss ins Nichts hätte getroffen, ein Schuss auf die
+		# Figur nichts.
+		hitbox.sync_to_physics = false
+
 		hitbox.collision_layer = hit_layer
 		# Die Trefferzone selbst sucht nichts — sie wird nur gefunden.
 		hitbox.collision_mask = 0

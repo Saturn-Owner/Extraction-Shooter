@@ -132,16 +132,29 @@ func _test_a_real_ray_finds_the_body() -> void:
 	_section("Ein echter Strahl trifft")
 
 	var character := _make()
+
+	# NICHT IM URSPRUNG UND NICHT UNGEDREHT PRÜFEN.
+	#
+	# Genau daran ist dieser Test einmal vorbeigelaufen: Er stellte die Figur
+	# auf (0,0,0) ohne Drehung — dort sind lokale und globale Koordinaten
+	# identisch, und ein Fehler, bei dem die Trefferzonen im Weltursprung
+	# kleben bleiben, ist schlicht nicht zu sehen. Im Spiel stand die Figur
+	# bei (3, 0, -25), ihre Trefferzonen bei (0, 1.3, 0), und kein Schuss kam
+	# je an. Der Test war trotzdem grün.
+	character.global_position = Vector3(3.0, 0.0, -25.0)
+	character.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+
 	# Zwei Bilder, damit die Physik die neuen Körper kennt.
 	await process_frame
 	await physics_frame
 
 	var space := root.world_3d.direct_space_state
 
-	# Von vorn auf jedes Körperteil einzeln.
+	# Von vorn auf jedes Körperteil einzeln. Die Figur ist gedreht, der
+	# Mittelpunkt muss deshalb über ihre Transformation umgerechnet werden.
 	for part: HealthSystem.Part in BlockyCharacter.VERTICAL:
-		var centre := character.centre_of(part)
-		var from := centre + Vector3(0.0, 0.0, -3.0)
+		var centre := character.global_transform * character.centre_of(part)
+		var from := centre + Vector3(0.0, 0.0, 3.0)
 		var query := PhysicsRayQueryParameters3D.create(from, centre)
 		# GENAU WIE IM GESCHOSS. Wird hier `true` gesetzt, besteht der Test
 		# auch mit Area3D-Trefferzonen — und im Spiel ginge jeder Schuss durch.
@@ -161,6 +174,16 @@ func _test_a_real_ray_finds_the_body() -> void:
 		"die Trefferzone hat take_hit() — sonst ignoriert Projectile sie")
 	_check(chest is AnimatableBody3D,
 		"und sie ist ein Körper, keine Area3D")
+
+	# DIE TREFFERZONE MUSS MIT DER FIGUR WANDERN. Das ist der Fehler von oben,
+	# noch einmal direkt gemessen statt über einen Strahl: AnimatableBody3D
+	# übernimmt mit sync_to_physics die Hoheit über seine Welttransformation
+	# und bleibt dann im Ursprung liegen.
+	_check(not chest.sync_to_physics,
+		"sync_to_physics ist aus — sonst folgt sie der Figur nicht")
+	_check(chest.global_position.distance_to(character.global_position) < 2.0,
+		"und sie steht bei der Figur (%v gegen %v)"
+			% [chest.global_position, character.global_position])
 
 	character.queue_free()
 
