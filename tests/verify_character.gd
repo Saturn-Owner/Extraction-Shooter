@@ -971,30 +971,25 @@ func _test_stances() -> void:
 	_check(absf(_foot_height(figure)) < 0.001,
 		"und der Fuss steht wieder genau auf null")
 
-	# --- Zielen hebt die Waffe ---
-	var hip_height := figure.weapon.position.y
-	figure.aiming = true
-	for i in range(120):
-		await process_frame
-	var aimed_height := figure.weapon.position.y
-	_check(aimed_height > hip_height + 0.1,
-		"gezielt kommt die Waffe hoch (%.2f auf %.2f)" % [hip_height, aimed_height])
-
-	# --- Rennen nimmt sie herunter ---
+	# --- Die Waffe sitzt in JEDER Haltung gleich ---
+	#
+	# Hier stand vorher das Gegenteil: dass Zielen die Waffe hebt und Rennen
+	# sie senkt. Beide Werte hatte ich erfunden, und beim Ausprobieren fiel
+	# auf, dass die betroffenen Figuren die Waffe anders hielten als die
+	# übrigen. Jetzt ist es umgekehrt festgeschrieben — wer die Waffe je
+	# wieder haltungsabhängig bewegen will, soll erst hier vorbeikommen.
+	var resting := figure.weapon.position
+	for probe_stance in [[true, false], [false, true], [true, true]]:
+		figure.aiming = probe_stance[0]
+		figure.sprinting = probe_stance[1]
+		for i in range(120):
+			await process_frame
+		_check(figure.weapon.position.is_equal_approx(resting)
+				and figure.weapon.rotation_degrees.is_zero_approx(),
+			"zielend=%s rennend=%s sitzt die Waffe unverändert"
+				% [probe_stance[0], probe_stance[1]])
 	figure.aiming = false
 	figure.sprinting = true
-	for i in range(120):
-		await process_frame
-	_check(figure.weapon.rotation_degrees.x < -10.0,
-		"rennend zeigt die Mündung nach unten (%.1f Grad)"
-			% figure.weapon.rotation_degrees.x)
-
-	# Zielen und Rennen zugleich darf sich nicht addieren.
-	figure.aiming = true
-	for i in range(120):
-		await process_frame
-	_check(figure.weapon.rotation_degrees.x < -10.0,
-		"wer rennt, zielt nicht — Rennen hat Vorrang")
 
 	# --- Beim Rennen nach VORN, nicht nach hinten ---
 	#

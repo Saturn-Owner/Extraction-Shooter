@@ -148,9 +148,9 @@ func _apply_stance() -> void:
 			else CharacterAnimation.Stance.STAND)
 		_animation.is_sprinting = sprinting
 		_animation.is_aiming = aiming
-	if weapon != null:
-		weapon.is_aiming = aiming
-		weapon.is_sprinting = sprinting
+	# An die Waffe geht nichts: Sie wird in jeder Haltung gleich gefasst,
+	# siehe den Kommentar in CharacterWeapon. Ducken und Rennen zeigen sich
+	# am Körper.
 
 
 ## Zieht der Figur die Weste an.

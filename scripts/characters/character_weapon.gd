@@ -57,16 +57,6 @@ enum Behaviour {
 var data: WeaponData
 var viewmodel: WeaponViewmodel
 
-## Haltung. Wird von aussen gesetzt — beim Dummy vom Skript, beim Spieler
-## später von den Tasten. Dieselbe Schnittstelle wie bei `CharacterAnimation`,
-## damit beide dieselbe Wahrheit über den Zustand haben.
-var is_aiming: bool = false
-var is_sprinting: bool = false
-
-var _aim: float = 0.0
-var _sprint: float = 0.0
-var _last_delta: float = 0.0
-
 var _voices: Array[AudioStreamPlayer3D] = []
 var _next_voice: int = 0
 var _shot_sound: AudioStream
@@ -137,32 +127,25 @@ const BRING_IN_END := 0.12
 const PUSH_OUT_START := 0.90
 
 ## ---------------------------------------------------------------------------
-## ZIELEN UND RENNEN
+## DIE WAFFE WIRD IN JEDER HALTUNG GLEICH GEFASST
 ##
-## Beides bewegt NUR die Waffe. Die Arme brauchen dafür keine Zeile: Sie lösen
-## über inverse Kinematik auf Griff- und Vorderschaftpunkt auf, und die hängen
-## am Waffenmodell. Wandert die Waffe, wandern die Hände mit.
+## Hier standen einmal eigene Werte fürs Zielen (Waffe 20 cm hoch, 13 cm zur
+## Mitte) und fürs Rennen (28 Grad Mündung herunter). Beide waren von mir
+## erfunden — es gibt im Projekt keine Vorlage dafür, so wie es sie fürs
+## Nachladen gibt.
 ##
-## Genau dafür gibt es `grip_point` und `support_point` am Modell. Wer die
-## Armwinkel stattdessen von Hand nachzöge, müsste das für jede neue Haltung
-## und jede neue Waffe wieder tun.
-
-## Zielen: Waffe zur Körpermitte und auf Augenhöhe.
+## Beim Ausprobieren fiel auf, dass die so ausgestatteten Figuren die Waffe
+## anders hielten als die übrigen. Mechanisch war nichts kaputt: Die Hände
+## sassen auf 0 mm an ihren Griffpunkten, die Mündung wich in beiden Fällen um
+## dieselben 12 Grad ab. Es sah trotzdem falsch aus — und eine erfundene
+## Haltung gegen eine gewachsene zu stellen, ist genau die Sorte zweiter
+## Wahrheit, die das Projekt sonst vermeidet.
 ##
-## Der Waffenpunkt sitzt bei x = 0,18, also rechts der Mitte, und auf 1,30 m.
-## Die Augen liegen bei etwa 1,68 m auf x = 0. Angelegt wird die Waffe also
-## nach innen und nach oben — nicht ganz bis zum Auge, weil der Kopf im
-## Anschlag auch seinerseits ein Stück herunterkommt.
-const AIM_SHIFT := Vector3(-0.13, 0.20, 0.0)
-const AIM_SPEED := 8.0
-
-## Rennen: Mündung herunter, Waffe dichter an den Körper.
-##
-## Negatives X neigt die Mündung nach unten — beim Nachladen ist derselbe
-## Wert positiv und hebt sie an.
-const SPRINT_SHIFT := Vector3(0.0, -0.06, 0.06)
-const SPRINT_PITCH := -28.0
-const SPRINT_SPEED := 6.0
+## Geblieben ist deshalb nur das Nachladen, weil dessen Werte aus dem
+## `WeaponViewmodel` stammen. Ducken und Rennen zeigen sich am KÖRPER —
+## abgesenkter Rumpf, vorgebeugte Haltung, Schrittzyklus —, nicht an der
+## Waffe. Wenn Zielen später sichtbar werden soll, gehören seine Werte
+## genauso ans Waffenmodell wie `reload_rotation_degrees`.
 
 var _home_position: Vector3
 var _timer: float = 0.0
@@ -223,8 +206,6 @@ func _process(delta: float) -> void:
 	if viewmodel == null:
 		return
 
-	_last_delta = delta
-
 	# Ohne diesen Aufruf steht der Verschluss still und das Magazin klebt
 	# fest — die Mechanik läuft nicht von allein.
 	viewmodel.update_mechanics(delta)
@@ -251,20 +232,8 @@ func _update_hold_pose() -> void:
 		else:
 			amount = 1.0 - smoothstep(PUSH_OUT_START, 1.0, progress)
 
-	# Zielen und Rennen schliessen sich gegenseitig aus, und Nachladen hat
-	# Vorrang vor beidem: Wer das Magazin wechselt, zielt nicht.
-	var free := 1.0 - amount
-	var aim_goal := 1.0 if (is_aiming and not is_sprinting) else 0.0
-	var sprint_goal := 1.0 if is_sprinting else 0.0
-	_aim = move_toward(_aim, aim_goal, AIM_SPEED * _last_delta)
-	_sprint = move_toward(_sprint, sprint_goal, SPRINT_SPEED * _last_delta)
-
-	position = (_home_position
-		+ RELOAD_SHIFT * amount
-		+ AIM_SHIFT * _aim * free
-		+ SPRINT_SHIFT * _sprint * free)
-	rotation_degrees = (_reload_rotation() * amount
-		+ Vector3(SPRINT_PITCH * _sprint * free, 0.0, 0.0))
+	position = _home_position + RELOAD_SHIFT * amount
+	rotation_degrees = _reload_rotation() * amount
 
 
 ## Lädt endlos nach, mit Pause dazwischen.

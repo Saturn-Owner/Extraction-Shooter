@@ -115,11 +115,34 @@ func _toggle_character_window() -> void:
 ## seinen Standplatz, also über acht Meter von x = 4 bis x = 12. Bliebe er
 ## wie die anderen bei x = 3, liefe seine Bahn von -1 bis 7 — mitten durch
 ## die gepanzerte Scheibe bei x = 0.
+## ---------------------------------------------------------------------------
+## ALLE FIGUREN TRAGEN EINE WAFFE
+##
+## Die vier auf Entfernung standen zuerst mit leeren Händen da, weil sie nur
+## fürs Treffen und für die Bewegung gedacht waren. Nebeneinander sah man
+## dadurch zwei verschiedene Figuren — bewaffnete mit angelegten Armen und
+## unbewaffnete mit frei schwingenden.
+##
+## Jetzt fassen alle zehn die Waffe gleich. Nebenbei prüft das die Armhaltung
+## auch in Bewegung und auf Entfernung mit: Wenn eine Hand irgendwo abrutscht,
+## fällt es an zehn Figuren eher auf als an dreien.
 const HUMANOID_PLACES := [
-	{distance = 25.0, x = 3.0, patrol = 0.0, speed = 0.0, label = "steht"},
-	{distance = 50.0, x = 9.0, patrol = 14.0, speed = 4.4, label = "rennt"},
-	{distance = 100.0, x = 8.0, patrol = 8.0, speed = 1.6, label = "geht"},
-	{distance = 300.0, x = 3.0, patrol = 0.0, speed = 0.0, label = "steht"},
+	{
+		distance = 25.0, x = 3.0, patrol = 0.0, speed = 0.0, label = "steht",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
+	{
+		distance = 50.0, x = 9.0, patrol = 14.0, speed = 4.4, label = "rennt",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
+	{
+		distance = 100.0, x = 8.0, patrol = 8.0, speed = 1.6, label = "geht",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
+	{
+		distance = 300.0, x = 3.0, patrol = 0.0, speed = 0.0, label = "steht",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
 
 	# Drei bewaffnete, dicht beieinander bei 15 m — man soll die Mechanik
 	# sehen können, und dafür muss man nah genug stehen. Alle mit
