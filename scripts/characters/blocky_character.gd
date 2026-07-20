@@ -174,6 +174,14 @@ func build() -> void:
 	_meshes.clear()
 	_hitboxes.clear()
 
+	var old_mount := weapon_mount()
+	if old_mount != null:
+		old_mount.queue_free()
+	var mount := Node3D.new()
+	mount.name = "Waffenpunkt"
+	mount.position = WEAPON_MOUNT
+	add_child(mount)
+
 	for part: HealthSystem.Part in VERTICAL:
 		var size := size_of(part)
 		var centre := centre_of(part)
@@ -208,6 +216,16 @@ func build() -> void:
 		joint.add_child(hinge)
 
 		_add_segment(hinge, part, Vector3(size.x * TAPER, lower_height, size.z * TAPER))
+
+		# Am unteren Ende des Unterarms sitzt die Hand. Sie hat keine
+		# Geometrie und keine eigene Trefferzone — sie ist nur der Punkt, an
+		# dem eine Waffe hängt. Dadurch folgt die Waffe der Armhaltung von
+		# selbst, statt getrennt ausgerichtet werden zu müssen.
+		if part == HealthSystem.Part.LEFT_ARM or part == HealthSystem.Part.RIGHT_ARM:
+			var hand := Node3D.new()
+			hand.name = "Hand"
+			hand.position = Vector3(0.0, -lower_height, 0.0)
+			hinge.add_child(hand)
 
 
 ## Legt einen Kasten samt Trefferzone unter einem Gelenk an.
@@ -293,6 +311,42 @@ func hinge_of(part: HealthSystem.Part) -> Node3D:
 	if joint == null:
 		return null
 	return joint.get_node_or_null(NodePath(HINGES[part].name))
+
+
+## Der Punkt, an dem eine Waffe hängt. Nur an Armen vorhanden.
+##
+## Zurzeit nur zur Kontrolle: Die Waffe hängt NICHT hier, siehe
+## `weapon_mount()`. Der Knoten bleibt, weil er der richtige Aufhängepunkt
+## wäre, sobald es inverse Kinematik gibt.
+func hand_of(part: HealthSystem.Part) -> Node3D:
+	var hinge := hinge_of(part)
+	return hinge.get_node_or_null("Hand") as Node3D if hinge != null else null
+
+
+## Wo eine Waffe vor dem Körper sitzt: rechts der Mitte, auf Brusthöhe.
+##
+## ---------------------------------------------------------------------------
+## WARUM NICHT AN DER HAND, OBWOHL DAS NAHELIEGT
+##
+## Erster Versuch war genau das, mit der Begründung, dass die Waffe dann der
+## Armhaltung von selbst folgt. Im Rendering stand die Mündung daraufhin auf
+## 2,02 m Höhe — die Waffe zeigte in den Himmel.
+##
+## Der Grund: Eine Hand am Ende von Schulter und Ellenbogen trägt deren
+## aufsummierte Drehung, und die ist nicht die Richtung, in die die Waffe
+## zeigen soll. Um sie auszugleichen, müsste man die Haltung rückwärts
+## rechnen — und bei jeder Änderung der Haltung neu.
+##
+## Andersherum ist es stabil: Die Waffe sitzt fest und richtig, die Arme
+## werden so gestellt, dass sie plausibel danach greifen. Eine Waffe, die in
+## die falsche Richtung zeigt, fällt sofort auf; eine Hand, die zwei
+## Zentimeter neben dem Griff liegt, bei eckigen Gliedmassen nicht.
+const WEAPON_MOUNT := Vector3(0.10, 1.28, -0.18)
+
+
+## Der Knoten, an den eine Waffe gehängt wird.
+func weapon_mount() -> Node3D:
+	return get_node_or_null("Waffenpunkt") as Node3D
 
 
 ## Die vordere Trefferzone eines Körperteils. Bei zweiteiligen Gliedern das

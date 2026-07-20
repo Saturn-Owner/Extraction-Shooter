@@ -120,6 +120,23 @@ const HUMANOID_PLACES := [
 	{distance = 50.0, x = 9.0, patrol = 14.0, speed = 4.4, label = "rennt"},
 	{distance = 100.0, x = 8.0, patrol = 8.0, speed = 1.6, label = "geht"},
 	{distance = 300.0, x = 3.0, patrol = 0.0, speed = 0.0, label = "steht"},
+
+	# Drei bewaffnete, dicht beieinander bei 15 m — man soll die Mechanik
+	# sehen können, und dafür muss man nah genug stehen. Alle mit
+	# Schalldämpfer: Ein ungedämpfter Dauerbeschuss dreier Figuren im
+	# Hintergrund wäre nach zwei Minuten unerträglich.
+	{
+		distance = 15.0, x = -8.0, patrol = 0.0, speed = 0.0, label = "haelt",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.HOLD,
+	},
+	{
+		distance = 15.0, x = -11.0, patrol = 0.0, speed = 0.0, label = "laedt nach",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.RELOAD,
+	},
+	{
+		distance = 15.0, x = -14.0, patrol = 0.0, speed = 0.0, label = "schiesst",
+		weapon = true, behaviour = CharacterWeapon.Behaviour.SHOOT,
+	},
 ]
 
 
@@ -145,6 +162,11 @@ func _place_humanoids() -> void:
 		figure.label_text = "%d m  %s" % [int(distance), place.label]
 		figure.patrol_width = place.patrol
 		figure.patrol_speed = place.speed
+
+		if place.get("weapon", false):
+			figure.weapon_id = &"weapon_rifle_ar15"
+			figure.weapon_attachments = [&"ar15_muzzle_suppressor"] as Array[StringName]
+			figure.weapon_behaviour = place.behaviour
 
 		container.add_child(figure)
 		# Nach dem Einhängen setzen: global_position braucht den Baum.

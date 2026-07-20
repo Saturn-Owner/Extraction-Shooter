@@ -27,6 +27,7 @@ func _initialize() -> void:
 	await _test_the_target_can_be_reset()
 	await _test_movement()
 	await _test_hinges()
+	await _test_weapon_in_hand()
 	_test_colours()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
@@ -553,6 +554,94 @@ func _test_hinges() -> void:
 			% bent.distance_to(forearm.global_position))
 
 	character.queue_free()
+
+
+## Die Waffe in der Hand.
+func _test_weapon_in_hand() -> void:
+	_section("Waffe")
+
+	var figure := HumanoidTarget.new()
+	figure.label_text = "Träger"
+	figure.weapon_id = &"weapon_rifle_ar15"
+	figure.weapon_attachments = [&"ar15_muzzle_suppressor"] as Array[StringName]
+	figure.weapon_behaviour = CharacterWeapon.Behaviour.HOLD
+	root.add_child(figure)
+	await process_frame
+
+	_check(figure.weapon != null, "die Figur hat eine Waffe")
+	if figure.weapon == null:
+		figure.queue_free()
+		return
+
+	_check(figure.weapon.viewmodel != null, "und ein Modell dazu")
+	_check(figure.weapon.viewmodel is AR15Viewmodel,
+		"es ist die AR-15 aus Blender, nicht der Platzhalter")
+
+	# DER SCHALLDÄMPFER MUSS WIRKEN, nicht nur montiert sein.
+	_check(figure.weapon.data.loudness_multiplier < WeaponAudio.SUPPRESSED_BELOW,
+		"der Schalldämpfer senkt die Lautstärke (%.2f)"
+			% figure.weapon.data.loudness_multiplier)
+	_check(WeaponAudio.volume_db_for(figure.weapon.data) < -6.0,
+		"und sie wird hörbar leiser abgespielt (%.1f dB)"
+			% WeaponAudio.volume_db_for(figure.weapon.data))
+
+	# DIE MÜNDUNG MUSS NACH VORN ZEIGEN.
+	#
+	# Hier lag der Fehler des ersten Versuchs: Die Waffe hing an der Hand und
+	# erbte damit die aufsummierte Drehung von Schulter und Ellenbogen — die
+	# Mündung stand auf 2,02 m Höhe, also über dem Kopf, und zeigte in den
+	# Himmel. Gemessen wird deshalb nicht, DASS eine Waffe da ist, sondern
+	# wohin sie zeigt.
+	var muzzle := figure.weapon.viewmodel.muzzle_point
+	_check(muzzle != null, "es gibt einen Mündungspunkt")
+	if muzzle != null:
+		var local := figure.global_transform.affine_inverse() * muzzle.global_position
+		_check(local.z < -0.5,
+			"die Mündung sitzt vor dem Körper (%.2f m)" % local.z)
+		_check(local.y > 1.0 and local.y < 1.6,
+			"auf Brusthöhe, nicht über dem Kopf (%.2f m)" % local.y)
+
+	# Die Arme gehören an die Waffe, nicht in den Gehzyklus.
+	_check(figure._animation.holding_weapon, "die Arme sind im Anschlag")
+
+	var arm := figure.joint_of(HealthSystem.Part.RIGHT_ARM)
+	var before := arm.rotation_degrees
+	figure._animation.speed = 4.0
+	for i in range(120):
+		figure._animation._process(1.0 / 60.0)
+	_check(arm.rotation_degrees.distance_to(before) < 6.0,
+		"und pendeln beim Laufen nicht frei mit (%.1f Grad Unterschied)"
+			% arm.rotation_degrees.distance_to(before))
+
+	figure.queue_free()
+
+	# --- Nachladen und Schiessen laufen ohne Fehler durch ---
+	for entry in [
+		{name = "nachladend", mode = CharacterWeapon.Behaviour.RELOAD},
+		{name = "schiessend", mode = CharacterWeapon.Behaviour.SHOOT},
+	]:
+		var actor := HumanoidTarget.new()
+		actor.weapon_id = &"weapon_rifle_ar15"
+		actor.weapon_attachments = [&"ar15_muzzle_suppressor"] as Array[StringName]
+		actor.weapon_behaviour = entry.mode
+		root.add_child(actor)
+		await process_frame
+
+		# Ein voller Durchlauf: leerschiessen, nachladen, weiter.
+		for i in range(400):
+			actor.weapon._process(1.0 / 60.0)
+
+		_check(actor.weapon.viewmodel != null,
+			"%s: das Modell steht nach 400 Bildern noch" % entry.name)
+		actor.queue_free()
+
+	# Eine Figur OHNE Waffe darf sich davon nicht stören lassen.
+	var bare := HumanoidTarget.new()
+	root.add_child(bare)
+	await process_frame
+	_check(bare.weapon == null, "ohne weapon_id bleibt die Figur unbewaffnet")
+	_check(not bare._animation.holding_weapon, "und ihre Arme schwingen frei")
+	bare.queue_free()
 
 
 func _test_colours() -> void:

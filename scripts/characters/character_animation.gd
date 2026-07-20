@@ -35,6 +35,43 @@ var character: BlockyCharacter
 ## Tempo in Metern je Sekunde. Setzt, wer die Figur bewegt.
 var speed: float = 0.0
 
+## Ob die Figur eine Waffe im Anschlag hat.
+##
+## Dann schwingen die Arme NICHT mit. Wer ein Gewehr hält, hat beide Hände
+## daran — ein Arm, der dabei frei pendelt, sieht sofort falsch aus, und die
+## Waffe, die an der Hand hängt, würde mitpendeln.
+var holding_weapon: bool = false
+
+## Haltung mit Waffe. Werte in Grad.
+##
+## ---------------------------------------------------------------------------
+## WARUM HIER FESTE WINKEL STEHEN UND KEINE IK
+##
+## Sauber wäre inverse Kinematik: Man gibt an, wo die Hände sein sollen, und
+## der Rechner sucht die Gelenkwinkel. Für zwei Gelenke je Arm und eckige
+## Gliedmassen ist das aber mit Kanonen auf Spatzen geschossen — man sieht
+## dem Ergebnis den Unterschied nicht an, und feste Winkel lassen sich beim
+## Betrachten eines Bildes nachjustieren.
+##
+## Z DREHT DEN ARM ZUR KÖRPERMITTE. Ohne das zeigen beide Unterarme
+## kerzengerade nach vorn, 56 cm auseinander — die Waffe ist 5 cm breit, die
+## Hände greifen also ins Leere. Der linke Arm braucht positives Z, der rechte
+## negatives, damit beide nach innen kommen.
+## ACHTUNG BEIM NACHJUSTIEREN: X und Z zusammen verhalten sich nicht so, wie
+## man erwartet — Godot wendet Euler-Winkel in der Reihenfolge YXZ an, und
+## eine grössere X-Drehung hebt den Arm dann seitlich an, statt ihn weiter
+## nach vorn zu bringen. Ein Versuch mit (48, 0, 34) liess den Stützarm nach
+## oben zeigen statt an den Vorderschaft. Wer hier dreht, sollte danach
+## rendern statt zu rechnen.
+const HOLD_LEFT_SHOULDER := Vector3(38.0, 0.0, 26.0)
+const HOLD_LEFT_ELBOW := Vector3(62.0, 0.0, 0.0)
+const HOLD_RIGHT_SHOULDER := Vector3(22.0, 0.0, -30.0)
+const HOLD_RIGHT_ELBOW := Vector3(74.0, 0.0, 0.0)
+
+## Wie stark die Haltung beim Laufen mitatmet. Klein: Ein Anschlag soll
+## ruhig wirken, aber nicht wie festgeschraubt.
+const HOLD_SWAY := 5.0
+
 ## Ab diesem Tempo gilt die volle Ausschlagsweite. Entspricht etwa dem
 ## Sprint des Spielers.
 const FULL_SWING_SPEED := 4.5
@@ -186,12 +223,21 @@ func _process(delta: float) -> void:
 		var joint := character.joint_of(part)
 		if joint == null:
 			continue
+		var hinge := character.hinge_of(part)
 		var entry: Dictionary = SWINGING[part]
+
+		var is_arm := part == HealthSystem.Part.LEFT_ARM \
+			or part == HealthSystem.Part.RIGHT_ARM
+
+		if holding_weapon and is_arm:
+			_pose_weapon_arm(part, joint, hinge, swing)
+			continue
+
 		# Absolut setzen, nie addieren: Bei _intensity = 0 kommt exakt null
 		# heraus und der Kanal räumt sich von selbst auf.
-		joint.rotation_degrees.x = swing * entry.amount * entry.sign * _intensity
+		joint.rotation_degrees = Vector3(
+			swing * entry.amount * entry.sign * _intensity, 0.0, 0.0)
 
-		var hinge := character.hinge_of(part)
 		if hinge == null:
 			continue
 		hinge.rotation_degrees.x = _hinge_angle(part, entry.sign)
@@ -208,6 +254,22 @@ func _process(delta: float) -> void:
 		if joint == null:
 			continue
 		joint.position = _rest[part] + Vector3(0.0, bob + breath, 0.0)
+
+
+## Setzt einen Arm in die Waffenhaltung.
+##
+## Der Ausschlag geht hier NICHT in die Schulter, sondern nur als kleines
+## Mitatmen obendrauf. Beide Hände bleiben an der Waffe.
+func _pose_weapon_arm(part: HealthSystem.Part, joint: Node3D, hinge: Node3D,
+		swing: float) -> void:
+	var left := part == HealthSystem.Part.LEFT_ARM
+	var shoulder := HOLD_LEFT_SHOULDER if left else HOLD_RIGHT_SHOULDER
+	var elbow := HOLD_LEFT_ELBOW if left else HOLD_RIGHT_ELBOW
+
+	var sway := swing * HOLD_SWAY * _intensity
+	joint.rotation_degrees = shoulder + Vector3(sway, 0.0, 0.0)
+	if hinge != null:
+		hinge.rotation_degrees = elbow
 
 
 ## Winkel eines Zwischengelenks — Knie oder Ellenbogen.
@@ -243,10 +305,17 @@ func reset() -> void:
 		var joint := character.joint_of(part)
 		if joint == null:
 			continue
-		joint.position = _rest[part]
-		joint.rotation_degrees.x = 0.0
-
 		var hinge := character.hinge_of(part)
+
+		if holding_weapon and (part == HealthSystem.Part.LEFT_ARM
+				or part == HealthSystem.Part.RIGHT_ARM):
+			joint.position = _rest[part]
+			_pose_weapon_arm(part, joint, hinge, 0.0)
+			continue
+
+		joint.position = _rest[part]
+		joint.rotation_degrees = Vector3.ZERO
+
 		if hinge != null:
 			# Nicht auf null: Der Ellenbogen hat auch im Stand seinen
 			# Grundwinkel, sonst hängen die Arme kerzengerade herunter.

@@ -36,6 +36,15 @@ const LABEL_HEIGHT := 0.32
 
 @export var patrol_speed: float = 1.4
 
+## Ob und wie die Figur eine Waffe führt. Leer = keine.
+@export var weapon_id: StringName = &""
+
+@export var weapon_attachments: Array[StringName] = []
+
+@export var weapon_behaviour: CharacterWeapon.Behaviour = CharacterWeapon.Behaviour.HOLD
+
+var weapon: CharacterWeapon
+
 var _label: Label3D
 var _hits: int = 0
 var _animation: CharacterAnimation
@@ -67,8 +76,29 @@ func _ready() -> void:
 	_label.outline_size = 18
 	add_child(_label)
 
+	if weapon_id != &"":
+		_arm_with_weapon()
+
 	part_hit.connect(_on_part_hit)
 	_update_label()
+
+
+## Gibt der Figur eine Waffe.
+func _arm_with_weapon() -> void:
+	var mount := weapon_mount()
+	if mount == null:
+		push_warning("[HumanoidTarget] Kein Waffenpunkt gefunden — Waffe entfällt")
+		return
+
+	weapon = CharacterWeapon.new()
+	weapon.name = "Waffe"
+	weapon.weapon_id = weapon_id
+	weapon.attachment_ids = weapon_attachments
+	weapon.behaviour = weapon_behaviour
+	mount.add_child(weapon)
+
+	# Die Arme gehören jetzt an die Waffe, nicht in den Gehzyklus.
+	_animation.holding_weapon = true
 
 
 ## Läuft hin und her, falls patrol_width gesetzt ist.
@@ -134,6 +164,8 @@ func reset() -> void:
 	position = _patrol_origin
 	if _animation != null:
 		_animation.reset()
+	if weapon != null:
+		weapon.reset()
 	if health != null:
 		health.reset()
 	plate_durability = plate.max_durability if plate != null else 0.0
