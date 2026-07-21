@@ -59,7 +59,7 @@ const FIT_ROLL_DEG := 0.0
 ## NICHT fuer den Bildausschnitt benutzen: Diese Verschiebung wirkt in JEDER
 ## Haltung, auch beim Zielen. Wie die Waffe im Hueftanschlag sitzt, gehoert in
 ## `hip_position`, die beim Zielen weggeblendet wird.
-const FIT_OFFSET := Vector3(0.008, 0.0, 0.0)
+const FIT_OFFSET := Vector3.ZERO
 
 
 func get_model_name() -> String:
@@ -72,7 +72,7 @@ func _configure() -> void:
 	# Wert senkt `weapon_view` die Waffe beim Zielen ab, damit die Kimme in der
 	# Bildmitte landet. Wer hier danebenliegt, zielt an der eigenen Visierung
 	# vorbei.
-	sight_height = 0.082
+	sight_height = 0.070
 
 	# Beim Zielen dicht ans Auge statt nach vorn geschoben (Grundwert 0.16).
 	#
@@ -81,7 +81,7 @@ func _configure() -> void:
 	# Auge faellt alles unterhalb der Visierlinie aus dem Bildrand — man sieht
 	# Kimme und Lauf, sonst nichts. Dieses Modell ist laenger als die anderen
 	# und braucht das deutlicher.
-	ads_distance = -0.11
+	ads_distance = 0.015
 	muzzle_z = -0.560
 	# Schwerer, stumpfer, kickt spuerbar mehr.
 	recoil_scale = 1.35
