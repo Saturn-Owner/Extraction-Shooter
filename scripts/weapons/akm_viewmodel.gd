@@ -23,6 +23,31 @@ const MODEL := "res://assets/models/weapons/akm/akm.glb"
 ## Hoehe der Laufachse ueber dem Modellursprung.
 const BORE_Y := 0.014
 
+## Hoehe der Visierlinie ueber dem Modellursprung — GEMESSEN, nicht geraten.
+##
+## Diese Zahl ist nach oben UND nach unten eingeklemmt, und beide Grenzen
+## liegen nur drei Millimeter auseinander:
+##
+##   oben   Das Korn endet bei y = 0.0880. Wer die Linie hoeher legt, zielt
+##          ueber die eigene Visierung hinweg.
+##   unten  Zwischen den Visieren sitzt bei z = -0.32 ein Aufbau am Gehaeuse,
+##          der bis y = 0.0858 reicht — und der steht dem Auge dreissig
+##          Zentimeter naeher als das Korn. Liegt die Linie tiefer als 0.0855,
+##          verdeckt dieser Aufbau das Korn vollstaendig.
+##
+## Diese Enge ist keine Schlamperei, sondern liegt am Modell: Es ist ein AK mit
+## durchgehender Schiene, gebaut fuer eine Optik. Wer wirklich ein AK-Zielbild
+## will, braucht in Blender ein hoeheres Korn — dann wird hier eine Zahl
+## geaendert und sonst nichts.
+const SIGHT_LINE := 0.0865
+
+## Hinteres Ende der Visierlinie: die Schienenoberkante (gemessen y = 0.0824)
+## kurz vor dem Schaft. Dort laege eine Kimme, wenn die Waffe eine haette.
+const REAR_SIGHT_Z := -0.205
+
+## Wo das Korn im Modell steckt — gemessen am hoechsten Punkt der Waffe.
+const FRONT_SIGHT_Z := -0.530
+
 ## Gemessen mit einem Godot-Skript (nicht geschaetzt): Groesse und Mittelpunkt
 ## des Modells in seinem eigenen Raum. Daraus faellt die Lage in der Hand.
 ## Wird eine ANDERE Waffe exportiert, hier neu vermessen und eintragen.
@@ -59,7 +84,14 @@ const FIT_ROLL_DEG := 0.0
 ## NICHT fuer den Bildausschnitt benutzen: Diese Verschiebung wirkt in JEDER
 ## Haltung, auch beim Zielen. Wie die Waffe im Hueftanschlag sitzt, gehoert in
 ## `hip_position`, die beim Zielen weggeblendet wird.
-const FIT_OFFSET := Vector3.ZERO
+## GEMESSEN: Die Waffe steht in ihrer eigenen Datei nicht mittig. Ihre
+## Laengsachse — Lauf, Schiene, Kornring — liegt bei x = -0.0053. Zentriert
+## wurde beim Einpassen die HUELLE des Modells, und die ist unsymmetrisch,
+## weil Ladehebel und Auswurffenster rechts sitzen.
+##
+## Ohne diesen Ausgleich zielt man 5 mm neben der eigenen Waffe vorbei: Die
+## Kamera steht auf x = 0, die Visierung auf x = -0.0053.
+const FIT_OFFSET := Vector3(0.0053, 0.0, 0.0)
 
 
 func get_model_name() -> String:
@@ -67,21 +99,23 @@ func get_model_name() -> String:
 
 
 func _configure() -> void:
-	# GEMESSEN, nicht geschaetzt: Das Modell reicht im Viewmodel-Raum bis
-	# y = 0.088 hinauf, die Visierung sitzt knapp darunter. Genau um diesen
-	# Wert senkt `weapon_view` die Waffe beim Zielen ab, damit die Kimme in der
-	# Bildmitte landet. Wer hier danebenliegt, zielt an der eigenen Visierung
-	# vorbei.
-	sight_height = 0.070
+	# Dieselbe Zahl, auf der die Kerbe der Kimme steht. `weapon_view` senkt die
+	# Waffe beim Zielen um genau diesen Wert ab — damit landet die Visierlinie
+	# auf der Bildmitte, und zwar ohne dass hier irgendetwas nachjustiert
+	# werden muesste. Wer SIGHT_LINE aendert, aendert beides zugleich.
+	sight_height = SIGHT_LINE
 
-	# Beim Zielen dicht ans Auge statt nach vorn geschoben (Grundwert 0.16).
+	# Wie weit die Waffe beim Zielen vor dem Auge steht.
 	#
-	# Der Grund ist der Kolben: Je weiter die Waffe beim Zielen vom Auge weg
-	# steht, desto weiter rutscht ihr hinteres Ende von unten ins Bild. Nah am
-	# Auge faellt alles unterhalb der Visierlinie aus dem Bildrand — man sieht
-	# Kimme und Lauf, sonst nichts. Dieses Modell ist laenger als die anderen
-	# und braucht das deutlicher.
-	ads_distance = 0.015
+	# Vorher stand hier 0.015 — die Waffe lag damit im Auge. Das hintere Ende
+	# des Schaftes sass anderthalb Zentimeter vor der Kamera und fuellte den
+	# halben Bildschirm; vom Zielbild war nichts uebrig. Naeher heisst hier
+	# NICHT besser: Was dicht vor dem Auge steht, wird riesig, und die Waffe
+	# ist von der Muendung bis zum Schaftende ueber einen halben Meter lang.
+	#
+	# Bei 0.06 sitzt das hintere Ende der Visierlinie gut zwei Handbreit vor
+	# dem Auge — dort, wo es beim Anschlag auch waere.
+	ads_distance = 0.06
 	muzzle_z = -0.560
 	# Schwerer, stumpfer, kickt spuerbar mehr.
 	recoil_scale = 1.35
@@ -102,6 +136,7 @@ func _configure() -> void:
 
 func _build_parts() -> void:
 	_build_body()
+	_build_sight_points()
 
 	# Die Mündung sitzt am vorderen Ende der Laufachse — daran haengen
 	# Muendungsfeuer und der Ausgangspunkt der Kugel.
@@ -118,6 +153,39 @@ func _build_parts() -> void:
 	# Solange sie leer sind, bewegt die Mechanik nur Luft — ohne Schaden.
 	add_child(ViewmodelParts.pivot("Action", Vector3(0.019, 0.030, -0.120)))
 	add_child(ViewmodelParts.pivot("Trigger", Vector3(0.0, -0.020, -0.086)))
+
+
+## Setzt die beiden Punkte, ueber die gezielt wird — ohne Geometrie.
+##
+## ---------------------------------------------------------------------------
+## HIER STEHT ABSICHTLICH NICHTS IM BILD
+##
+## Diese Waffe hat keine sichtbare Kimme. Sie ist ein umgebautes AK mit
+## durchgehender Schiene: vorn ein Korn im Ring, hinten eine leere Schiene.
+## Gezielt wird ueber die Schiene, so wie bei der AR-15 auch.
+##
+## Es gab hier einmal eine aus Quadern gebaute Kimme. Sie hat getan, was sie
+## sollte, und wurde trotzdem wieder entfernt: Lucas will die Waffe so sehen,
+## wie sie aus Blender kommt. Die Zahlen, die sie hinterlassen hat, bleiben —
+## an ihnen haengt die Zielhaltung, und sie sind gemessen, nicht geraten.
+##
+## Die Punkte selbst sind leer und im Spiel unsichtbar. Sie stehen trotzdem
+## hier, weil `verify_weapon_handling` an ihnen die Visierlinie nachrechnet:
+## gleiche Hoehe, mittig, Korn vor Kimme — und vor allem, ob zwischen beiden
+## ueberhaupt freie Sicht besteht. Genau diese Pruefung haette den Fehler
+## gefunden, an dem hier zwei Nachmittage draufgegangen sind.
+func _build_sight_points() -> void:
+	# Das Korn steckt im Modell und ist kein eigener Knoten. Dieser Punkt sagt,
+	# wo es sitzt — gemessen, nicht gesetzt: Der Kornring endet bei y = 0.0880,
+	# z = -0.53. Wer das Modell austauscht, sieht hier, welche Zahl nachgemessen
+	# gehoert.
+	add_child(ViewmodelParts.pivot("FrontSight",
+			Vector3(0.0, SIGHT_LINE, FRONT_SIGHT_Z)))
+
+	# Das hintere Ende der Visierlinie: die Schienenoberkante kurz vor dem
+	# Schaft. Dort laege eine Kimme, wenn die Waffe eine haette.
+	add_child(ViewmodelParts.pivot("RearSight",
+			Vector3(0.0, SIGHT_LINE, REAR_SIGHT_Z)))
 
 
 ## Laedt das Modell, vermisst es und setzt es passend in die Hand.

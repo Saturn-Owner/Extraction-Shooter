@@ -815,6 +815,82 @@ func _check_sight_line(model: WeaponViewmodel, label: String) -> void:
 	_check(front.position.z < rear.position.z,
 		"%s: das Korn sitzt vor der Kimme" % label)
 
+	_check_clear_view(model, label, rear, front)
+
+
+## Steht zwischen Kimme und Korn etwas im Weg?
+##
+## ---------------------------------------------------------------------------
+## DIESER TEST HAT EINEN ECHTEN FEHLER GEFANGEN, DEN NIEMAND ERKLAEREN KONNTE
+##
+## Die AKM sah beim Zielen aus, als waere sie kaputt: Kimme und Korn sassen
+## rechnerisch genau richtig, im Bild war vom Korn trotzdem nichts zu sehen.
+## Der Grund lag dazwischen — ein Aufbau am Gehaeuse, zwei Millimeter zu hoch,
+## dafuer dreissig Zentimeter naeher am Auge. Aus dieser Naehe verdeckt er
+## alles dahinter.
+##
+## Die Pruefung ist einfacher als die Erklaerung: Das Auge liegt auf der
+## Visierlinie und schaut waagerecht. Also darf zwischen den beiden Visieren
+## nichts hoeher stehen als diese Linie — sonst schaut man dagegen.
+##
+## Nur der schmale Streifen in der Mitte zaehlt. Ladehebel und Auswurffenster
+## stehen seitlich hoch und stoeren beim Zielen niemanden.
+func _check_clear_view(model: WeaponViewmodel, label: String,
+		rear: Node3D, front: Node3D) -> void:
+	const CORRIDOR := 0.004
+	const TOLERANCE := 0.0002
+	# Die Visiere selbst duerfen ueber der Linie stehen — die Backen der Kimme
+	# MUESSEN es sogar. Also ein Stueck Abstand zu beiden, sonst meldet der
+	# Test die Kimme als ihr eigenes Hindernis.
+	const CLEARANCE := 0.025
+
+	var highest := _highest_in_corridor(model, Transform3D.IDENTITY,
+			front.position.z + CLEARANCE, rear.position.z - CLEARANCE, CORRIDOR)
+
+	if highest.y == -INF:
+		# Zwischen den Visieren liegt gar nichts — bei einer im Code gebauten
+		# Waffe aus wenigen Quadern durchaus moeglich.
+		return
+
+	_check(highest.y <= model.sight_height + TOLERANCE,
+		"%s: freie Sicht zwischen Kimme und Korn (hoechstes Teil %.4f bei z %.3f, Linie %.4f)"
+			% [label, highest.y, highest.z, model.sight_height])
+
+
+## Hoechster Modellpunkt im mittleren Streifen zwischen zwei Laengsstellen.
+##
+## Gibt y = -INF zurueck, wenn dort nichts liegt. Bewusst als Rueckgabewert und
+## nicht ueber einen Zaehler von aussen: Ein Lambda in GDScript fasst die
+## Variablen der Umgebung als Kopie, nicht als Verweis — was es hochzaehlt,
+## kommt draussen nie an.
+func _highest_in_corridor(node: Node, transform: Transform3D,
+		from_z: float, to_z: float, corridor: float) -> Vector3:
+	var best := Vector3(0.0, -INF, 0.0)
+
+	if node is MeshInstance3D:
+		var mesh := (node as MeshInstance3D).mesh
+		if mesh != null:
+			for surface in mesh.get_surface_count():
+				var arrays := mesh.surface_get_arrays(surface)
+				var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+				for v in verts:
+					var point := transform * v
+					if point.z <= from_z or point.z >= to_z:
+						continue
+					if absf(point.x) > corridor:
+						continue
+					if point.y > best.y:
+						best = point
+
+	for child in node.get_children():
+		if child is Node3D:
+			var found := _highest_in_corridor(child,
+					transform * (child as Node3D).transform, from_z, to_z, corridor)
+			if found.y > best.y:
+				best = found
+
+	return best
+
 
 ## Der Kern des Ganzen: Nimmt der Spieler eine andere Waffe, muss auch ein
 ## anderes Modell in der Hand liegen. Ohne diesen Test faellt ein fehlendes
