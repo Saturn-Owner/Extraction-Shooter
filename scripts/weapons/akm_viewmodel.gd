@@ -37,15 +37,29 @@ const FIT_LENGTH := 0.56
 
 ## Neigt die Waffe um die Querachse. Zeigt der Lauf nach UNTEN oder OBEN statt
 ## nach vorn, hier drehen. Das Modell kam mit dem Lauf nach unten.
-const FIT_PITCH_DEG := 22.0
+const FIT_PITCH_DEG := 0.0
 
 ## Dreht die Waffe um die Hochachse. Zeigt der Lauf nach HINTEN statt nach
 ## vorn, hier auf 180 stellen.
-const FIT_YAW_DEG := 0.0
+const FIT_YAW_DEG := 180.0
 
 ## Rollt die Waffe um die Laufachse. Steht sie auf dem Kopf oder auf der Seite,
 ## hier 180 oder 90 eintragen.
 const FIT_ROLL_DEG := 0.0
+
+## Verschiebt das Modell im Kameraraum, NACHDEM es gedreht und gesetzt wurde.
+##
+## Rueckt die VISIERUNG auf die Bildmitte — und sonst nichts.
+##
+## `weapon_view` zieht die Waffe beim Zielen auf x = 0 und senkt sie um
+## `sight_height`. Das setzt voraus, dass die Visierung im Modell genau dort
+## sitzt. Tut sie es nicht — weil das Modell sie leicht neben der Mitte hat —,
+## wird der Versatz hier ausgeglichen.
+##
+## NICHT fuer den Bildausschnitt benutzen: Diese Verschiebung wirkt in JEDER
+## Haltung, auch beim Zielen. Wie die Waffe im Hueftanschlag sitzt, gehoert in
+## `hip_position`, die beim Zielen weggeblendet wird.
+const FIT_OFFSET := Vector3(0.008, 0.0, 0.0)
 
 
 func get_model_name() -> String:
@@ -53,17 +67,37 @@ func get_model_name() -> String:
 
 
 func _configure() -> void:
-	# Die AK-Visierung baut hoeher als die der AR-15.
-	sight_height = 0.074
+	# GEMESSEN, nicht geschaetzt: Das Modell reicht im Viewmodel-Raum bis
+	# y = 0.088 hinauf, die Visierung sitzt knapp darunter. Genau um diesen
+	# Wert senkt `weapon_view` die Waffe beim Zielen ab, damit die Kimme in der
+	# Bildmitte landet. Wer hier danebenliegt, zielt an der eigenen Visierung
+	# vorbei.
+	sight_height = 0.082
+
+	# Beim Zielen dicht ans Auge statt nach vorn geschoben (Grundwert 0.16).
+	#
+	# Der Grund ist der Kolben: Je weiter die Waffe beim Zielen vom Auge weg
+	# steht, desto weiter rutscht ihr hinteres Ende von unten ins Bild. Nah am
+	# Auge faellt alles unterhalb der Visierlinie aus dem Bildrand — man sieht
+	# Kimme und Lauf, sonst nichts. Dieses Modell ist laenger als die anderen
+	# und braucht das deutlicher.
+	ads_distance = -0.11
 	muzzle_z = -0.560
 	# Schwerer, stumpfer, kickt spuerbar mehr.
 	recoil_scale = 1.35
 	action_travel = 0.090
 	action_cycle_time = 0.062
 	magazine_drop = 0.40
-	# Liegt etwas tiefer und schwerer in der Hand.
-	hip_position = Vector3(0.118, -0.135, -0.215)
-	hip_rotation_degrees = Vector3(0.0, -3.0, 0.0)
+
+	# Der Bildausschnitt im Hueftanschlag gehoert HIERHER und nicht in die
+	# Modellverschiebung: `weapon_view` blendet die Hueftposition beim Zielen
+	# aus, die Modellverschiebung nicht. Wer die Waffe ueber das Modell
+	# zurechtruecht, verschiebt die Visierung mit und zielt daneben.
+	#
+	# Weiter zur Mitte als die AR-15 (0.115) und nach hinten statt nach vorn
+	# (die Grundwerte schieben um -0.22 nach vorn): Dieses Modell ist laenger
+	# und ragt sonst mit dem Kolben ins Bild.
+	hip_position = Vector3(0.075, -0.125, 0.06)
 
 
 func _build_parts() -> void:
@@ -122,7 +156,7 @@ func _fit_transform() -> Transform3D:
 		* Basis().scaled(Vector3.ONE * scale)
 
 	var half_length := longest * scale * 0.5
-	var place := Vector3(0.0, BORE_Y, muzzle_z + half_length)
+	var place := Vector3(0.0, BORE_Y, muzzle_z + half_length) + FIT_OFFSET
 
 	# Erst um die eigene Mitte zentrieren, dann drehen/skalieren und an die
 	# Einbaustelle schieben.
