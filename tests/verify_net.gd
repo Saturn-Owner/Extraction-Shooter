@@ -22,9 +22,9 @@ const TEST_PORT := 24599
 ## Der Server-Prozess braucht ein paar Sekunden zum Laden.
 const CONNECT_RETRY_MS := 2000
 const MAX_CONNECT_ATTEMPTS := 5
-const OVERALL_TIMEOUT_MS := 40000
+const OVERALL_TIMEOUT_MS := 90000
 
-enum Stage {LOCAL_COMBAT, BOOT, CONNECT, WAIT_ROSTER, WAIT_AVATAR, DONE}
+enum Stage {LOCAL_COMBAT, BOOT, CONNECT, WAIT_ROSTER, WAIT_AVATAR, WAIT_PEER, WATCH_MOVE, DONE}
 
 var _net: Node
 var _arena: Node3D
@@ -42,8 +42,13 @@ var _started_at := 0
 var _stage_started_at := 0
 var _connect_attempts := 0
 var _server_pid := -1
+var _mover_pid := -1
 var _got_success := false
 var _got_failure := false
+## Wo die Figur des Läufer-Clients zuerst gesehen wurde, und wie weit sie
+## sich seitdem maximal davon entfernt hat.
+var _peer_first_seen := Vector3.INF
+var _peer_max_shift := 0.0
 
 
 func _initialize() -> void:
@@ -206,10 +211,53 @@ func _process(_delta: float) -> bool:
 			if _net.avatars.has(_net.local_peer_id()) \
 					and _arena.get_node_or_null("Player") != null:
 				_run_avatar_checks()
+				_launch_mover()
+				_next_stage(Stage.WAIT_PEER)
+		Stage.WAIT_PEER:
+			# Der zweite Client verbindet sich gerade — warten, bis sein
+			# Avatar hier auftaucht.
+			var other := _other_avatar()
+			if other != null:
+				_peer_first_seen = other.sync_position
+				_next_stage(Stage.WATCH_MOVE)
+			elif Time.get_ticks_msec() - _stage_started_at > 20000:
+				_check(false, "Läufer-Client ist nie aufgetaucht")
+				return _finish()
+		Stage.WATCH_MOVE:
+			# DER TEST, DER GEFEHLT HAT: Beim ersten echten Spieltest standen
+			# die Mitspieler wie angewurzelt — die Avatare spawnten (das prüfte
+			# die Suite), aber die laufende Pose kam nie an (das prüfte
+			# niemand). Hier sieht die Suite dem anderen Client beim Laufen zu.
+			var other := _other_avatar()
+			if other != null and _peer_first_seen != Vector3.INF:
+				_peer_max_shift = maxf(_peer_max_shift,
+					_peer_first_seen.distance_to(other.sync_position))
+			if _peer_max_shift > 1.0:
+				_check(true, "Mitspieler bewegt sich übers Netz (%.1f m gesehen)" % _peer_max_shift)
+				_run_shutdown_checks()
+				return _finish()
+			if Time.get_ticks_msec() - _stage_started_at > 15000:
+				_check(false, "Mitspieler bleibt stehen — Pose kommt nicht über die Leitung")
+				_run_shutdown_checks()
 				return _finish()
 		Stage.DONE:
 			return true
 	return false
+
+
+func _other_avatar() -> Node3D:
+	for peer_id in _net.avatars:
+		if peer_id != _net.local_peer_id():
+			return _net.avatars[peer_id]
+	return null
+
+
+func _launch_mover() -> void:
+	var project_dir := ProjectSettings.globalize_path("res://")
+	_mover_pid = OS.create_process(OS.get_executable_path(),
+		["--headless", "--path", project_dir, "--script", "res://tests/net_mover.gd",
+			"--", "--port", str(TEST_PORT)])
+	_check(_mover_pid > 0, "Läufer-Client gestartet (PID %d)" % _mover_pid)
 
 
 func _next_stage(stage: Stage) -> void:
@@ -288,6 +336,8 @@ func _run_avatar_checks() -> void:
 	_check(benches == 4, "Vier Werkbänke stehen an den Spawns (%d)" % benches)
 	_check(_arena.get_node("Spawns").get_child_count() == 4, "Vier Spawn-Ecken")
 
+
+func _run_shutdown_checks() -> void:
 	_net.shutdown()
 	_check(not _net.is_multiplayer(), "Trennen setzt den Modus zurück")
 	_check(_net.roster.is_empty(), "Trennen leert die Roster-Abschrift")
@@ -296,6 +346,8 @@ func _run_avatar_checks() -> void:
 func _finish() -> bool:
 	if _server_pid > 0:
 		OS.kill(_server_pid)
+	if _mover_pid > 0:
+		OS.kill(_mover_pid)
 	_stage = Stage.DONE
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)

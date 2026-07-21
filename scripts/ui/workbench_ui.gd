@@ -66,6 +66,24 @@ func _ready() -> void:
 	visible = false
 
 
+## Tab schließt die Bank — abgefangen VOR der Oberfläche.
+##
+## Die Station horcht in _unhandled_input, und das ist zu spät: Sobald ein
+## Knopf per Klick den Fokus hat, frisst die Fokus-Navigation der Controls
+## jedes Tab (springt zum nächsten Knopf), und _unhandled_input sieht es
+## nie. Man kam aus der Bank nicht mehr heraus. _input läuft vor der
+## GUI-Verarbeitung und schnappt sich die Taste zuerst.
+func _input(event: InputEvent) -> void:
+	if not visible or station == null:
+		return
+	if not (event is InputEventKey) or not event.is_pressed() or event.is_echo():
+		return
+	var key := event as InputEventKey
+	if key.physical_keycode == KEY_TAB or key.physical_keycode == KEY_ESCAPE:
+		station.close()
+		get_viewport().set_input_as_handled()
+
+
 func _build_layout() -> void:
 	var background := ColorRect.new()
 	background.name = "Hintergrund"
