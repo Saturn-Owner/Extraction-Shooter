@@ -1,4 +1,4 @@
-## Der Launcher: Steam-Anmeldung, Auto-Update, Spielen.
+## Der Launcher: Steam-Anmeldung, Auto-Update, News, Spielen.
 ##
 ## Warum es ihn gibt:
 ##   1. Tester bekommen EINMAL diese eine Datei. Ab dann holt der Launcher
@@ -14,9 +14,12 @@
 ##   der Launcher selbst. Die Antwort-Parameter gehen an UNSEREN Server, der
 ##   sie bei Steam GEGENPRÜFT (sonst könnte jeder eine fremde ID behaupten)
 ##   und dafür ein Sitzungs-Token ausgibt. Das Token nimmt das Spiel mit.
+##
+## Das AUSSEHEN wohnt komplett in launcher_theme.gd und background.gdshader —
+## diese Datei kennt keine Farben, nur Theme-Typen.
 extends Control
 
-## Wo Update und Anmeldung herkommen.
+## Wo Update, News und Anmeldung herkommen.
 const SERVER := "193.23.160.41"
 const AUTH_PORT := 24568
 const DOWNLOAD_PORT := 24569
@@ -42,6 +45,7 @@ var _callback_server: TCPServer
 var _http_version: HTTPRequest
 var _http_download: HTTPRequest
 var _http_auth: HTTPRequest
+var _http_news: HTTPRequest
 
 var _status: Label
 var _login_status: Label
@@ -50,121 +54,245 @@ var _name_line: LineEdit
 var _play_button: Button
 var _progress: ProgressBar
 var _version_label: Label
+var _news_box: VBoxContainer
+var _pulse: Tween
 
 
 func _ready() -> void:
+	theme = LauncherTheme.build()
 	_build_layout()
 	_load_session()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(GAME_DIR))
 	_local_version = _read_local_version()
 	_check_version()
+	_load_news()
 
 
-# ------------------------------------------------------------------ Anzeige
+# ------------------------------------------------------------------ Aufbau
 
 func _build_layout() -> void:
+	# Der lebendige Hintergrund — alles Weitere liegt darüber.
 	var background := ColorRect.new()
-	background.color = Color(0.07, 0.08, 0.10)
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var material := ShaderMaterial.new()
+	material.shader = load("res://background.gdshader")
+	background.material = material
 	add_child(background)
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 28)
+		margin.add_theme_constant_override(side, 20)
 	add_child(margin)
 
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
+	column.add_theme_constant_override("separation", LauncherTheme.GAP)
 	margin.add_child(column)
+
+	column.add_child(_build_header())
+	column.add_child(_build_main())
+	column.add_child(_build_footer())
+
+
+func _build_header() -> Control:
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 14)
 
 	var title := Label.new()
 	title.text = "EXTRACTION SHOOTER"
-	title.add_theme_font_size_override("font_size", 32)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(title)
+	title.theme_type_variation = &"TitleLabel"
+	header.add_child(title)
 
-	var subtitle := Label.new()
-	subtitle.text = "Launcher — Multiplayer-Beta"
-	subtitle.add_theme_color_override("font_color", Color(0.6, 0.62, 0.65))
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(subtitle)
+	var beta := Label.new()
+	beta.text = "MULTIPLAYER-BETA"
+	beta.theme_type_variation = &"PanelTitle"
+	beta.size_flags_vertical = Control.SIZE_SHRINK_END
+	header.add_child(beta)
 
-	column.add_child(_spacer(8))
+	var stretch := Control.new()
+	stretch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(stretch)
 
-	# --- Anmeldung ---
-	var login_heading := Label.new()
-	login_heading.text = "Anmeldung"
-	login_heading.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-	column.add_child(login_heading)
+	_version_label = Label.new()
+	_version_label.theme_type_variation = &"MonoLabel"
+	_version_label.size_flags_vertical = Control.SIZE_SHRINK_END
+	header.add_child(_version_label)
+	return header
+
+
+func _build_main() -> Control:
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", LauncherTheme.GAP)
+	columns.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	# --- Linke Spalte: Anmeldung und Spielstand ---
+	var left := VBoxContainer.new()
+	left.custom_minimum_size = Vector2(340, 0)
+	left.add_theme_constant_override("separation", LauncherTheme.GAP)
+	columns.add_child(left)
+
+	var login := _panel("ANMELDUNG", LauncherTheme.OLIVE)
+	left.add_child(login.panel)
 
 	_login_button = Button.new()
 	_login_button.text = "Mit Steam anmelden"
 	_login_button.pressed.connect(_start_steam_login)
-	column.add_child(_login_button)
+	login.content.add_child(_login_button)
 
 	_login_status = Label.new()
 	_login_status.text = "Nicht angemeldet — Spielen geht auch als Gast"
-	_login_status.add_theme_color_override("font_color", Color(0.6, 0.62, 0.65))
-	column.add_child(_login_status)
+	_login_status.theme_type_variation = &"DimLabel"
+	_login_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	login.content.add_child(_login_status)
+
+	var name_heading := Label.new()
+	name_heading.text = "Spielername"
+	name_heading.theme_type_variation = &"DimLabel"
+	login.content.add_child(name_heading)
 
 	_name_line = LineEdit.new()
-	_name_line.placeholder_text = "Spielername"
-	column.add_child(_name_line)
+	_name_line.placeholder_text = "Wie sollen dich die anderen sehen?"
+	login.content.add_child(_name_line)
 
-	column.add_child(_spacer(8))
+	var game := _panel("SPIELSTAND", LauncherTheme.ORANGE)
+	left.add_child(game.panel)
 
-	# --- Spielstand / Update ---
-	var game_heading := Label.new()
-	game_heading.text = "Spiel"
-	game_heading.add_theme_color_override("font_color", Color(0.65, 0.72, 0.8))
-	column.add_child(game_heading)
+	_version_label_body(game.content)
 
-	_version_label = Label.new()
-	_version_label.add_theme_color_override("font_color", Color(0.6, 0.62, 0.65))
-	column.add_child(_version_label)
+	var stretch := Control.new()
+	stretch.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left.add_child(stretch)
+
+	# --- Rechte Spalte: Nachrichten ---
+	var news := _panel("NACHRICHTEN VOM FELD", LauncherTheme.OLIVE)
+	news.panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	columns.add_child(news.panel)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	news.content.add_child(scroll)
+
+	_news_box = VBoxContainer.new()
+	_news_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_news_box.add_theme_constant_override("separation", 14)
+	scroll.add_child(_news_box)
+
+	var loading := Label.new()
+	loading.text = "Lade Nachrichten ..."
+	loading.theme_type_variation = &"DimLabel"
+	_news_box.add_child(loading)
+	return columns
+
+
+## Die Zeilen im Spielstand-Panel.
+func _version_label_body(parent: VBoxContainer) -> void:
+	var installed := Label.new()
+	installed.name = "Stand"
+	installed.theme_type_variation = &"MonoLabel"
+	installed.text = "Prüfe ..."
+	parent.add_child(installed)
+
+
+func _build_footer() -> Control:
+	var footer := _panel("", LauncherTheme.ORANGE)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", LauncherTheme.PADDING)
+	footer.content.add_child(row)
+
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	left.add_theme_constant_override("separation", 6)
+	row.add_child(left)
 
 	_progress = ProgressBar.new()
 	_progress.min_value = 0.0
 	_progress.max_value = 1.0
+	_progress.custom_minimum_size = Vector2(0, 14)
+	_progress.show_percentage = false
 	_progress.visible = false
-	column.add_child(_progress)
+	left.add_child(_progress)
 
 	_status = Label.new()
 	_status.text = "Prüfe auf Updates ..."
-	column.add_child(_status)
-
-	column.add_child(_spacer(8))
+	left.add_child(_status)
 
 	_play_button = Button.new()
 	_play_button.text = "SPIELEN"
-	_play_button.custom_minimum_size = Vector2(0, 56)
-	_play_button.add_theme_font_size_override("font_size", 24)
+	_play_button.theme_type_variation = &"PlayButton"
+	_play_button.custom_minimum_size = Vector2(240, 64)
 	_play_button.disabled = true
 	_play_button.pressed.connect(_play)
-	column.add_child(_play_button)
-
-	var hint := Label.new()
-	hint.text = "Der Launcher hält das Spiel automatisch aktuell."
-	hint.add_theme_color_override("font_color", Color(0.45, 0.47, 0.5))
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	column.add_child(hint)
+	row.add_child(_play_button)
+	return footer.panel
 
 
-func _spacer(height: int) -> Control:
-	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, height)
-	return spacer
+## Ein Panel im Militärakten-Look: dünne Kante, farbiger Streifen links,
+## Überschrift oben. Gibt Panel und Inhalts-Behälter zurück.
+func _panel(heading: String, stripe_color: Color) -> Dictionary:
+	var panel := PanelContainer.new()
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", LauncherTheme.PADDING)
+	panel.add_child(row)
+
+	var stripe := ColorRect.new()
+	stripe.color = stripe_color
+	stripe.custom_minimum_size = Vector2(LauncherTheme.STRIPE_WIDTH, 0)
+	row.add_child(stripe)
+
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 8)
+	row.add_child(content)
+
+	if heading != "":
+		var label := Label.new()
+		label.text = heading
+		label.theme_type_variation = &"PanelTitle"
+		content.add_child(label)
+
+	return {panel = panel, content = content}
 
 
 func _set_status(text: String) -> void:
+	_status.remove_theme_color_override("font_color")
 	_status.text = text
+
+
+func _set_ready() -> void:
+	_state = State.READY
+	_play_button.disabled = false
+	_set_status("Bereit. Der Server wartet.")
+	# Ein ruhiges Pulsieren sagt: Hier geht es weiter.
+	if _pulse == null or not _pulse.is_valid():
+		_pulse = create_tween().set_loops()
+		_pulse.tween_property(_play_button, "modulate",
+			Color(1.12, 1.09, 1.03), 0.9).set_trans(Tween.TRANS_SINE)
+		_pulse.tween_property(_play_button, "modulate",
+			Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
 
 
 func _refresh_version_label() -> void:
 	var local := _local_version if _local_version != "" else "nicht installiert"
 	var remote := _remote_version if _remote_version != "" else "?"
-	_version_label.text = "Installiert: %s   ·   Aktuell: %s" % [local, remote]
+	_version_label.text = remote
+	# Über den Baum gesucht statt gemerkt: Das Label wohnt im Spielstand-Panel.
+	for label in _all_labels(self):
+		if label.name == "Stand":
+			label.text = "installiert  %s\naktuell      %s" % [local, remote]
+
+
+func _all_labels(node: Node) -> Array:
+	var found: Array = []
+	for child in node.get_children():
+		if child is Label:
+			found.append(child)
+		found.append_array(_all_labels(child))
+	return found
 
 
 # ------------------------------------------------------------ Sitzung/Namen
@@ -209,8 +337,7 @@ func _on_version_response(result: int, code: int, _headers: PackedStringArray,
 		# Kein Server heißt nicht kein Spiel: Was installiert ist, bleibt
 		# spielbar — nur eben ohne Update-Garantie.
 		if FileAccess.file_exists(GAME_EXE):
-			_state = State.READY
-			_play_button.disabled = false
+			_set_ready()
 			_set_status("Update-Server nicht erreichbar — starte installierte Version")
 		else:
 			_fail("Update-Server nicht erreichbar und kein Spiel installiert")
@@ -225,9 +352,7 @@ func _on_version_response(result: int, code: int, _headers: PackedStringArray,
 	_refresh_version_label()
 
 	if _remote_version == _local_version and FileAccess.file_exists(GAME_EXE):
-		_state = State.READY
-		_play_button.disabled = false
-		_set_status("Spiel ist aktuell.")
+		_set_ready()
 	else:
 		_state = State.NEEDS_UPDATE
 		_start_download()
@@ -286,9 +411,7 @@ func _unpack() -> void:
 	_write_local_version(_remote_version)
 	_local_version = _remote_version
 	_refresh_version_label()
-	_state = State.READY
-	_play_button.disabled = false
-	_set_status("Spiel ist aktuell.")
+	_set_ready()
 
 
 func _read_local_version() -> String:
@@ -305,7 +428,8 @@ func _write_local_version(version: String) -> void:
 func _fail(message: String) -> void:
 	_state = State.ERROR
 	_progress.visible = false
-	_set_status("FEHLER: " + message)
+	_status.text = "FEHLER: " + message
+	_status.add_theme_color_override("font_color", LauncherTheme.RED)
 
 
 func _process(_delta: float) -> void:
@@ -314,6 +438,46 @@ func _process(_delta: float) -> void:
 		if total > 0:
 			_progress.value = float(_http_download.get_downloaded_bytes()) / float(total)
 	_poll_steam_callback()
+
+
+# --------------------------------------------------------------------- News
+
+func _load_news() -> void:
+	_http_news = HTTPRequest.new()
+	add_child(_http_news)
+	_http_news.request_completed.connect(_on_news_response)
+	_http_news.request("http://%s:%d/news.json" % [SERVER, DOWNLOAD_PORT])
+
+
+func _on_news_response(result: int, code: int, _headers: PackedStringArray,
+		body: PackedByteArray) -> void:
+	for child in _news_box.get_children():
+		child.queue_free()
+
+	var entries: Variant = null
+	if result == HTTPRequest.RESULT_SUCCESS and code == 200:
+		entries = JSON.parse_string(body.get_string_from_utf8())
+	if not (entries is Array) or (entries as Array).is_empty():
+		var empty := Label.new()
+		empty.text = "Keine Nachrichten erreichbar."
+		empty.theme_type_variation = &"DimLabel"
+		_news_box.add_child(empty)
+		return
+
+	for entry in entries:
+		if not (entry is Dictionary):
+			continue
+		var title := Label.new()
+		title.text = "%s  —  %s" % [entry.get("date", ""), entry.get("title", "")]
+		title.theme_type_variation = &"NewsTitle"
+		title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_news_box.add_child(title)
+
+		var text := Label.new()
+		text.text = entry.get("text", "")
+		text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_news_box.add_child(text)
 
 
 # ---------------------------------------------------------- Steam-Anmeldung
@@ -417,6 +581,6 @@ func _play() -> void:
 	if not _token.is_empty():
 		args.append_array(["--token", _token])
 	if OS.create_process(exe, args) > 0:
-		_set_status("Spiel gestartet — viel Erfolg!")
+		_set_status("Spiel gestartet — viel Erfolg da draußen.")
 	else:
 		_fail("Spiel liess sich nicht starten")
