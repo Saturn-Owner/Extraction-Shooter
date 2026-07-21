@@ -53,8 +53,24 @@ func _ready() -> void:
 	position = sync_position
 	rotation.y = body_yaw
 	if is_own():
+		# WEM gefunkt wird, entscheidet die Freigabe-Liste (allow_peer), nicht
+		# der Automatismus: Der Synchronizer würde sonst sofort an jeden neuen
+		# Peer senden — auch an einen, dessen Arena diesen Avatar noch gar
+		# nicht gebaut hat. Übers Internet kam genau so das erste Paket zu
+		# früh an, der Pfad-Handschlag scheiterte einmal, und der Empfänger
+		# warf danach ALLE Bewegungs-Updates stumm weg: Mitspieler standen
+		# wie eingefroren. Nur der Server bekommt sofort Freigabe — seine
+		# Kopie steht garantiert, er hat sie ja selbst gespawnt.
+		$Synchronizer.set_visibility_for(1, true)
 		return
 	_build_body()
+
+
+## Freigabe: Dieser Peer hat unseren Avatar gebaut und darf ab jetzt die
+## laufende Pose empfangen. Wird nur auf dem Besitzer-Rechner aufgerufen —
+## Sichtbarkeit entscheidet immer die Autorität.
+func allow_peer(peer_id: int) -> void:
+	$Synchronizer.set_visibility_for(peer_id, true)
 
 
 ## Gehört dieser Avatar dem Spieler an diesem Rechner?

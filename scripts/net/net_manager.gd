@@ -50,7 +50,7 @@ const MAX_ORIGIN_DRIFT := 3.5
 ## RPCs, Synchronizer-Feldern oder Spielregeln von Hand hochgezählt.
 ## Ein Client mit alter Version bekommt eine klare Absage statt eines
 ## Spiels voller Geistereffekte.
-const PROTOCOL_VERSION := 1
+const PROTOCOL_VERSION := 2
 
 enum Mode {OFFLINE, SERVER, CLIENT}
 
@@ -229,6 +229,30 @@ func _spawn_avatar_here(peer_id: int, spawn_position: Vector3, display_name: Str
 
 	if peer_id == multiplayer.get_unique_id():
 		own_avatar_spawned.emit(spawn_position)
+	elif is_client():
+		# Handschlag gegen den Einfrier-Fehler: Erst wenn WIR den Avatar
+		# gebaut haben, darf sein Besitzer anfangen, uns seine Pose zu
+		# funken. Der Server reicht die Meldung an ihn weiter.
+		_avatar_ready_for.rpc_id(1, peer_id)
+
+
+## Ein Client meldet: Ich habe den Avatar von owner_peer gebaut.
+## Der Server sagt dem Besitzer, dass er diesen Zuschauer freigeben darf.
+@rpc("any_peer", "reliable")
+func _avatar_ready_for(owner_peer: int) -> void:
+	if not is_server():
+		return
+	var viewer := multiplayer.get_remote_sender_id()
+	if roster.has(owner_peer):
+		_allow_viewer.rpc_id(owner_peer, viewer)
+
+
+## Der eigene Avatar darf ab jetzt an diesen Peer funken.
+@rpc("authority", "reliable")
+func _allow_viewer(viewer_peer: int) -> void:
+	var avatar: RemoteAvatar = avatars.get(local_peer_id())
+	if avatar != null:
+		avatar.allow_peer(viewer_peer)
 
 
 @rpc("authority", "reliable")
