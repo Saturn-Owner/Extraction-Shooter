@@ -8,6 +8,55 @@ Begründungen im Einzelnen stehen weiterhin in den Commits.
 
 ---
 
+## 21.07.2026 — Die AKM als echtes Modell
+
+Branch `feature/akm-modell`.
+
+Lucas' AKM aus Blender ersetzt die bisherige Quaderwaffe. Aus 74 MB `.blend`
+sind 5,9 MB `.glb` geworden — texturiert, in einem Stück.
+
+### Warum das Zielen so lange gedauert hat
+
+Drei Fehler, die einander verdeckt haben. Alle drei sind jetzt **gemessen**
+statt geschätzt:
+
+- **Die Waffe stand 5 mm neben der Bildmitte.** Beim Einpassen wurde die
+  Hülle des Modells zentriert, und die ist unsymmetrisch — Ladehebel und
+  Auswurffenster sitzen rechts.
+- **Die Zielhöhe war geraten.** Sie ist enger eingeklemmt, als man denkt: Das
+  Korn endet bei y = 0.0880, ein Aufbau am Gehäuse reicht bis 0.0858 und steht
+  dem Auge dreißig Zentimeter näher. Dazwischen bleiben drei Millimeter.
+- **Die Waffe stand zu dicht am Auge.** Bei `ads_distance = 0.015` saß das
+  Schaftende anderthalb Zentimeter vor der Kamera und füllte den halben
+  Bildschirm.
+
+Beim Zielen liegt die Waffe jetzt bei `-0.09`, also **hinter** der Kamera. Das
+ist Absicht: Die Schulterstütze reicht im Modell bis ganz nach hinten und
+verschwindet erst, wenn sie hinter die Nahgrenze der Kamera rutscht.
+
+### Was daraus an Werkzeug entstanden ist
+
+Der eigentliche Fehler war nicht eine falsche Zahl, sondern dass niemand sie
+prüfen konnte, ohne das Spiel zu starten und hinzusehen.
+
+- `tools/render_sight_picture.gd` rendert die Zielansicht — mit dem echten
+  ADS-Bildwinkel, der echten Nahgrenze und einer roten Kugel auf der
+  Schussachse. Sitzt sie im Korn, stimmt die Visierlinie.
+- `tools/measure_sights.gd` vermisst Korn, Kimme und Sichtlinie am Modell und
+  sagt, welches Bauteil beim Zielen die Oberkante bildet.
+- `verify_weapon_handling` prüft für **jede** Waffe, ob zwischen Kimme und
+  Korn freie Sicht besteht. Genau diese Prüfung hätte den Fehler sofort
+  gefunden.
+
+### Was ein Mensch noch machen muss
+
+Das Modell ist ein Stück. Verschluss, Ladehebel, Abzug und Magazin bewegen
+sich nicht einzeln — die Ankerpunkte dafür stehen schon an der richtigen
+Stelle, es fehlt nur die Zerlegung in Blender. Und ein Zielbild wie bei einer
+echten AK braucht dort ein höheres Korn; im Code ist das dann eine Zahl.
+
+---
+
 ## 20.07.2026 — Zweite Karte: Frachthafen
 
 Branch `feature/karte-frachthafen`.

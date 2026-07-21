@@ -113,9 +113,22 @@ func _configure() -> void:
 	# NICHT besser: Was dicht vor dem Auge steht, wird riesig, und die Waffe
 	# ist von der Muendung bis zum Schaftende ueber einen halben Meter lang.
 	#
-	# Bei 0.06 sitzt das hintere Ende der Visierlinie gut zwei Handbreit vor
-	# dem Auge — dort, wo es beim Anschlag auch waere.
-	ads_distance = 0.06
+	# NEGATIV — die Waffe wird beim Zielen hinter die Kamera gezogen.
+	#
+	# Das klingt falsch und ist genau der Punkt: Die Schulterstuetze reicht im
+	# Modell von z = -0.16 bis z = 0 und stand sonst immer im Bild. Sie
+	# verschwindet erst, wenn sie hinter die Nahgrenze der Kamera rutscht
+	# (0.05, siehe scenes/player/player.tscn) — dort wird sie weggeschnitten.
+	# Bei -0.09 ist von ihr nichts mehr zu sehen; uebrig bleiben Gehaeuse,
+	# Gasblock, Handschutz und Korn.
+	#
+	# Nicht weiter zurueck: Ab etwa -0.12 schneidet die Nahgrenze mitten durch
+	# das Gehaeuse, und man schaut von innen dagegen — als heller Fleck neben
+	# dem Ladehebel deutlich zu sehen.
+	#
+	# Diese Zahl gilt NUR fuers Zielen. Wie die Waffe sonst in der Hand liegt,
+	# steht in hip_position und bleibt davon unberuehrt.
+	ads_distance = -0.09
 	muzzle_z = -0.560
 	# Schwerer, stumpfer, kickt spuerbar mehr.
 	recoil_scale = 1.35

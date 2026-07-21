@@ -151,7 +151,11 @@ func _build_scene(data: WeaponData) -> void:
 
 	_camera = Camera3D.new()
 	_camera.fov = data.ads_fov
-	_camera.near = 0.02
+	# Dieselbe Nahgrenze wie die Spielerkamera in scenes/player/player.tscn.
+	# Wer hier kleiner rechnet, sieht das Modell vollstaendig und uebersieht,
+	# dass das Spiel alles unter fuenf Zentimetern wegschneidet — bei einer
+	# Waffe, die beim Zielen dicht ans Auge kommt, ist genau das der Punkt.
+	_camera.near = 0.05
 	_camera.position = Vector3.ZERO
 	_camera.rotation = Vector3.ZERO
 	_scene.add_child(_camera)
