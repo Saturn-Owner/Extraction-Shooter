@@ -44,7 +44,9 @@ New-Item -ItemType Directory -Force $stage | Out-Null
 $zip = Join-Path $stage "extraction_beta.zip"
 if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path $exe -DestinationPath $zip
-@{ version = $version; file = "extraction_beta.zip" } | ConvertTo-Json |
+# Die echte Downloadgroesse wandert mit ins Manifest - der Launcher zeigt sie an.
+$sizeMb = [math]::Round((Get-Item $zip).Length / 1MB)
+@{ version = $version; file = "extraction_beta.zip"; size_mb = $sizeMb } | ConvertTo-Json |
     Out-File -Encoding ascii (Join-Path $stage "version.json")
 
 Write-Host "Lade auf den VPS..." -ForegroundColor Cyan

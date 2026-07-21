@@ -1,0 +1,33 @@
+[
+	{
+		"version": "Beta 1",
+		"date": "21.07.2026",
+		"groups": [
+			{
+				"heading": "MULTIPLAYER",
+				"items": [
+					"Arena-Beta: Paintballfeld 50x70 m mit begehbarem Gebaeude, vier Spawn-Ecken und Deckungen.",
+					"Der Server entscheidet jeden Treffer - echte Ballistik mit Flugzeit, Koerperteilen und Durchschlag.",
+					"Tod -> 5 Sekunden -> Respawn an der eigenen Ecke. Killzaehler oben links.",
+					"Veraltete Spielversionen werden mit klarer Meldung abgewiesen."
+				]
+			},
+			{
+				"heading": "WERKBANK",
+				"items": [
+					"Waffenschrank an jeder Spawn-Ecke: AR-15, M870 und G17 zum Mitnehmen.",
+					"Munition auffuellen kostenlos an der Bank.",
+					"Tab schliesst die Werkbank jetzt zuverlaessig."
+				]
+			},
+			{
+				"heading": "LAUNCHER",
+				"items": [
+					"Anmeldung ueber Steam - ohne dass wir Passwoerter speichern.",
+					"Auto-Update: der Launcher haelt das Spiel von selbst aktuell.",
+					"Neues Design mit News, Patchnotes und Roadmap."
+				]
+			}
+		]
+	}
+]

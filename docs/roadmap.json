@@ -1,0 +1,30 @@
+[
+	{
+		"quarter": "JETZT",
+		"status": "LIVE",
+		"kind": "live",
+		"items": [
+			"Multiplayer-Beta: Arena, echtes Schadenssystem, Respawn-Loop",
+			"Launcher mit Steam-Anmeldung und Auto-Update"
+		]
+	},
+	{
+		"quarter": "IN ARBEIT",
+		"status": "IN ARBEIT",
+		"kind": "wip",
+		"items": [
+			"Mitspieler-Bewegung uebers Internet stabilisieren",
+			"Launcher-Feinschliff nach dem ersten Testerlauf"
+		]
+	},
+	{
+		"quarter": "GEPLANT",
+		"status": "GEPLANT",
+		"kind": "plan",
+		"items": [
+			"Serverseitige Bewegungspruefung (Schutz vor Schummeln)",
+			"Persistentes Lager, gebunden ans Steam-Konto",
+			"Die grosse Raid-Karte im Multiplayer"
+		]
+	}
+]

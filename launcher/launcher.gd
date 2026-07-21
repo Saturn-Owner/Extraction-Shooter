@@ -28,6 +28,10 @@ const DOWNLOAD_PORT := 24569
 ## Auf diesem örtlichen Port fängt der Launcher die Steam-Rückkehr ab.
 const CALLBACK_PORT := 27444
 
+## Version des Launchers selbst (nicht des Spiels) — bei Launcher-Änderungen
+## von Hand hochzählen, damit Tester sagen können, welchen sie haben.
+const LAUNCHER_VERSION := "1.1"
+
 const SESSION_FILE := "user://session.json"
 const SETTINGS_FILE := "user://settings.json"
 const GAME_DIR := "user://game"
@@ -57,7 +61,17 @@ var _name_line: LineEdit
 var _play_button: Button
 var _progress: ProgressBar
 var _version_label: Label
+var _installed_label: Label
 var _news_box: VBoxContainer
+var _hero_kicker: Label
+var _hero_title: Label
+var _hero_text: Label
+var _patch_box: VBoxContainer
+var _road_box: VBoxContainer
+var _size_label: Label
+var _last_played_label: Label
+var _http_patch: HTTPRequest
+var _http_road: HTTPRequest
 
 var _views := {}
 var _tab_buttons := {}
@@ -87,6 +101,8 @@ func _ready() -> void:
 	else:
 		_set_status("Automatische Update-Suche aus — „Dateien überprüfen\" für Update")
 	_load_news()
+	_load_patchnotes()
+	_load_roadmap()
 
 
 # ------------------------------------------------------------------ Aufbau
@@ -173,7 +189,7 @@ func _build_titlebar() -> Control:
 	sq.custom_minimum_size = Vector2(16, 16)
 	sq.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	brand.add_child(sq)
-	var brand_label := _mk_label("RED SNOW", 20, LauncherTheme.INK)
+	var brand_label := _mk_label("EXTRACTION SHOOTER", 20, LauncherTheme.INK)
 	brand_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	brand.add_child(brand_label)
 	bar.add_child(pad_brand)
@@ -240,16 +256,30 @@ func _build_tabbar() -> Control:
 	stretch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bar.add_child(stretch)
 
-	var note := Label.new()
-	note.text = "Zuletzt gespielt · vor 2 Tagen"
-	note.theme_type_variation = &"DimLabel"
-	note.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_last_played_label = Label.new()
+	_last_played_label.text = _format_last_played()
+	_last_played_label.theme_type_variation = &"DimLabel"
+	_last_played_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var pad := MarginContainer.new()
 	for s in ["margin_left", "margin_right"]:
 		pad.add_theme_constant_override(s, LauncherTheme.PADDING)
-	pad.add_child(note)
+	pad.add_child(_last_played_label)
 	bar.add_child(pad)
 	return bar
+
+
+## "Zuletzt gespielt" aus dem gespeicherten Zeitstempel — und nur dann,
+## wenn es wirklich ein letztes Mal gab.
+func _format_last_played() -> String:
+	var stamp: float = _settings.get("last_played", 0.0)
+	if stamp <= 0.0:
+		return ""
+	var days := int((Time.get_unix_time_from_system() - stamp) / 86400.0)
+	if days <= 0:
+		return "Zuletzt gespielt · heute"
+	if days == 1:
+		return "Zuletzt gespielt · gestern"
+	return "Zuletzt gespielt · vor %d Tagen" % days
 
 
 ## Ein Tab-Knopf: flach, transparent, Hover füllt grau, aktiv färbt rot.
@@ -338,20 +368,22 @@ func _build_news_view() -> Control:
 	hero_col.add_theme_constant_override("separation", 6)
 	hero.add_child(hero_col)
 
-	var cap := _mk_label("[ KEY ART · 1920×1080 hier ablegen ]", 11, Color(1, 1, 1, 0.5))
-	hero_col.add_child(cap)
+	# Der Hero zeigt die NEUESTE echte Nachricht vom Server — keine
+	# ausgedachte Saison. Bis sie geladen ist, steht hier nur Zurückhaltung.
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	hero_col.add_child(spacer)
-	hero_col.add_child(_mk_label("NEUE SAISON · JETZT LIVE", 13, LauncherTheme.RED))
-	var title := Label.new()
-	title.text = "WHITEOUT"
-	title.theme_type_variation = &"TitleLabel"
-	hero_col.add_child(title)
-	var lede := _mk_label("Ein Schneesturm hat die Karte verschluckt. Sicht unter zwanzig Metern, die Extraktionspunkte wandern, und der letzte Heli hebt zur vollen Stunde ab — ob ihr an Bord seid oder nicht.", 14, Color(1, 1, 1, 0.82))
-	lede.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lede.custom_minimum_size = Vector2(0, 0)
-	hero_col.add_child(lede)
+	_hero_kicker = _mk_label("AUS DER BETA", 13, LauncherTheme.RED)
+	hero_col.add_child(_hero_kicker)
+	_hero_title = Label.new()
+	_hero_title.text = "..."
+	_hero_title.theme_type_variation = &"TitleLabel"
+	_hero_title.add_theme_font_size_override("font_size", 40)
+	_hero_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hero_col.add_child(_hero_title)
+	_hero_text = _mk_label("", 14, Color(1, 1, 1, 0.82))
+	_hero_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hero_col.add_child(_hero_text)
 	view.add_child(hero)
 
 	view.add_child(_hline())
@@ -380,44 +412,65 @@ func _build_news_view() -> Control:
 func _build_patch_view() -> Control:
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	var col := VBoxContainer.new()
-	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.add_theme_constant_override("separation", LauncherTheme.PADDING + 8)
+	_patch_box = VBoxContainer.new()
+	_patch_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_patch_box.add_theme_constant_override("separation", LauncherTheme.PADDING + 8)
 
 	var pad := MarginContainer.new()
 	for s in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
 		pad.add_theme_constant_override(s, LauncherTheme.PADDING + 8)
-	pad.add_child(col)
+	pad.add_child(_patch_box)
 
-	# Kopf: große rote Version + Datum.
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 16)
-	head.add_child(_mk_label("v0.8.4", 48, LauncherTheme.RED))
-	var meta := VBoxContainer.new()
-	meta.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	meta.add_child(_mk_label("19. JULI 2026", 14, LauncherTheme.INK))
-	meta.add_child(_mk_label("AKTUELLE VERSION", 11, LauncherTheme.TEXT_DIM))
-	head.add_child(meta)
-	col.add_child(head)
-
-	col.add_child(_patch_group("BALANCE", [
-		"Ausdauer regeneriert 12 % langsamer bei über 70 % Traglast.",
-		"Nahkampfschaden des „Kithife\" um 8 % gesenkt.",
-		"Streuung der DMR-Klasse im Anschlag um 15 % verringert.",
-	]))
-	col.add_child(_patch_group("NETCODE", [
-		"Tickrate der Extraktionszonen von 30 auf 60 angehoben.",
-		"Rubberbanding beim Heli-Extrakt in Randregionen behoben.",
-		"Server wählt die Region jetzt nach Ping statt nach Standort.",
-	]))
-	col.add_child(_patch_group("FEHLERBEHEBUNGEN", [
-		"Absturz beim Betreten des Kühlhauses behoben.",
-		"Inventar-Sortierung merkt sich die zuletzt gewählte Reihenfolge.",
-		"Falsch angezeigte Versicherungs-Rückgabezeiten korrigiert.",
-	]))
+	var loading := Label.new()
+	loading.text = "Lade Patchnotes ..."
+	loading.theme_type_variation = &"DimLabel"
+	_patch_box.add_child(loading)
 
 	scroll.add_child(pad)
 	return scroll
+
+
+## Patchnotes kommen als patchnotes.json vom Server — dieselbe Pflege wie
+## die News: docs/patchnotes.json editieren, publish_news.ps1, fertig.
+func _load_patchnotes() -> void:
+	_http_patch = HTTPRequest.new()
+	add_child(_http_patch)
+	_http_patch.request_completed.connect(_on_patchnotes_response)
+	_http_patch.request("http://%s:%d/patchnotes.json" % [SERVER, DOWNLOAD_PORT])
+
+
+func _on_patchnotes_response(result: int, code: int, _headers: PackedStringArray,
+		body: PackedByteArray) -> void:
+	for child in _patch_box.get_children():
+		child.queue_free()
+
+	var entries: Variant = null
+	if result == HTTPRequest.RESULT_SUCCESS and code == 200:
+		entries = JSON.parse_string(body.get_string_from_utf8())
+	if not (entries is Array) or (entries as Array).is_empty():
+		var empty := Label.new()
+		empty.text = "Keine Patchnotes erreichbar."
+		empty.theme_type_variation = &"DimLabel"
+		_patch_box.add_child(empty)
+		return
+
+	for i in (entries as Array).size():
+		var entry: Dictionary = (entries as Array)[i]
+		var head := HBoxContainer.new()
+		head.add_theme_constant_override("separation", 16)
+		head.add_child(_mk_label(String(entry.get("version", "?")), 48, LauncherTheme.RED))
+		var meta := VBoxContainer.new()
+		meta.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		meta.add_child(_mk_label(String(entry.get("date", "")), 14, LauncherTheme.INK))
+		meta.add_child(_mk_label("AKTUELLE VERSION" if i == 0 else "ÄLTERE VERSION",
+			11, LauncherTheme.TEXT_DIM))
+		head.add_child(meta)
+		_patch_box.add_child(head)
+
+		for group in entry.get("groups", []):
+			if group is Dictionary:
+				_patch_box.add_child(_patch_group(
+					String(group.get("heading", "")), group.get("items", [])))
 
 
 func _patch_group(heading: String, items: Array) -> Control:
@@ -468,7 +521,7 @@ func _build_road_view() -> Control:
 	pad.add_child(col)
 
 	col.add_child(_mk_label("ROADMAP", 36, LauncherTheme.INK))
-	var sub := _mk_label("Wohin Red Snow im nächsten Jahr steuert. Termine sind Richtwerte, keine Versprechen.", 14, LauncherTheme.TEXT_DIM)
+	var sub := _mk_label("Woran wir wirklich arbeiten. Reihenfolge ist Absicht, Termine gibt es keine.", 14, LauncherTheme.TEXT_DIM)
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(sub)
 
@@ -476,24 +529,49 @@ func _build_road_view() -> Control:
 	spacer.custom_minimum_size = Vector2(0, 14)
 	col.add_child(spacer)
 
-	col.add_child(_road_phase("Q3 2026", "LIVE", "live", [
-		"Saison 2 „Whiteout\" — Schneesturm-Wetter & Sichtsystem",
-		"Neue Extraktion: Kühlhaus (Nordsektor)",
-		"Überarbeiteter Ausdauer- & Traglast-Haushalt",
-	]))
-	col.add_child(_road_phase("Q4 2026", "IN ARBEIT", "wip", [
-		"Fraktions-Ruf — Händler-Freischaltungen & Aufträge",
-		"Neue Waffenklasse: DMR",
-		"Nacht-Raids mit Nachtsicht-Ausrüstung",
-	]))
-	col.add_child(_road_phase("Q1 2027", "GEPLANT", "plan", [
-		"Koop-PvE-Missionen gegen die KI-Fraktion",
-		"Unterschlupf-Ausbau — Werkbank & Lager",
-		"Ranglisten-Saison mit eigenem Belohnungspfad",
-	]))
+	_road_box = VBoxContainer.new()
+	_road_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_road_box.add_theme_constant_override("separation", 0)
+	var loading := Label.new()
+	loading.text = "Lade Roadmap ..."
+	loading.theme_type_variation = &"DimLabel"
+	_road_box.add_child(loading)
+	col.add_child(_road_box)
 
 	scroll.add_child(pad)
 	return scroll
+
+
+## Die Roadmap kommt als roadmap.json vom Server — gepflegt wie die News.
+func _load_roadmap() -> void:
+	_http_road = HTTPRequest.new()
+	add_child(_http_road)
+	_http_road.request_completed.connect(_on_roadmap_response)
+	_http_road.request("http://%s:%d/roadmap.json" % [SERVER, DOWNLOAD_PORT])
+
+
+func _on_roadmap_response(result: int, code: int, _headers: PackedStringArray,
+		body: PackedByteArray) -> void:
+	for child in _road_box.get_children():
+		child.queue_free()
+
+	var entries: Variant = null
+	if result == HTTPRequest.RESULT_SUCCESS and code == 200:
+		entries = JSON.parse_string(body.get_string_from_utf8())
+	if not (entries is Array) or (entries as Array).is_empty():
+		var empty := Label.new()
+		empty.text = "Keine Roadmap erreichbar."
+		empty.theme_type_variation = &"DimLabel"
+		_road_box.add_child(empty)
+		return
+
+	for entry in entries:
+		if entry is Dictionary:
+			_road_box.add_child(_road_phase(
+				String(entry.get("quarter", "")),
+				String(entry.get("status", "")),
+				String(entry.get("kind", "plan")),
+				entry.get("items", [])))
 
 
 func _road_phase(quarter: String, status: String, kind: String, items: Array) -> Control:
@@ -595,10 +673,13 @@ func _build_side() -> Control:
 	var dl_stretch := Control.new()
 	dl_stretch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dl.add_child(dl_stretch)
-	dl.add_child(_mk_label("2,7 GB", 14, LauncherTheme.INK))
+	_size_label = _mk_label("—", 14, LauncherTheme.INK)
+	dl.add_child(_size_label)
 	inst.content.add_child(dl)
 
-	var loc := _mk_label("E:\\Games\\Red Snow", 12, LauncherTheme.TEXT_DIM)
+	# Der ECHTE Installationsort — der Launcher legt das Spiel in sein
+	# Benutzerverzeichnis, und genau das steht hier.
+	var loc := _mk_label(ProjectSettings.globalize_path(GAME_DIR), 12, LauncherTheme.TEXT_DIM)
 	loc.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 	inst.content.add_child(loc)
 
@@ -606,10 +687,6 @@ func _build_side() -> Control:
 	verify.text = "Dateien überprüfen"
 	verify.pressed.connect(_check_version)
 	inst.content.add_child(verify)
-
-	var relocate := Button.new()
-	relocate.text = "Speicherort ändern"
-	inst.content.add_child(relocate)
 	side.add_child(inst.panel)
 
 	side.add_child(_hline())
@@ -651,9 +728,10 @@ func _build_actionbar() -> Control:
 	verbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	verbox.custom_minimum_size = Vector2(150, 0)
 	verbox.add_theme_constant_override("separation", 2)
-	_version_label = _mk_label("v—", 16, LauncherTheme.INK)
+	_version_label = _mk_label("—", 16, LauncherTheme.INK)
 	verbox.add_child(_version_label)
-	verbox.add_child(_mk_label("BUILD 20260719", 11, LauncherTheme.TEXT_DIM))
+	_installed_label = _mk_label("INSTALLIERT: —", 11, LauncherTheme.TEXT_DIM)
+	verbox.add_child(_installed_label)
 	var verpad := MarginContainer.new()
 	for s in ["margin_left", "margin_right"]:
 		verpad.add_theme_constant_override(s, LauncherTheme.PADDING)
@@ -739,18 +817,11 @@ func _build_settings_overlay() -> Control:
 	pad.add_child(rows)
 	col.add_child(pad)
 
+	# Nur Schalter, die wirklich etwas tun — Attrappen gehören nicht in
+	# einen echten Launcher.
 	rows.add_child(_section_head("ALLGEMEIN"))
-	rows.add_child(_setting_row("Sprache",
-		_make_segment("language", ["Deutsch", "English"])))
-	rows.add_child(_thin_line())
-	rows.add_child(_setting_row("Server-Region",
-		_make_segment("region", ["EU-Nord", "EU-West", "NA-Ost"])))
-	rows.add_child(_thin_line())
 	rows.add_child(_setting_row("Beim Start nach Updates suchen",
 		_make_toggle("auto_update")))
-	rows.add_child(_thin_line())
-	rows.add_child(_setting_row("Ins Tray minimieren statt schließen",
-		_make_toggle("minimize_to_tray")))
 
 	rows.add_child(_gap(LauncherTheme.PADDING))
 	rows.add_child(_section_head("SPIEL"))
@@ -766,21 +837,20 @@ func _build_settings_overlay() -> Control:
 		_save_settings())
 	rows.add_child(_setting_row("Startoptionen", args))
 	rows.add_child(_thin_line())
-	var loc := HBoxContainer.new()
-	loc.add_theme_constant_override("separation", 10)
-	var loc_path := _mk_label("E:\\Games\\Red Snow", 12, LauncherTheme.TEXT_DIM)
-	loc_path.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	loc.add_child(loc_path)
-	var loc_btn := Button.new()
-	loc_btn.text = "Ändern"
-	loc.add_child(loc_btn)
-	rows.add_child(_setting_row("Speicherort", loc))
+	var loc_path := _mk_label(ProjectSettings.globalize_path(GAME_DIR), 12, LauncherTheme.TEXT_DIM)
+	loc_path.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	loc_path.custom_minimum_size = Vector2(300, 0)
+	rows.add_child(_setting_row("Speicherort", loc_path))
 	rows.add_child(_thin_line())
 	var repair := Button.new()
-	repair.text = "Spiel reparieren"
+	repair.text = "Spiel neu herunterladen"
 	repair.pressed.connect(func():
 		_settings_overlay.visible = false
-		_check_version())
+		# Reparieren heißt: frisch holen, nicht nur nachsehen.
+		if _remote_version != "":
+			_start_download()
+		else:
+			_check_version())
 	rows.add_child(_setting_row("Dateien prüfen & reparieren", repair))
 
 	rows.add_child(_gap(LauncherTheme.PADDING))
@@ -792,7 +862,7 @@ func _build_settings_overlay() -> Control:
 
 	col.add_child(_hline())
 	var foot := HBoxContainer.new()
-	foot.add_child(_mk_label("Red Snow Launcher · v0.8.4 · build 20260719", 11, LauncherTheme.TEXT_DIM))
+	foot.add_child(_mk_label("Extraction Launcher · " + LAUNCHER_VERSION, 11, LauncherTheme.TEXT_DIM))
 	var foot_stretch := Control.new()
 	foot_stretch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	foot.add_child(foot_stretch)
@@ -887,33 +957,6 @@ func _make_toggle(id: String) -> Button:
 	return button
 
 
-## Segmentierte Auswahl: eine Reihe Toggle-Buttons, genau einer aktiv.
-func _make_segment(id: String, options: Array) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 0)
-	var group := ButtonGroup.new()
-	var current: String = _settings.get(id, options[0])
-	for i in options.size():
-		if i > 0:
-			row.add_child(_vline())
-		var opt: String = options[i]
-		var button := Button.new()
-		button.toggle_mode = true
-		button.button_group = group
-		button.text = opt
-		button.add_theme_font_size_override("font_size", 13)
-		var active: bool = opt == current
-		button.button_pressed = active
-		_paint_active(button, active)
-		button.toggled.connect(func(pressed):
-			_paint_active(button, pressed)
-			if pressed:
-				_settings[id] = opt
-				_save_settings())
-		row.add_child(button)
-	return row
-
-
 func _logout() -> void:
 	_token = ""
 	_steam_id = ""
@@ -925,12 +968,10 @@ func _logout() -> void:
 
 func _load_settings() -> void:
 	_settings = {
-		language = "Deutsch",
-		region = "EU-Nord",
 		auto_update = true,
 		close_on_launch = true,
-		minimize_to_tray = false,
 		launch_args = "",
+		last_played = 0.0,
 	}
 	if not FileAccess.file_exists(SETTINGS_FILE):
 		return
@@ -985,7 +1026,8 @@ func _set_ready() -> void:
 func _refresh_version_label() -> void:
 	var local := _local_version if _local_version != "" else "nicht installiert"
 	var remote := _remote_version if _remote_version != "" else "?"
-	_version_label.text = "v" + remote
+	_version_label.text = remote
+	_installed_label.text = "INSTALLIERT: " + local
 	# Über den Baum gesucht statt gemerkt: Das Label wohnt im Installations-Panel.
 	for label in _all_labels(self):
 		if label.name == "Stand":
@@ -1055,6 +1097,9 @@ func _on_version_response(result: int, code: int, _headers: PackedStringArray,
 		return
 	_remote_version = data.version
 	_remote_file = data.file
+	# Die echte Downloadgröße steht im Manifest — nichts wird geschätzt.
+	if data.has("size_mb") and _size_label != null:
+		_size_label.text = "%d MB" % int(data.size_mb)
 	_refresh_version_label()
 
 	if _remote_version == _local_version and FileAccess.file_exists(GAME_EXE):
@@ -1164,13 +1209,27 @@ func _on_news_response(result: int, code: int, _headers: PackedStringArray,
 	if result == HTTPRequest.RESULT_SUCCESS and code == 200:
 		entries = JSON.parse_string(body.get_string_from_utf8())
 	if not (entries is Array) or (entries as Array).is_empty():
+		_hero_title.text = "EXTRACTION SHOOTER"
+		_hero_text.text = "Multiplayer-Beta — Server gerade nicht erreichbar."
 		var empty := Label.new()
 		empty.text = "Keine Nachrichten erreichbar."
 		empty.theme_type_variation = &"DimLabel"
 		_news_box.add_child(empty)
 		return
 
-	for entry in entries:
+	# Die neueste Nachricht wird zum Hero, der Rest zur Liste darunter.
+	var first: Dictionary = (entries as Array)[0]
+	_hero_kicker.text = String(first.get("date", "AUS DER BETA"))
+	_hero_title.text = String(first.get("title", "")).to_upper()
+	_hero_text.text = first.get("text", "")
+
+	var rest: Array = (entries as Array).slice(1)
+	if rest.is_empty():
+		var quiet := Label.new()
+		quiet.text = "Keine weiteren Meldungen."
+		quiet.theme_type_variation = &"DimLabel"
+		_news_box.add_child(quiet)
+	for entry in rest:
 		if not (entry is Dictionary):
 			continue
 		var title := Label.new()
@@ -1293,6 +1352,10 @@ func _play() -> void:
 			args.append(part)
 	if OS.create_process(exe, args) > 0:
 		_set_status("Spiel gestartet — viel Erfolg da draußen.")
+		_settings["last_played"] = Time.get_unix_time_from_system()
+		_save_settings()
+		if _last_played_label != null:
+			_last_played_label.text = _format_last_played()
 		if _settings.get("close_on_launch", true):
 			get_tree().create_timer(1.0).timeout.connect(func(): get_tree().quit())
 	else:
