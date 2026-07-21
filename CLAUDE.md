@@ -162,6 +162,14 @@ Entwickler kann es nicht mehr öffnen. Stattdessen auf einer Kopie testen.
    git checkout -b feature/kurzer-name
    ```
    Branch-Namen sprechend wählen: `feature/spielerbewegung`, `feature/loot-system`, `fix/extraction-timer`.
+
+   **Claude macht das von selbst:** Sobald eine Aufgabe ein neues Feature ist,
+   legt Claude den Branch an, ohne zu fragen — frisch von `main`, sprechender
+   Name. Der Nutzer muss nicht daran denken. Was NICHT auf einen neuen Branch
+   gehört: kleine Fehlerbehebungen und Nacharbeiten am Feature, an dem gerade
+   gearbeitet wird — die bleiben auf dessen Branch. Faustregel: Neues Feature =
+   neuer Branch; Weiterbauen am laufenden Feature = gleicher Branch. Im
+   Zweifel kurz fragen, ob es ein eigenes Feature sein soll.
 3. **Fertige Features als Pull Request** auf GitHub erstellen (`gh pr create`). Den Code-Review übernimmt Claude — ein Mensch muss nicht gegenlesen. Nach dem Review wird der PR gemerged, erst dann landet das Feature auf `main`.
 4. **Regelmäßig committen und pushen** — lieber viele kleine Commits als ein riesiger am Ende des Tages.
 5. **Erst mergen, wenn das Feature in Godot getestet wurde** und das Spiel startet. Kaputten Code nicht auf `main` schieben.
