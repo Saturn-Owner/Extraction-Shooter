@@ -4,6 +4,7 @@
 [ext_resource type="Script" path="res://scripts/levels/raid_level.gd" id="2_raid_level"]
 [ext_resource type="PackedScene" path="res://scenes/ui/loot_window.tscn" id="9_loot_window"]
 [ext_resource type="PackedScene" path="res://scenes/ui/character_window.tscn" id="11_character_window"]
+[ext_resource type="PackedScene" path="res://scenes/ui/pause_menu.tscn" id="13_pause_menu"]
 [ext_resource type="PackedScene" path="res://scenes/loot/loot_container.tscn" id="3_loot"]
 [ext_resource type="PackedScene" path="res://scenes/raid/extraction_zone.tscn" id="4_extraction"]
 [ext_resource type="Script" path="res://scripts/raid/raid_manager.gd" id="5_raid_manager"]
@@ -203,6 +204,8 @@ text = "..."
 [node name="LootWindow" parent="HUD" instance=ExtResource("9_loot_window")]
 
 [node name="CharacterWindow" parent="HUD" instance=ExtResource("11_character_window")]
+
+[node name="PauseMenu" parent="HUD" instance=ExtResource("13_pause_menu")]
 
 [node name="PromptLabel" type="Label" parent="HUD"]
 anchors_preset = 8

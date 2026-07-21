@@ -1,7 +1,66 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_main_menu"]
 [ext_resource type="PackedScene" path="res://scenes/ui/settings_panel.tscn" id="2_settings_panel"]
+[ext_resource type="PackedScene" path="res://scenes/ui/info_panel.tscn" id="3_info_panel"]
+[ext_resource type="FontFile" path="res://assets/fonts/BlackOpsOne-Regular.ttf" id="4_black_ops_one"]
+[ext_resource type="FontFile" path="res://assets/fonts/Oswald.ttf" id="5_oswald"]
+[ext_resource type="Texture2D" path="res://assets/textures/ui/winter_landscape.png" id="6_landscape"]
+[ext_resource type="PackedScene" path="res://scenes/ui/profile_panel.tscn" id="7_profile_panel"]
+
+[sub_resource type="StyleBoxFlat" id="Style_bracket_tl"]
+bg_color = Color(0, 0, 0, 0)
+border_width_top = 2
+border_width_left = 2
+border_color = Color(0.180, 0.435, 0.420, 1)
+
+[sub_resource type="StyleBoxFlat" id="Style_bracket_tr"]
+bg_color = Color(0, 0, 0, 0)
+border_width_top = 2
+border_width_right = 2
+border_color = Color(0.180, 0.435, 0.420, 1)
+
+[sub_resource type="StyleBoxFlat" id="Style_bracket_bl"]
+bg_color = Color(0, 0, 0, 0)
+border_width_bottom = 2
+border_width_left = 2
+border_color = Color(0.180, 0.435, 0.420, 1)
+
+[sub_resource type="StyleBoxFlat" id="Style_bracket_br"]
+bg_color = Color(0, 0, 0, 0)
+border_width_bottom = 2
+border_width_right = 2
+border_color = Color(0.180, 0.435, 0.420, 1)
+
+[sub_resource type="StyleBoxFlat" id="Style_profil_badge"]
+bg_color = Color(0.039, 0.043, 0.035, 0.55)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.227, 0.235, 0.212, 1)
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 18.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="Style_avatar"]
+bg_color = Color(0.110, 0.122, 0.118, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.180, 0.435, 0.420, 1)
+
+[sub_resource type="StyleBoxFlat" id="Style_item_normal"]
+bg_color = Color(0, 0, 0, 0)
+border_width_left = 5
+border_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="Style_item_hover"]
+bg_color = Color(0.180, 0.435, 0.420, 0.14)
+border_width_left = 5
+border_color = Color(0.180, 0.435, 0.420, 1)
 
 [node name="MainMenu" type="Control"]
 anchors_preset = 15
@@ -9,75 +68,383 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("1_main_menu")
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="TextureRect" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
-color = Color(0.047, 0.051, 0.043, 1)
+texture = ExtResource("6_landscape")
+expand_mode = 1
+stretch_mode = 6
 
-[node name="Content" type="MarginContainer" parent="."]
+[node name="Overlay" type="ColorRect" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
-theme_override_constants/margin_left = 56
-theme_override_constants/margin_top = 48
-theme_override_constants/margin_right = 56
-theme_override_constants/margin_bottom = 40
+color = Color(0.039, 0.043, 0.035, 0.6)
 
-[node name="Layout" type="HBoxContainer" parent="Content"]
-theme_override_constants/separation = 48
+[node name="OverlayUnten" type="ColorRect" parent="."]
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -320.0
+color = Color(0.024, 0.027, 0.024, 0.55)
 
-[node name="Links" type="VBoxContainer" parent="Content/Layout"]
-custom_minimum_size = Vector2(340, 0)
-theme_override_constants/separation = 12
+[node name="CornerBrackets" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
 
-[node name="Titel" type="Label" parent="Content/Layout/Links"]
-text = "REDSNOW"
-theme_override_font_sizes/font_size = 42
-theme_override_colors/font_color = Color(0.906, 0.890, 0.847, 1)
+[node name="TL" type="Panel" parent="CornerBrackets"]
+custom_minimum_size = Vector2(34, 34)
+offset_left = 22.0
+offset_top = 22.0
+offset_right = 56.0
+offset_bottom = 56.0
+theme_override_styles/panel = SubResource("Style_bracket_tl")
 
-[node name="Untertitel" type="Label" parent="Content/Layout/Links"]
-text = "EXTRACTION PROTOCOL"
-theme_override_font_sizes/font_size = 14
-theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
+[node name="TR" type="Panel" parent="CornerBrackets"]
+custom_minimum_size = Vector2(34, 34)
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -56.0
+offset_top = 22.0
+offset_right = -22.0
+offset_bottom = 56.0
+grow_horizontal = 0
+theme_override_styles/panel = SubResource("Style_bracket_tr")
 
-[node name="LueckeOben" type="Control" parent="Content/Layout/Links"]
-custom_minimum_size = Vector2(0, 60)
+[node name="BL" type="Panel" parent="CornerBrackets"]
+custom_minimum_size = Vector2(34, 34)
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 22.0
+offset_top = -56.0
+offset_right = 56.0
+offset_bottom = -22.0
+grow_vertical = 0
+theme_override_styles/panel = SubResource("Style_bracket_bl")
 
-[node name="Buttons" type="VBoxContainer" parent="Content/Layout/Links"]
-theme_override_constants/separation = 6
+[node name="BR" type="Panel" parent="CornerBrackets"]
+custom_minimum_size = Vector2(34, 34)
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -56.0
+offset_top = -56.0
+offset_right = -22.0
+offset_bottom = -22.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_styles/panel = SubResource("Style_bracket_br")
 
-[node name="Spielen" type="Button" parent="Content/Layout/Links/Buttons"]
-custom_minimum_size = Vector2(300, 44)
-alignment = 0
-text = "01   SPIELEN / DEPLOY"
+[node name="TopBar" type="HBoxContainer" parent="."]
+offset_left = 64.0
+offset_top = 28.0
+offset_right = 64.0
+offset_bottom = 28.0
+theme_override_constants/separation = 24
 
-[node name="Einstellungen" type="Button" parent="Content/Layout/Links/Buttons"]
-custom_minimum_size = Vector2(300, 44)
-alignment = 0
-text = "02   EINSTELLUNGEN"
+[node name="Profil" type="PanelContainer" parent="TopBar"]
+mouse_default_cursor_shape = 2
+theme_override_styles/panel = SubResource("Style_profil_badge")
 
-[node name="LueckeUnten" type="Control" parent="Content/Layout/Links"]
-size_flags_vertical = 3
+[node name="ProfilInner" type="HBoxContainer" parent="TopBar/Profil"]
+theme_override_constants/separation = 14
 
-[node name="Status" type="VBoxContainer" parent="Content/Layout/Links"]
+[node name="Avatar" type="Panel" parent="TopBar/Profil/ProfilInner"]
+custom_minimum_size = Vector2(52, 52)
+theme_override_styles/panel = SubResource("Style_avatar")
+
+[node name="AvatarLabel" type="Label" parent="TopBar/Profil/ProfilInner/Avatar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("4_black_ops_one")
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "G4"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="AvatarTexture" type="TextureRect" parent="TopBar/Profil/ProfilInner/Avatar"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="ProfilText" type="VBoxContainer" parent="TopBar/Profil/ProfilInner"]
+theme_override_constants/separation = 3
+
+[node name="Callsign" type="Label" parent="TopBar/Profil/ProfilInner/ProfilText"]
+theme_override_fonts/font = ExtResource("5_oswald")
+theme_override_font_sizes/font_size = 17
+theme_override_colors/font_color = Color(0.945, 0.929, 0.886, 1)
+text = "GHOST-04"
+
+[node name="LevelRow" type="HBoxContainer" parent="TopBar/Profil/ProfilInner/ProfilText"]
+theme_override_constants/separation = 8
+
+[node name="Level" type="Label" parent="TopBar/Profil/ProfilInner/ProfilText/LevelRow"]
+theme_override_fonts/font = ExtResource("5_oswald")
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "LVL 47"
+
+[node name="XPTrack" type="ColorRect" parent="TopBar/Profil/ProfilInner/ProfilText/LevelRow"]
+custom_minimum_size = Vector2(70, 5)
+color = Color(0.165, 0.173, 0.157, 1)
+
+[node name="XPFill" type="ColorRect" parent="TopBar/Profil/ProfilInner/ProfilText/LevelRow/XPTrack"]
+offset_right = 43.0
+offset_bottom = 5.0
+color = Color(0.180, 0.435, 0.420, 1)
+
+[node name="TitleBlock" type="VBoxContainer" parent="TopBar"]
 theme_override_constants/separation = 2
 
-[node name="Server" type="Label" parent="Content/Layout/Links/Status"]
-text = "SERVER: EU-NORD-02"
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
+[node name="Titel" type="Label" parent="TopBar/TitleBlock"]
+theme_override_fonts/font = ExtResource("4_black_ops_one")
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(0.945, 0.929, 0.886, 1)
+text = "REDSNOW"
 
-[node name="Ping" type="Label" parent="Content/Layout/Links/Status"]
-text = "PING: 24MS   STATUS: ONLINE"
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
+[node name="Untertitel" type="Label" parent="TopBar/TitleBlock"]
+theme_override_fonts/font = ExtResource("5_oswald")
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "EXTRACTION PROTOCOL"
 
-[node name="Build" type="Label" parent="Content/Layout/Links/Status"]
-text = "BUILD 0.1.0"
-theme_override_font_sizes/font_size = 11
-theme_override_colors/font_color = Color(0.36, 0.36, 0.34, 1)
+[node name="MenuList" type="VBoxContainer" parent="."]
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 64.0
+offset_top = -100.0
+offset_right = 64.0
+offset_bottom = -100.0
+grow_vertical = 0
+theme_override_constants/separation = 4
 
-[node name="Vorschau" type="CenterContainer" parent="Content/Layout"]
+[node name="Spielen" type="Control" parent="MenuList"]
+custom_minimum_size = Vector2(520, 64)
+
+[node name="Btn" type="Button" parent="MenuList/Spielen"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+custom_minimum_size = Vector2(0, 64)
+theme_override_styles/normal = SubResource("Style_item_normal")
+theme_override_styles/hover = SubResource("Style_item_hover")
+theme_override_styles/pressed = SubResource("Style_item_hover")
+theme_override_styles/focus = SubResource("Style_item_normal")
+text = ""
+
+[node name="Row" type="MarginContainer" parent="MenuList/Spielen"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="Inhalt" type="HBoxContainer" parent="MenuList/Spielen/Row"]
+mouse_filter = 2
+theme_override_constants/separation = 20
+
+[node name="Index" type="Label" parent="MenuList/Spielen/Row/Inhalt"]
+custom_minimum_size = Vector2(28, 0)
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "01"
+
+[node name="Name" type="Label" parent="MenuList/Spielen/Row/Inhalt"]
+theme_override_fonts/font = ExtResource("5_oswald")
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.965, 0.949, 0.910, 1)
+text = "SPIELEN / DEPLOY"
+
+[node name="Spacer" type="Control" parent="MenuList/Spielen/Row/Inhalt"]
 size_flags_horizontal = 3
 
+[node name="PulseDot" type="Panel" parent="MenuList/Spielen/Row/Inhalt"]
+custom_minimum_size = Vector2(10, 10)
+size_flags_vertical = 4
+theme_override_styles/panel = SubResource("Style_avatar")
+
+[node name="Store" type="Control" parent="MenuList"]
+custom_minimum_size = Vector2(520, 64)
+
+[node name="Btn" type="Button" parent="MenuList/Store"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+custom_minimum_size = Vector2(0, 64)
+theme_override_styles/normal = SubResource("Style_item_normal")
+theme_override_styles/hover = SubResource("Style_item_hover")
+theme_override_styles/pressed = SubResource("Style_item_hover")
+theme_override_styles/focus = SubResource("Style_item_normal")
+text = ""
+
+[node name="Row" type="MarginContainer" parent="MenuList/Store"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="Inhalt" type="HBoxContainer" parent="MenuList/Store/Row"]
+mouse_filter = 2
+theme_override_constants/separation = 20
+
+[node name="Index" type="Label" parent="MenuList/Store/Row/Inhalt"]
+custom_minimum_size = Vector2(28, 0)
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "02"
+
+[node name="Name" type="Label" parent="MenuList/Store/Row/Inhalt"]
+theme_override_fonts/font = ExtResource("5_oswald")
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.788, 0.773, 0.722, 1)
+text = "STORE / SHOP"
+
+[node name="Statistiken" type="Control" parent="MenuList"]
+custom_minimum_size = Vector2(520, 64)
+
+[node name="Btn" type="Button" parent="MenuList/Statistiken"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+custom_minimum_size = Vector2(0, 64)
+theme_override_styles/normal = SubResource("Style_item_normal")
+theme_override_styles/hover = SubResource("Style_item_hover")
+theme_override_styles/pressed = SubResource("Style_item_hover")
+theme_override_styles/focus = SubResource("Style_item_normal")
+text = ""
+
+[node name="Row" type="MarginContainer" parent="MenuList/Statistiken"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="Inhalt" type="HBoxContainer" parent="MenuList/Statistiken/Row"]
+mouse_filter = 2
+theme_override_constants/separation = 20
+
+[node name="Index" type="Label" parent="MenuList/Statistiken/Row/Inhalt"]
+custom_minimum_size = Vector2(28, 0)
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "03"
+
+[node name="Name" type="Label" parent="MenuList/Statistiken/Row/Inhalt"]
+theme_override_fonts/font = ExtResource("5_oswald")
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.788, 0.773, 0.722, 1)
+text = "STATISTIKEN / PROFIL"
+
+[node name="Einstellungen" type="Control" parent="MenuList"]
+custom_minimum_size = Vector2(520, 64)
+
+[node name="Btn" type="Button" parent="MenuList/Einstellungen"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+custom_minimum_size = Vector2(0, 64)
+theme_override_styles/normal = SubResource("Style_item_normal")
+theme_override_styles/hover = SubResource("Style_item_hover")
+theme_override_styles/pressed = SubResource("Style_item_hover")
+theme_override_styles/focus = SubResource("Style_item_normal")
+text = ""
+
+[node name="Row" type="MarginContainer" parent="MenuList/Einstellungen"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 16
+
+[node name="Inhalt" type="HBoxContainer" parent="MenuList/Einstellungen/Row"]
+mouse_filter = 2
+theme_override_constants/separation = 20
+
+[node name="Index" type="Label" parent="MenuList/Einstellungen/Row/Inhalt"]
+custom_minimum_size = Vector2(28, 0)
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "04"
+
+[node name="Name" type="Label" parent="MenuList/Einstellungen/Row/Inhalt"]
+theme_override_fonts/font = ExtResource("5_oswald")
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.788, 0.773, 0.722, 1)
+text = "EINSTELLUNGEN"
+
+[node name="Vorschau" type="CenterContainer" parent="."]
+anchor_left = 0.35
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="StatusBottomRight" type="VBoxContainer" parent="."]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -260.0
+offset_top = -70.0
+offset_right = -64.0
+offset_bottom = -70.0
+grow_horizontal = 0
+grow_vertical = 0
+theme_override_constants/separation = 2
+
+[node name="ServerRow" type="HBoxContainer" parent="StatusBottomRight"]
+size_flags_horizontal = 3
+alignment = 2
+theme_override_constants/separation = 6
+
+[node name="Label" type="Label" parent="StatusBottomRight/ServerRow"]
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
+text = "SERVER:"
+
+[node name="Value" type="Label" parent="StatusBottomRight/ServerRow"]
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "EU-NORD-02"
+
+[node name="PingRow" type="HBoxContainer" parent="StatusBottomRight"]
+size_flags_horizontal = 3
+alignment = 2
+theme_override_constants/separation = 6
+
+[node name="Label" type="Label" parent="StatusBottomRight/PingRow"]
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
+text = "PING: 24MS   STATUS:"
+
+[node name="Value" type="Label" parent="StatusBottomRight/PingRow"]
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.498, 0.682, 0.435, 1)
+text = "ONLINE"
+
+[node name="Build" type="Label" parent="StatusBottomRight"]
+size_flags_horizontal = 3
+horizontal_alignment = 2
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.361, 0.369, 0.337, 1)
+text = "BUILD 0.1.0"
+
 [node name="SettingsPanel" parent="." instance=ExtResource("2_settings_panel")]
+visible = false
+
+[node name="InfoPanel" parent="." instance=ExtResource("3_info_panel")]
+visible = false
+
+[node name="ProfilePanel" parent="." instance=ExtResource("7_profile_panel")]
 visible = false

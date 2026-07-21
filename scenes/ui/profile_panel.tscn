@@ -1,0 +1,163 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/profile_panel.gd" id="1_profile_panel"]
+[ext_resource type="FontFile" path="res://assets/fonts/BlackOpsOne-Regular.ttf" id="2_black_ops_one"]
+[ext_resource type="FontFile" path="res://assets/fonts/Oswald.ttf" id="3_oswald"]
+
+[sub_resource type="StyleBoxFlat" id="Style_backdrop"]
+bg_color = Color(0.024, 0.027, 0.024, 0.72)
+
+[sub_resource type="StyleBoxFlat" id="Style_panel"]
+bg_color = Color(0.063, 0.071, 0.059, 0.96)
+border_width_left = 1
+border_width_top = 4
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.180, 0.435, 0.420, 1)
+content_margin_left = 32.0
+content_margin_top = 24.0
+content_margin_right = 32.0
+content_margin_bottom = 28.0
+
+[node name="ProfilePanel" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 1
+script = ExtResource("1_profile_panel")
+
+[node name="Backdrop" type="Panel" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("Style_backdrop")
+
+[node name="Panel" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(380, 0)
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -190.0
+offset_top = -160.0
+offset_right = 190.0
+offset_bottom = 160.0
+theme_override_styles/panel = SubResource("Style_panel")
+
+[node name="Inhalt" type="VBoxContainer" parent="Panel"]
+theme_override_constants/separation = 16
+
+[node name="Kopf" type="HBoxContainer" parent="Panel/Inhalt"]
+theme_override_constants/separation = 16
+
+[node name="Titel" type="Label" parent="Panel/Inhalt/Kopf"]
+size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("3_oswald")
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(0.945, 0.929, 0.886, 1)
+text = "PROFIL"
+
+[node name="Schliessen" type="Button" parent="Panel/Inhalt/Kopf"]
+custom_minimum_size = Vector2(36, 36)
+text = "✕"
+
+[node name="MainView" type="VBoxContainer" parent="Panel/Inhalt"]
+theme_override_constants/separation = 16
+
+[node name="AvatarRow" type="CenterContainer" parent="Panel/Inhalt/MainView"]
+
+[node name="AvatarButton" type="Button" parent="Panel/Inhalt/MainView/AvatarRow"]
+custom_minimum_size = Vector2(96, 96)
+text = ""
+
+[node name="AvatarLabel" type="Label" parent="Panel/Inhalt/MainView/AvatarRow/AvatarButton"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_fonts/font = ExtResource("2_black_ops_one")
+theme_override_font_sizes/font_size = 26
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "G4"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="AvatarTexture" type="TextureRect" parent="Panel/Inhalt/MainView/AvatarRow/AvatarButton"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="Hinweis" type="Label" parent="Panel/Inhalt/MainView"]
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
+text = "Klicken für ein neues Bild"
+
+[node name="Status" type="Label" parent="Panel/Inhalt/MainView"]
+horizontal_alignment = 1
+autowrap_mode = 3
+theme_override_font_sizes/font_size = 12
+theme_override_colors/font_color = Color(0.80, 0.35, 0.30, 1)
+text = ""
+
+[node name="NameTitel" type="Label" parent="Panel/Inhalt/MainView"]
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
+text = "Name"
+
+[node name="NameEdit" type="LineEdit" parent="Panel/Inhalt/MainView"]
+theme_override_fonts/font = ExtResource("3_oswald")
+theme_override_font_sizes/font_size = 20
+theme_override_colors/font_color = Color(0.945, 0.929, 0.886, 1)
+theme_override_colors/font_uneditable_color = Color(0.945, 0.929, 0.886, 1)
+theme_override_styles/normal = SubResource("Style_backdrop")
+theme_override_styles/focus = SubResource("Style_panel")
+theme_override_styles/read_only = SubResource("Style_backdrop")
+alignment = 1
+max_length = 24
+
+[node name="EditorView" type="VBoxContainer" parent="Panel/Inhalt"]
+theme_override_constants/separation = 12
+
+[node name="EditorTitel" type="Label" parent="Panel/Inhalt/EditorView"]
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
+text = "Ziehen zum Verschieben, Regler zum Skalieren"
+
+[node name="RahmenBox" type="CenterContainer" parent="Panel/Inhalt/EditorView"]
+
+[node name="Rahmen" type="Control" parent="Panel/Inhalt/EditorView/RahmenBox"]
+custom_minimum_size = Vector2(260, 260)
+
+[node name="Vorschau" type="TextureRect" parent="Panel/Inhalt/EditorView/RahmenBox/Rahmen"]
+
+[node name="ZoomRow" type="HBoxContainer" parent="Panel/Inhalt/EditorView"]
+theme_override_constants/separation = 12
+
+[node name="Label" type="Label" parent="Panel/Inhalt/EditorView/ZoomRow"]
+theme_override_font_sizes/font_size = 13
+theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
+text = "Zoom"
+
+[node name="Slider" type="HSlider" parent="Panel/Inhalt/EditorView/ZoomRow"]
+custom_minimum_size = Vector2(0, 20)
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 4.0
+step = 0.01
+value = 1.0
+
+[node name="Knoepfe" type="HBoxContainer" parent="Panel/Inhalt/EditorView"]
+theme_override_constants/separation = 12
+
+[node name="Abbrechen" type="Button" parent="Panel/Inhalt/EditorView/Knoepfe"]
+size_flags_horizontal = 3
+text = "Abbrechen"
+
+[node name="Uebernehmen" type="Button" parent="Panel/Inhalt/EditorView/Knoepfe"]
+size_flags_horizontal = 3
+text = "Übernehmen"

@@ -8,7 +8,7 @@
 ##   Tab       Charakter öffnen (Ausrüstung, Gesundheit, Inventar) — oder,
 ##             vor einer offenen Kiste, alles nehmen
 ##   1 / 2     Primär- / Sekundärwaffe ziehen
-##   Esc       Fenster schliessen
+##   Esc       Fenster schliessen — sonst Pausenmenue oeffnen/schliessen
 ##   K         Selbsttötung (zum Testen des Verlusts)
 ##   Enter     neuen Raid starten
 ##
@@ -17,10 +17,12 @@ extends Node3D
 
 @onready var _player: PlayerController = $Player
 @onready var _raid: RaidManager = $RaidManager
+@onready var _info_panel: PanelContainer = $HUD/InfoPanel
 @onready var _label: Label = $HUD/InfoPanel/InfoLabel
 @onready var _prompt: Label = $HUD/PromptLabel
 @onready var _loot_window: LootWindow = $HUD/LootWindow
 @onready var _character_window: CharacterWindow = $HUD/CharacterWindow
+@onready var _pause_menu: PauseMenu = $HUD/PauseMenu
 
 ## Was der Spieler in den ersten Raid mitnimmt.
 ##
@@ -50,9 +52,16 @@ func _ready() -> void:
 	# Jedes Fenster legt beim Öffnen die Steuerung still und gibt sie beim
 	# Schliessen wieder frei. Ein Ort dafür, damit kein Fenster den Spieler
 	# gelähmt zurücklassen kann.
-	for window in [_loot_window, _character_window]:
+	for window in [_loot_window, _character_window, _pause_menu]:
 		window.opened.connect(_on_window_opened)
 		window.closed.connect(_on_window_closed)
+
+	# Das Pausenmenue traegt oben links dieselbe Kopfzeile wie das Hauptmenue
+	# (siehe scripts/ui/pause_menu.gd) — genau dort sitzt sonst die staendige
+	# Statusanzeige (Traglast, Ausdauer, Waffe). Beide gleichzeitig ueberlagern
+	# sich zu unlesbarem Text, darum blenden sie sich gegenseitig aus.
+	_pause_menu.opened.connect(_on_pause_opened)
+	_pause_menu.closed.connect(_on_pause_closed)
 
 	# Wer im Raid stirbt, verliert alles — auch durch Hunger oder Kaelte.
 	_player.health.died.connect(_on_player_died)
@@ -112,7 +121,17 @@ func _on_window_closed() -> void:
 
 
 func _any_window_open() -> bool:
-	return _loot_window.is_open() or _character_window.is_open()
+	return _loot_window.is_open() or _character_window.is_open() or _pause_menu.is_open()
+
+
+func _on_pause_opened() -> void:
+	_info_panel.hide()
+	_prompt.hide()
+
+
+func _on_pause_closed() -> void:
+	_info_panel.show()
+	_prompt.show()
 
 
 ## Tod durch Verletzung, Hunger, Durst oder Kaelte — das Ergebnis ist gleich.
@@ -128,6 +147,8 @@ func _on_raid_ended(survived: bool, secured: int) -> void:
 		_loot_window.close()
 	if _character_window.is_open():
 		_character_window.close()
+	if _pause_menu.is_open():
+		_pause_menu.close()
 	if survived:
 		_show_message("EXTRAHIERT — %d Gegenstaende ins Lager gebracht. [Enter] fuer neuen Raid" % secured, 30.0)
 	else:
@@ -170,6 +191,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_loot_window.close()
 			elif _character_window.is_open():
 				_character_window.close()
+			elif _pause_menu.is_open():
+				_pause_menu.close()
+			else:
+				_pause_menu.open()
 
 
 ## Waffenwechsel. Ist der Platz leer, passiert nichts — kein Wechsel auf

@@ -1,18 +1,18 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/settings_panel.gd" id="1_settings_panel"]
+[ext_resource type="FontFile" path="res://assets/fonts/Oswald.ttf" id="2_oswald"]
+
+[sub_resource type="StyleBoxFlat" id="Style_backdrop"]
+bg_color = Color(0.024, 0.027, 0.024, 0.72)
 
 [sub_resource type="StyleBoxFlat" id="Style_panel"]
-bg_color = Color(0.086, 0.090, 0.078, 0.97)
+bg_color = Color(0.063, 0.071, 0.059, 0.96)
 border_width_left = 1
-border_width_top = 1
+border_width_top = 4
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.227, 0.235, 0.212, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
+border_color = Color(0.180, 0.435, 0.420, 1)
 content_margin_left = 28.0
 content_margin_top = 24.0
 content_margin_right = 28.0
@@ -25,27 +25,46 @@ anchor_bottom = 1.0
 mouse_filter = 1
 script = ExtResource("1_settings_panel")
 
+[node name="Backdrop" type="Panel" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("Style_backdrop")
+
 [node name="Panel" type="PanelContainer" parent="."]
-custom_minimum_size = Vector2(420, 0)
-layout_mode = 1
+custom_minimum_size = Vector2(440, 0)
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -210.0
-offset_top = -200.0
-offset_right = 210.0
-offset_bottom = 200.0
+offset_left = -220.0
+offset_top = -210.0
+offset_right = 220.0
+offset_bottom = 210.0
 theme_override_styles/panel = SubResource("Style_panel")
 
 [node name="Inhalt" type="VBoxContainer" parent="Panel"]
 theme_override_constants/separation = 18
 
-[node name="Titel" type="Label" parent="Panel/Inhalt"]
+[node name="Kopf" type="HBoxContainer" parent="Panel/Inhalt"]
+theme_override_constants/separation = 16
+
+[node name="Index" type="Label" parent="Panel/Inhalt/Kopf"]
+theme_override_font_sizes/font_size = 15
+theme_override_colors/font_color = Color(0.180, 0.435, 0.420, 1)
+text = "04"
+
+[node name="Titel" type="Label" parent="Panel/Inhalt/Kopf"]
+size_flags_horizontal = 3
+theme_override_fonts/font = ExtResource("2_oswald")
+theme_override_font_sizes/font_size = 26
+theme_override_colors/font_color = Color(0.945, 0.929, 0.886, 1)
 text = "EINSTELLUNGEN"
-theme_override_font_sizes/font_size = 20
-theme_override_colors/font_color = Color(0.906, 0.890, 0.847, 1)
+
+[node name="Schliessen" type="Button" parent="Panel/Inhalt/Kopf"]
+custom_minimum_size = Vector2(36, 36)
+text = "✕"
 
 [node name="Lautstaerke" type="VBoxContainer" parent="Panel/Inhalt"]
 theme_override_constants/separation = 8
@@ -95,6 +114,3 @@ theme_override_colors/font_color = Color(0.545, 0.529, 0.478, 1)
 
 [node name="Liste" type="VBoxContainer" parent="Panel/Inhalt/Tasten"]
 theme_override_constants/separation = 4
-
-[node name="Zurueck" type="Button" parent="Panel/Inhalt"]
-text = "Zurück"

@@ -3,14 +3,14 @@
 ## Baut denselben Weg wie WeaponPreview (siehe scripts/ui/weapon_preview.gd):
 ## eigene Welt, eigene Beleuchtung, automatisches Einpassen der Kamera.
 ##
-## PLATZHALTER-FIGUR: Es gibt noch kein Charaktermodell im Projekt (siehe
-## CharacterWindow — dort wird die Figur aus demselben Grund nur gezeichnet,
-## nicht als 3D-Modell gezeigt). Die Klötze hier sind bewusst grob, wie
-## GenericViewmodel bei Waffen ohne eigenes Modell: eine Notlösung, die
-## sichtbar macht, wo später ein echtes Modell hingehört, statt einen leeren
-## Ausschnitt zu zeigen.
+## Laedt das echte Modell unter MODEL_PATH, falls vorhanden. Ohne die Datei
+## faellt sie auf eine grobe Blockfigur zurueck (ViewmodelParts-Quader) — eine
+## Notloesung wie GenericViewmodel bei Waffen ohne eigenes Modell, damit die
+## Vorschau nie leer bleibt.
 class_name CharacterPreview
 extends SubViewportContainer
+
+const MODEL_PATH := "res://assets/models/character/figur_nackt.glb"
 
 ## Grad pro Sekunde. Langsamer als WeaponPreview — hier soll man die Silhouette
 ## erkennen, nicht ein Detail begutachten.
@@ -19,8 +19,8 @@ const TURN_SPEED := 14.0
 const MARGIN := 1.25
 const SIZE := Vector2i(520, 640)
 
-## Grobe Körpermaße in Metern, Füße auf y = 0.
-const HEIGHT := 1.80
+## Grobe Körpermaße in Metern, Füße auf y = 0 — nur für die Platzhalterfigur,
+## falls MODEL_PATH fehlt.
 const HEAD_SIZE := Vector3(0.20, 0.22, 0.20)
 const TORSO_SIZE := Vector3(0.36, 0.52, 0.20)
 const ARM_SIZE := Vector3(0.11, 0.50, 0.11)
@@ -53,7 +53,8 @@ func _ready() -> void:
 	_turntable = Node3D.new()
 	_turntable.name = "Drehteller"
 	_viewport.add_child(_turntable)
-	_build_placeholder_figure()
+	if not _load_model():
+		_build_placeholder_figure()
 
 	_camera = Camera3D.new()
 	_camera.fov = 32.0
@@ -61,6 +62,17 @@ func _ready() -> void:
 	_viewport.add_child(_camera)
 
 	_frame_figure()
+
+
+## Laedt das echte Charaktermodell, falls es im Projekt liegt.
+func _load_model() -> bool:
+	if not ResourceLoader.exists(MODEL_PATH):
+		return false
+	var packed := load(MODEL_PATH) as PackedScene
+	if packed == null:
+		return false
+	_turntable.add_child(packed.instantiate())
+	return true
 
 
 func _build_environment() -> void:
@@ -129,20 +141,47 @@ func _build_placeholder_figure() -> void:
 
 
 ## Kamera so stellen, dass die ganze Figur beim Drehen im Bild bleibt —
-## dieselbe Rechnung wie WeaponPreview._frame_model().
+## dieselbe Rechnung wie WeaponPreview._frame_model(), aus den echten Bounds
+## der geladenen Kinder (Modell oder Platzhalter), nicht aus einer festen Zahl.
 func _frame_figure() -> void:
-	var centre := Vector3(0.0, HEIGHT * 0.5, 0.0)
+	var bounds := _model_bounds(_turntable)
+	var centre := bounds.get_center()
 
 	var vertical_tan := tan(deg_to_rad(_camera.fov) * 0.5)
 	var horizontal_tan := vertical_tan * (float(_viewport.size.x) / float(_viewport.size.y))
 
-	var swept_radius := maxf(TORSO_SIZE.x, ARM_SIZE.x * 2.0 + TORSO_SIZE.x) * 0.6
-	var half_height := HEIGHT * 0.5
+	# Wie bei WeaponPreview: der Kreis, den die Figur beim Drehen ueberstreicht,
+	# nicht nur die aktuelle Ansicht — sonst schneidet eine andere Drehstellung
+	# aus dem Bild.
+	var swept_radius := Vector2(bounds.size.x, bounds.size.z).length() * 0.5
+	var half_height := bounds.size.y * 0.5
 
 	var distance := maxf(swept_radius / horizontal_tan, half_height / vertical_tan) + swept_radius
 
 	var direction := Vector3(0.25, 0.05, 1.0).normalized()
 	_camera.look_at_from_position(centre + direction * distance * MARGIN, centre, Vector3.UP)
+
+
+func _model_bounds(node: Node3D) -> AABB:
+	var boxes: Array[AABB] = []
+	_collect_boxes(node, Transform3D.IDENTITY, boxes)
+	if boxes.is_empty():
+		return AABB(Vector3(0.0, 0.9, 0.0), Vector3.ONE * 0.3)
+
+	var bounds := boxes[0]
+	for i in range(1, boxes.size()):
+		bounds = bounds.merge(boxes[i])
+	return bounds
+
+
+func _collect_boxes(node: Node, transform: Transform3D, boxes: Array[AABB]) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			boxes.append(transform * mesh_instance.mesh.get_aabb())
+	for child in node.get_children():
+		if child is Node3D:
+			_collect_boxes(child, transform * (child as Node3D).transform, boxes)
 
 
 func _on_resized() -> void:

@@ -31,9 +31,28 @@ func _initialize() -> void:
 
 	await _shot("01_hauptmenue")
 
-	var einstellungen: Button = menu.get_node("Content/Layout/Links/Buttons/Einstellungen")
+	var store: Button = menu.get_node("MenuList/Store/Btn")
+	store.pressed.emit()
+	await _shot("02_store")
+	var info_close: Button = menu.get_node("InfoPanel/Panel/Inhalt/Kopf/Schliessen")
+	info_close.pressed.emit()
+	await process_frame
+
+	var einstellungen: Button = menu.get_node("MenuList/Einstellungen/Btn")
 	einstellungen.pressed.emit()
-	await _shot("02_einstellungen")
+	await _shot("03_einstellungen")
+	var settings_close: Button = menu.get_node("SettingsPanel/Panel/Inhalt/Kopf/Schliessen")
+	settings_close.pressed.emit()
+	await process_frame
+
+	# Nur ansehen, nichts aendern: Dieses Werkzeug ruehrt das echte
+	# gespeicherte Profil (PlayerProfile) nicht an.
+	var profil_badge: PanelContainer = menu.get_node("TopBar/Profil")
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	profil_badge.gui_input.emit(click)
+	await _shot("04_profil")
 
 	print("\nFertig: %s" % ProjectSettings.globalize_path(OUT_DIR))
 	quit(0)

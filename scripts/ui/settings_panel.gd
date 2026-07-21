@@ -35,7 +35,7 @@ const ACTIONS := [
 @onready var _master_slider: HSlider = $Panel/Inhalt/Lautstaerke/Master/Slider
 @onready var _world_slider: HSlider = $Panel/Inhalt/Lautstaerke/Welt/Slider
 @onready var _keys_list: VBoxContainer = $Panel/Inhalt/Tasten/Liste
-@onready var _back_button: Button = $Panel/Inhalt/Zurueck
+@onready var _close_button: Button = $Panel/Inhalt/Kopf/Schliessen
 
 
 func _ready() -> void:
@@ -49,7 +49,7 @@ func _ready() -> void:
 	_world_slider.value = db_to_linear(AudioServer.get_bus_volume_db(world_bus))
 	_world_slider.value_changed.connect(_on_world_changed)
 
-	_back_button.pressed.connect(_on_back_pressed)
+	_close_button.pressed.connect(_on_close_pressed)
 
 	_build_key_list()
 
@@ -67,7 +67,7 @@ func _on_world_changed(value: float) -> void:
 	AudioServer.set_bus_volume_db(world_bus, linear_to_db(value))
 
 
-func _on_back_pressed() -> void:
+func _on_close_pressed() -> void:
 	hide()
 	closed.emit()
 
