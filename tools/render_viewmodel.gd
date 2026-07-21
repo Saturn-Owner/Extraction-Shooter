@@ -92,16 +92,16 @@ func _initialize() -> void:
 
 ## Die Waffen, an denen gerade gearbeitet wird.
 ##
-## Bewusst eine feste Liste und nicht "alle mit eigenem Modell": Die AKM hat
-## zwar ein Modell, gehoert aber nicht zum aktuellen Arbeitsstand und liegt
-## auch nicht im Inventar. Wer sie mitrendert, bekommt bei jedem Durchlauf
-## Bilder, die niemand angefordert hat.
+## Bewusst eine feste Liste und nicht "alle mit eigenem Modell": Wer eine Waffe
+## mitrendert, an der niemand arbeitet, bekommt bei jedem Durchlauf neun Bilder,
+## die keiner angefordert hat.
 ##
 ## Kommt eine Waffe dazu, hier eintragen.
 const IN_ARBEIT := [
 	&"weapon_rifle_ar15",
 	&"weapon_pistol_g17",
 	&"weapon_shotgun_m870",
+	&"weapon_rifle_akm",
 ]
 
 

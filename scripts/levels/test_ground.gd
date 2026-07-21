@@ -29,9 +29,11 @@ extends Node3D
 ## Reihenfolge ist wichtig: Grosse Gegenstaende zuerst, sonst zerstueckeln
 ## die kleinen das Raster und die Gewehre finden keinen Platz mehr.
 const LOADOUT := [
+	{id = &"weapon_rifle_akm", count = 1},
 	{id = &"weapon_rifle_ar15", count = 1},
 	{id = &"weapon_shotgun_m870", count = 1},
 	{id = &"weapon_pistol_g17", count = 1},
+	{id = &"ammo_762x39_ps", count = 30},
 	{id = &"ammo_556x45_m855a1", count = 60},
 	{id = &"ammo_556x45_m995", count = 30},
 	{id = &"ammo_9x19_fmj", count = 51},
