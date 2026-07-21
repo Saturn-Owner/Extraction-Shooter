@@ -4,47 +4,57 @@
 ## Abstände. Der Aufbau der Oberfläche (launcher.gd) fragt nur noch nach
 ## Theme-Typen und kennt keine einzige Farbe selbst.
 ##
-## Stilrichtung: Militärakte. Fast-schwarzer Grund, kantige Panels mit
-## dünner Kante und farbigem Aktenstreifen links, Oliv für Ruhiges,
-## Signal-Orange für alles, was Aufmerksamkeit will.
+## Stilrichtung: Modernist / "Red Snow". Schnee-weisser Grund, tiefschwarze
+## Tinte, harte 2px-Kanten und Null-Rundung. Ein einziges Signal-Rot traegt
+## Marke, Aktiv-Zustand, SPIELEN und alles Dringende — sonst ist alles Tinte
+## auf Papier. Flaechen werden nicht gefuellt, Struktur machen die Linien.
 class_name LauncherTheme
 
 # ------------------------------------------------------------------ Farben
-const BACKGROUND := Color("0d0f10")
-const PANEL := Color("16191b")
-const PANEL_EDGE := Color("2a2f33")
-const TEXT := Color("c8ccc9")
-const TEXT_DIM := Color("7a807c")
-## Sekundär-Akzent: Anmeldung, Bestätigung, Ruhe.
-const OLIVE := Color("5a6b4a")
-const OLIVE_BRIGHT := Color("7d925f")
-## Primär-Akzent: SPIELEN, Fortschritt, alles Dringende.
-const ORANGE := Color("d97b29")
-const ORANGE_BRIGHT := Color("f09441")
-const RED := Color("b5442e")
+## Der Schnee-Grund und die Panel-Flaeche eine Spur darunter.
+const BACKGROUND := Color("f3f2f2")
+const PANEL := Color("eae9e9")
+## Tiefschwarze Tinte — Text und alle tragenden Kanten.
+const INK := Color("201e1d")
+const PANEL_EDGE := Color("201e1d")
+const TEXT := Color("201e1d")
+const TEXT_DIM := Color("7d7979")
+## Feine Trennlinien: Tinte, aber durchscheinend (Neutral-300).
+const HAIRLINE := Color("d7d3d3")
+## Primaer- und einziger Akzent: Marke, Aktiv-Balken, SPIELEN, Fortschritt.
+const RED := Color("ec3013")
+const RED_HOVER := Color("ae1800")
+const RED_PRESSED := Color("7c1405")
+## Hover-Fuellung fuer ruhige Knoepfe (Neutral-200).
+const HOVER_FILL := Color("eae7e7")
+const PRESSED_FILL := Color("d7d3d3")
 
 # ---------------------------------------------------------------- Maße
-const CORNER := 2
-const EDGE_WIDTH := 1
-## Der Aktenstreifen am linken Panelrand.
-const STRIPE_WIDTH := 3.0
+## Null Rundung — Modernist zeichnet nur rechte Winkel.
+const CORNER := 0
+## Kraeftige 2px-Kante statt Haarlinie.
+const EDGE_WIDTH := 2
+## Der rote Aktiv-Balken am linken Rand des gewaehlten Menuepunkts.
+const STRIPE_WIDTH := 5.0
 const PADDING := 16
 const GAP := 12
 
 # ---------------------------------------------------------------- Schriften
 
-## Kantige Überschriften-Schrift, die jedes Windows dabei hat.
-## Fehlt sie (Linux-Tester), fällt Godot lautlos auf die Standardschrift.
+## Archivo traegt das ganze System — Ueberschriften wie Fliesstext, fett und
+## grotesk. Fehlt sie (Tester ohne Archivo), faellt Godot lautlos auf die
+## naechste Grotesk zurueck.
 static func heading_font() -> SystemFont:
 	var font := SystemFont.new()
-	font.font_names = ["Bahnschrift", "Arial Narrow"]
+	font.font_names = ["Archivo", "Archivo Black", "Arial"]
 	return font
 
 
-## Dienstliche Schreibmaschinen-Schrift für Versionen und Status.
+## Auch Status/Version stehen in Archivo — Modernist kennt keine zweite Stimme.
+## (Als Konstante behalten, falls anderswo eine Schmalschrift gebraucht wird.)
 static func mono_font() -> SystemFont:
 	var font := SystemFont.new()
-	font.font_names = ["Consolas", "Courier New"]
+	font.font_names = ["Archivo", "Consolas", "Courier New"]
 	return font
 
 
@@ -55,94 +65,110 @@ static func build() -> Theme:
 	var heading := heading_font()
 	var mono := mono_font()
 
-	# --- Panels: dunkle Fläche, feine Kante, kaum Rundung ---
+	# --- Panels: Papier-Flaeche, kraeftige Tinten-Kante, keine Rundung ---
 	var panel := StyleBoxFlat.new()
 	panel.bg_color = PANEL
-	panel.border_color = PANEL_EDGE
+	panel.border_color = INK
 	panel.set_border_width_all(EDGE_WIDTH)
 	panel.set_corner_radius_all(CORNER)
 	panel.set_content_margin_all(PADDING)
 	theme.set_stylebox("panel", "PanelContainer", panel)
 
-	# --- Normale Knöpfe: dunkel, Hover schärft die Kante zum Akzent ---
+	# --- Normale Knoepfe: Papier mit Tinten-Kante, Hover fuellt grau ---
 	theme.set_font("font", "Button", heading)
 	theme.set_font_size("font_size", "Button", 16)
-	theme.set_color("font_color", "Button", TEXT)
-	theme.set_color("font_hover_color", "Button", Color.WHITE)
+	theme.set_color("font_color", "Button", INK)
+	theme.set_color("font_hover_color", "Button", INK)
+	theme.set_color("font_pressed_color", "Button", RED)
 	theme.set_color("font_disabled_color", "Button", TEXT_DIM)
-	theme.set_stylebox("normal", "Button", _button_box(Color("1c2023"), PANEL_EDGE))
-	theme.set_stylebox("hover", "Button", _button_box(Color("22272a"), OLIVE_BRIGHT))
-	theme.set_stylebox("pressed", "Button", _button_box(Color("101314"), OLIVE))
-	theme.set_stylebox("disabled", "Button", _button_box(Color("141719"), Color("1e2224")))
-	theme.set_stylebox("focus", "Button", StyleBoxEmpty.new())
+	theme.set_stylebox("normal", "Button", _button_box(BACKGROUND, INK))
+	theme.set_stylebox("hover", "Button", _button_box(HOVER_FILL, INK))
+	theme.set_stylebox("pressed", "Button", _button_box(PRESSED_FILL, INK))
+	theme.set_stylebox("disabled", "Button", _button_box(BACKGROUND, HAIRLINE))
+	theme.set_stylebox("focus", "Button", _focus_box())
 
-	# --- Der SPIELEN-Knopf: volle Orange-Fläche, dunkle Schrift ---
+	# --- Der SPIELEN-Knopf: volle Rot-Flaeche, weisse Schrift ---
 	theme.set_type_variation(&"PlayButton", &"Button")
-	theme.set_font_size("font_size", "PlayButton", 26)
-	theme.set_color("font_color", "PlayButton", Color("141414"))
-	theme.set_color("font_hover_color", "PlayButton", Color("000000"))
-	theme.set_color("font_disabled_color", "PlayButton", TEXT_DIM)
-	theme.set_stylebox("normal", "PlayButton", _button_box(ORANGE, ORANGE))
-	theme.set_stylebox("hover", "PlayButton", _button_box(ORANGE_BRIGHT, ORANGE_BRIGHT))
-	theme.set_stylebox("pressed", "PlayButton", _button_box(Color("b5661f"), Color("b5661f")))
-	theme.set_stylebox("disabled", "PlayButton", _button_box(Color("2a221a"), Color("3a2f22")))
+	theme.set_font_size("font_size", "PlayButton", 30)
+	theme.set_color("font_color", "PlayButton", Color.WHITE)
+	theme.set_color("font_hover_color", "PlayButton", Color.WHITE)
+	theme.set_color("font_pressed_color", "PlayButton", Color.WHITE)
+	theme.set_color("font_disabled_color", "PlayButton", Color("eae7e7"))
+	theme.set_stylebox("normal", "PlayButton", _button_box(RED, RED))
+	theme.set_stylebox("hover", "PlayButton", _button_box(RED_HOVER, RED_HOVER))
+	theme.set_stylebox("pressed", "PlayButton", _button_box(RED_PRESSED, RED_PRESSED))
+	theme.set_stylebox("disabled", "PlayButton", _button_box(Color("bab6b6"), Color("bab6b6")))
 
-	# --- Eingabefelder ---
-	theme.set_color("font_color", "LineEdit", TEXT)
+	# --- Eingabefelder: Papier, Tinten-Kante, Fokus schaltet auf Rot ---
+	theme.set_color("font_color", "LineEdit", INK)
 	theme.set_color("font_placeholder_color", "LineEdit", TEXT_DIM)
-	var line := _button_box(Color("101314"), PANEL_EDGE)
+	theme.set_color("caret_color", "LineEdit", RED)
+	var line := _button_box(BACKGROUND, INK)
 	theme.set_stylebox("normal", "LineEdit", line)
-	theme.set_stylebox("focus", "LineEdit", _button_box(Color("101314"), OLIVE_BRIGHT))
+	theme.set_stylebox("focus", "LineEdit", _button_box(BACKGROUND, RED))
 
-	# --- Fortschrittsbalken: Orange auf dunkler Rinne ---
+	# --- Fortschrittsbalken: Rot auf grauer Rinne, keine Rundung ---
 	var trough := StyleBoxFlat.new()
-	trough.bg_color = Color("101314")
-	trough.border_color = PANEL_EDGE
-	trough.set_border_width_all(1)
+	trough.bg_color = Color("d7d3d3")
+	trough.set_border_width_all(0)
 	trough.set_corner_radius_all(CORNER)
 	var fill := StyleBoxFlat.new()
-	fill.bg_color = ORANGE
+	fill.bg_color = RED
 	fill.set_corner_radius_all(CORNER)
 	theme.set_stylebox("background", "ProgressBar", trough)
 	theme.set_stylebox("fill", "ProgressBar", fill)
 
 	# --- Label-Spielarten ---
-	theme.set_color("font_color", "Label", TEXT)
+	theme.set_color("font_color", "Label", INK)
 
+	# Der grosse Hero-Titel (WHITEOUT) — steht weiss ueber der Key-Art.
 	theme.set_type_variation(&"TitleLabel", &"Label")
 	theme.set_font("font", "TitleLabel", heading)
-	theme.set_font_size("font_size", "TitleLabel", 30)
+	theme.set_font_size("font_size", "TitleLabel", 72)
 	theme.set_color("font_color", "TitleLabel", Color.WHITE)
 
+	# Abschnitts-Ueberschrift (INSTALLATION, KONTO) — kleine, dunkle Grotesk.
 	theme.set_type_variation(&"PanelTitle", &"Label")
 	theme.set_font("font", "PanelTitle", heading)
-	theme.set_font_size("font_size", "PanelTitle", 15)
-	theme.set_color("font_color", "PanelTitle", TEXT_DIM)
+	theme.set_font_size("font_size", "PanelTitle", 13)
+	theme.set_color("font_color", "PanelTitle", Color("605d5d"))
 
 	theme.set_type_variation(&"DimLabel", &"Label")
 	theme.set_color("font_color", "DimLabel", TEXT_DIM)
 
+	# Version/Status/Build — ebenfalls Archivo, gedaempft.
 	theme.set_type_variation(&"MonoLabel", &"Label")
 	theme.set_font("font", "MonoLabel", mono)
-	theme.set_font_size("font_size", "MonoLabel", 13)
-	theme.set_color("font_color", "MonoLabel", TEXT_DIM)
+	theme.set_font_size("font_size", "MonoLabel", 12)
+	theme.set_color("font_color", "MonoLabel", Color("605d5d"))
 
+	# News-Kicker (PATCH, ZONE, EVENT) — das rote Signal ueber der Kachel.
 	theme.set_type_variation(&"NewsTitle", &"Label")
 	theme.set_font("font", "NewsTitle", heading)
-	theme.set_font_size("font_size", "NewsTitle", 16)
-	theme.set_color("font_color", "NewsTitle", ORANGE_BRIGHT)
+	theme.set_font_size("font_size", "NewsTitle", 15)
+	theme.set_color("font_color", "NewsTitle", RED)
 
 	return theme
 
 
-static func _button_box(background: Color, edge: Color = PANEL_EDGE) -> StyleBoxFlat:
+static func _button_box(background: Color, edge: Color = INK) -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()
 	box.bg_color = background
 	box.border_color = edge
 	box.set_border_width_all(EDGE_WIDTH)
 	box.set_corner_radius_all(CORNER)
-	box.content_margin_left = 14.0
-	box.content_margin_right = 14.0
-	box.content_margin_top = 8.0
-	box.content_margin_bottom = 8.0
+	box.content_margin_left = 16.0
+	box.content_margin_right = 16.0
+	box.content_margin_top = 9.0
+	box.content_margin_bottom = 9.0
+	return box
+
+
+## Tastatur-Fokus: 2px roter Rahmen statt des Browser-/Godot-Standards.
+static func _focus_box() -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0, 0, 0, 0)
+	box.border_color = RED
+	box.set_border_width_all(EDGE_WIDTH)
+	box.set_corner_radius_all(CORNER)
 	return box

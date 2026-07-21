@@ -15,3 +15,4 @@ config/features=PackedStringArray("4.7")
 window/size/viewport_width=1000
 window/size/viewport_height=620
 window/size/resizable=false
+window/size/borderless=true
