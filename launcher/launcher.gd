@@ -7,6 +7,10 @@
 ##   2. Anmeldung über Steam (OpenID): Steam bestätigt, wer der Spieler ist,
 ##      und wir bekommen nur seine Steam-ID. ES GIBT KEIN PASSWORT BEI UNS —
 ##      nichts zu speichern, nichts zu verlieren.
+##   3. Der Launcher hält auch SICH SELBST aktuell (eigenes Manifest
+##      launcher_version.json, gleicher Server) — tauscht die eigene .exe
+##      aus und startet neu. Auch für den Launcher selbst bekommt niemand
+##      je wieder eine neue Datei zugeschickt.
 ##
 ## Ablauf der Steam-Anmeldung:
 ##   Launcher öffnet den Browser mit der Steam-Login-Seite. Steam schickt
@@ -29,8 +33,9 @@ const DOWNLOAD_PORT := 24569
 const CALLBACK_PORT := 27444
 
 ## Version des Launchers selbst (nicht des Spiels) — bei Launcher-Änderungen
-## von Hand hochzählen, damit Tester sagen können, welchen sie haben.
-const LAUNCHER_VERSION := "1.1"
+## von Hand hochzählen, damit Tester sagen können, welchen sie haben, UND
+## damit der Selbst-Update-Vergleich unten überhaupt etwas zu vergleichen hat.
+const LAUNCHER_VERSION := "1.2"
 
 const SESSION_FILE := "user://session.json"
 const SETTINGS_FILE := "user://settings.json"
@@ -38,12 +43,29 @@ const GAME_DIR := "user://game"
 const VERSION_FILE := "user://game/version.txt"
 const GAME_EXE := "user://game/extraction_shooter.exe"
 
+## Wohin die heruntergeladene neue Launcher-.exe erst einmal kommt, bevor
+## sie die laufende .exe ersetzt — und das Batch-Skript, das den Tausch
+## übernimmt (siehe _apply_launcher_update).
+const LAUNCHER_UPDATE_FILE := "user://launcher_update.exe"
+const LAUNCHER_UPDATE_SCRIPT := "user://apply_update.bat"
+
 enum State {CHECKING, NEEDS_UPDATE, DOWNLOADING, UNPACKING, READY, ERROR}
 
 var _state: State = State.CHECKING
 var _remote_version := ""
 var _remote_file := ""
+var _remote_sha256 := ""
 var _local_version := ""
+## Wie oft der aktuelle Download schon versucht wurde — bei einer kaputten
+## Prüfsumme oder abgebrochener Übertragung einmal automatisch neu holen,
+## bevor der Tester zur Handarbeit ("Dateien überprüfen") muss.
+var _download_attempt := 0
+
+## Selbst-Update des Launchers: Prüfsumme der geladenen neuen .exe, bis sie
+## verifiziert und eingesetzt ist.
+var _launcher_update_sha256 := ""
+var _http_launcher_version: HTTPRequest
+var _http_launcher_download: HTTPRequest
 
 var _steam_id := ""
 var _token := ""
@@ -92,6 +114,10 @@ func _ready() -> void:
 	_load_session()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(GAME_DIR))
 	_local_version = _read_local_version()
+	# Der Selbst-Update-Check laeuft IMMER, unabhaengig vom Auto-Update-
+	# Schalter unten — der gilt nur fuer das Spiel. Ein veralteter Launcher
+	# mit einem Bug darin darf sich nicht selbst aus der Update-Kette werfen.
+	_check_launcher_update()
 	# Automatische Update-Suche laesst sich in den Einstellungen abschalten.
 	if _settings.get("auto_update", true):
 		_check_version()
@@ -441,6 +467,8 @@ func _load_patchnotes() -> void:
 
 func _on_patchnotes_response(result: int, code: int, _headers: PackedStringArray,
 		body: PackedByteArray) -> void:
+	_http_patch.queue_free()
+	_http_patch = null
 	for child in _patch_box.get_children():
 		child.queue_free()
 
@@ -552,6 +580,8 @@ func _load_roadmap() -> void:
 
 func _on_roadmap_response(result: int, code: int, _headers: PackedStringArray,
 		body: PackedByteArray) -> void:
+	_http_road.queue_free()
+	_http_road = null
 	for child in _road_box.get_children():
 		child.queue_free()
 
@@ -1081,6 +1111,8 @@ func _check_version() -> void:
 
 func _on_version_response(result: int, code: int, _headers: PackedStringArray,
 		body: PackedByteArray) -> void:
+	_http_version.queue_free()
+	_http_version = null
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		# Kein Server heißt nicht kein Spiel: Was installiert ist, bleibt
 		# spielbar — nur eben ohne Update-Garantie.
@@ -1097,6 +1129,7 @@ func _on_version_response(result: int, code: int, _headers: PackedStringArray,
 		return
 	_remote_version = data.version
 	_remote_file = data.file
+	_remote_sha256 = String(data.get("sha256", ""))
 	# Die echte Downloadgröße steht im Manifest — nichts wird geschätzt.
 	if data.has("size_mb") and _size_label != null:
 		_size_label.text = "%d MB" % int(data.size_mb)
@@ -1110,6 +1143,7 @@ func _on_version_response(result: int, code: int, _headers: PackedStringArray,
 
 
 func _start_download() -> void:
+	_download_attempt += 1
 	_state = State.DOWNLOADING
 	_set_status("Lade Version %s ..." % _remote_version)
 	_progress.visible = true
@@ -1127,10 +1161,56 @@ func _start_download() -> void:
 func _on_download_done(result: int, code: int, _headers: PackedStringArray,
 		_body: PackedByteArray) -> void:
 	_progress.visible = false
+	_http_download.queue_free()
+	_http_download = null
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
-		_fail("Download fehlgeschlagen (Code %d)" % code)
+		_retry_or_fail("Download fehlgeschlagen (Code %d)" % code)
 		return
+	if not _remote_sha256.is_empty():
+		_set_status("Prüfe Download ...")
+		var actual := _sha256_of_file(GAME_DIR + "/download.zip")
+		if actual != _remote_sha256.to_lower():
+			_retry_or_fail("Download beschädigt (Prüfsumme falsch)")
+			return
+	_download_attempt = 0
 	_unpack()
+
+
+## Ein einzelner kaputter Download ist meistens nur ein Netzwerk-Aussetzer —
+## deshalb einmal automatisch neu versuchen, statt den Tester sofort zur
+## Handarbeit ("Dateien überprüfen") zu schicken. Bleibt es beim zweiten
+## Mal kaputt, ist es vermutlich kein Zufall mehr.
+func _retry_or_fail(message: String) -> void:
+	_cleanup_partial_download()
+	if _download_attempt < 2:
+		_set_status("%s — versuche erneut ..." % message)
+		_start_download()
+	else:
+		_download_attempt = 0
+		_fail(message + " — auch nach erneutem Versuch")
+
+
+func _cleanup_partial_download() -> void:
+	var path := GAME_DIR + "/download.zip"
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## Berechnet den SHA-256-Hash einer Datei blockweise — Downloads (Spiel wie
+## Launcher) können zu groß fürs Auf-einmal-Einlesen sein.
+func _sha256_of_file(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return ""
+	var ctx := HashingContext.new()
+	ctx.start(HashingContext.HASH_SHA256)
+	var remaining := file.get_length()
+	while remaining > 0:
+		var chunk_size: int = min(remaining, 65536)
+		ctx.update(file.get_buffer(chunk_size))
+		remaining -= chunk_size
+	file.close()
+	return ctx.finish().hex_encode()
 
 
 ## Entpackt das Spiel-ZIP nach user://game/.
@@ -1183,6 +1263,119 @@ func _fail(message: String) -> void:
 	_status.add_theme_color_override("font_color", LauncherTheme.RED)
 
 
+# ------------------------------------------------------- Launcher-Selbst-Update
+#
+# Gleiches Prinzip wie beim Spiel, aber für die eigene .exe: ein Manifest
+# (launcher_version.json, veröffentlicht mit tools/publish_launcher.ps1)
+# nennt Version, Dateiname und SHA-256. Ist die Serverversion neuer, wird
+# die neue .exe heruntergeladen, ihre Prüfsumme verifiziert, und ein
+# kleines Batch-Skript tauscht sie gegen die laufende .exe aus, sobald
+# dieser Prozess sich beendet hat. Ohne Server oder bei Abweichung passiert
+# einfach nichts — die installierte Version läuft normal weiter.
+
+func _check_launcher_update() -> void:
+	_http_launcher_version = HTTPRequest.new()
+	add_child(_http_launcher_version)
+	_http_launcher_version.request_completed.connect(_on_launcher_version_response)
+	_http_launcher_version.request("http://%s:%d/launcher_version.json" % [SERVER, DOWNLOAD_PORT])
+
+
+func _on_launcher_version_response(result: int, code: int, _headers: PackedStringArray,
+		body: PackedByteArray) -> void:
+	_http_launcher_version.queue_free()
+	_http_launcher_version = null
+	# Kein Manifest erreichbar oder keins veröffentlicht: einfach weiterlaufen.
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		return
+	var data: Variant = JSON.parse_string(body.get_string_from_utf8())
+	if not (data is Dictionary) or not data.has("version") or not data.has("file"):
+		return
+	if not _is_newer(String(data.version), LAUNCHER_VERSION):
+		return
+	_launcher_update_sha256 = String(data.get("sha256", ""))
+	_download_launcher_update(String(data.file))
+
+
+## Numerischer Versionsvergleich ("1.2" vs "1.10") — ein reiner Stringvergleich
+## würde "1.10" fälschlich als älter als "1.2" einstufen.
+func _is_newer(remote: String, local: String) -> bool:
+	var remote_parts := remote.split(".")
+	var local_parts := local.split(".")
+	for i in maxi(remote_parts.size(), local_parts.size()):
+		var remote_value := int(remote_parts[i]) if i < remote_parts.size() else 0
+		var local_value := int(local_parts[i]) if i < local_parts.size() else 0
+		if remote_value != local_value:
+			return remote_value > local_value
+	return false
+
+
+func _download_launcher_update(filename: String) -> void:
+	_set_status("Lade neue Launcher-Version ...")
+	_http_launcher_download = HTTPRequest.new()
+	add_child(_http_launcher_download)
+	_http_launcher_download.download_file = LAUNCHER_UPDATE_FILE
+	_http_launcher_download.request_completed.connect(_on_launcher_update_downloaded)
+	var error := _http_launcher_download.request(
+		"http://%s:%d/%s" % [SERVER, DOWNLOAD_PORT, filename])
+	if error != OK:
+		push_warning("Launcher-Update: Download startet nicht")
+
+
+func _on_launcher_update_downloaded(result: int, code: int, _headers: PackedStringArray,
+		_body: PackedByteArray) -> void:
+	_http_launcher_download.queue_free()
+	_http_launcher_download = null
+	# Ein gescheitertes Selbst-Update darf niemals den normalen Start
+	# verhindern — im Zweifel läuft die installierte Version einfach weiter.
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		push_warning("Launcher-Update: Download fehlgeschlagen (Code %d)" % code)
+		_delete_if_exists(LAUNCHER_UPDATE_FILE)
+		return
+	if not _launcher_update_sha256.is_empty():
+		var actual := _sha256_of_file(LAUNCHER_UPDATE_FILE)
+		if actual != _launcher_update_sha256.to_lower():
+			push_warning("Launcher-Update: Prüfsumme falsch — breche ab")
+			_delete_if_exists(LAUNCHER_UPDATE_FILE)
+			return
+	_apply_launcher_update()
+
+
+func _delete_if_exists(path: String) -> void:
+	if FileAccess.file_exists(path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## Windows lässt eine laufende .exe nicht durch sich selbst überschreiben —
+## deshalb übernimmt ein kleines Batch-Skript den Tausch: warten, bis dieser
+## Prozess sich beendet hat, kopieren, neu starten, sich selbst löschen.
+## Das Skript startet noch VOR dem eigenen _fail()/quit(), läuft also mit
+## dem Prozess um die Wette — daher die Wiederholschleife statt eines
+## einzelnen Versuchs.
+func _apply_launcher_update() -> void:
+	var current_exe := OS.get_executable_path()
+	var new_exe := ProjectSettings.globalize_path(LAUNCHER_UPDATE_FILE)
+	var script_path := ProjectSettings.globalize_path(LAUNCHER_UPDATE_SCRIPT)
+	var lines := PackedStringArray([
+		"@echo off",
+		":wait",
+		"timeout /t 1 /nobreak > nul",
+		"copy /y \"%s\" \"%s\" > nul" % [new_exe, current_exe],
+		"if errorlevel 1 goto wait",
+		"del \"%s\"" % new_exe,
+		"start \"\" \"%s\"" % current_exe,
+		"del \"%~f0\"",
+	])
+	var file := FileAccess.open(script_path, FileAccess.WRITE)
+	if file == null:
+		push_warning("Launcher-Update: Update-Skript lässt sich nicht schreiben")
+		return
+	file.store_string("\r\n".join(lines))
+	file.close()
+	_set_status("Starte neue Version ...")
+	OS.create_process("cmd.exe", ["/c", script_path])
+	get_tree().quit()
+
+
 func _process(_delta: float) -> void:
 	if _state == State.DOWNLOADING and _http_download != null:
 		var total := _http_download.get_body_size()
@@ -1202,6 +1395,8 @@ func _load_news() -> void:
 
 func _on_news_response(result: int, code: int, _headers: PackedStringArray,
 		body: PackedByteArray) -> void:
+	_http_news.queue_free()
+	_http_news = null
 	for child in _news_box.get_children():
 		child.queue_free()
 
@@ -1314,6 +1509,8 @@ func _verify_with_server(openid_query: String) -> void:
 
 func _on_auth_response(result: int, code: int, _headers: PackedStringArray,
 		body: PackedByteArray) -> void:
+	_http_auth.queue_free()
+	_http_auth = null
 	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 		_login_status.text = "Anmeldung abgelehnt (Code %d) — Server an?" % code
 		return

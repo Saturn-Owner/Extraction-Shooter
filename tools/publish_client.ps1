@@ -3,10 +3,12 @@
 #   .\tools\publish_client.ps1 -Godot "<Godot-Console-Exe>" -Key "<SSH-Schluessel>"
 #
 # Ablauf: exportiert die .exe, packt sie in ein ZIP, schreibt version.json
-# (Versionsnummer aus dem Git-Stand) und legt beides auf den VPS in den
-# Download-Ordner. Ab dann zieht jeder Launcher beim naechsten Start das
-# Update automatisch. WICHTIG: Danach auch den Server ausrollen
-# (tools/deploy_server.sh), sonst passen Client und Server nicht zusammen.
+# (Versionsnummer aus dem Git-Stand, plus SHA-256-Pruefsumme des ZIPs - der
+# Launcher verifiziert damit jeden Download, bevor er ihn entpackt) und legt
+# beides auf den VPS in den Download-Ordner. Ab dann zieht jeder Launcher
+# beim naechsten Start das Update automatisch. WICHTIG: Danach auch den
+# Server ausrollen (tools/deploy_server.sh), sonst passen Client und Server
+# nicht zusammen.
 
 param(
     [string]$Godot = "C:\Users\Anwender\Downloads\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe",
@@ -46,8 +48,9 @@ if (Test-Path $zip) { Remove-Item $zip }
 Compress-Archive -Path $exe -DestinationPath $zip
 # Die echte Downloadgroesse wandert mit ins Manifest - der Launcher zeigt sie an.
 $sizeMb = [math]::Round((Get-Item $zip).Length / 1MB)
-@{ version = $version; file = "extraction_beta.zip"; size_mb = $sizeMb } | ConvertTo-Json |
-    Out-File -Encoding ascii (Join-Path $stage "version.json")
+$hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower()
+@{ version = $version; file = "extraction_beta.zip"; size_mb = $sizeMb; sha256 = $hash } |
+    ConvertTo-Json | Out-File -Encoding ascii (Join-Path $stage "version.json")
 
 Write-Host "Lade auf den VPS..." -ForegroundColor Cyan
 $sshArgs = @("-o", "BatchMode=yes")

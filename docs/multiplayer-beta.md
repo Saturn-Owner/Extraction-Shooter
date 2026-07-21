@@ -50,8 +50,15 @@ Mini-Godot-Projekt unter `launcher/`). Der Launcher
    unser Server prüft die Antwort gegen — wir speichern keine Passwörter).
    Anmelden ist optional, Gast geht weiterhin.
 2. **hält das Spiel aktuell**: vergleicht `version.json` vom VPS mit der
-   installierten Version, lädt bei Bedarf das ZIP und entpackt es.
-3. **startet das Spiel** mit `--name`/`--token`; das Menü übernimmt beides.
+   installierten Version, lädt bei Bedarf das ZIP herunter, verifiziert
+   dessen SHA-256-Prüfsumme (im Manifest) und entpackt es erst danach. Ist
+   die Prüfsumme falsch oder der Download abgebrochen, wird einmal
+   automatisch neu versucht, bevor ein Fehler steht.
+3. **hält sich selbst aktuell**: gleiches Prinzip über ein eigenes Manifest
+   `launcher_version.json` — lädt bei Bedarf eine neue `ExtractionLauncher.exe`,
+   verifiziert sie, tauscht sich per Batch-Skript aus und startet neu.
+   Niemand bekommt je wieder eine neue Launcher-Datei zugeschickt.
+4. **startet das Spiel** mit `--name`/`--token`; das Menü übernimmt beides.
 
 Neuen Spielstand veröffentlichen (beides nötig, sonst weist der Server
 alte Clients ab — `Net.PROTOCOL_VERSION` bei Protokolländerungen erhöhen!):
@@ -59,9 +66,11 @@ alte Clients ab — `Net.PROTOCOL_VERSION` bei Protokolländerungen erhöhen!):
     .\tools\publish_client.ps1 -Godot "<Godot-Console-Exe>" -Key "<SSH-Schlüssel>"
     ./tools/deploy_server.sh root@193.23.160.41 <SSH-Schlüssel>     # Git Bash
 
-Launcher selbst exportieren (nur nötig, wenn sich der Launcher ändert):
-`launcher/export_presets.example.cfg` nach `export_presets.cfg` kopieren,
-dann im Launcher-Ordner `--export-release "Windows Launcher"`.
+Neue Launcher-Version veröffentlichen (nur nötig, wenn sich der Launcher
+selbst ändert — vorher `LAUNCHER_VERSION` in `launcher/launcher.gd` von
+Hand hochzählen, sonst hält der neue Launcher sich selbst für aktuell):
+
+    .\tools\publish_launcher.ps1 -Godot "<Godot-Console-Exe>" -Key "<SSH-Schlüssel>"
 
 Dienste auf dem VPS: `extraction-server` (Spiel, UDP 24567 + Auth TCP 24568)
 und `extraction-downloads` (Updates, TCP 24569).

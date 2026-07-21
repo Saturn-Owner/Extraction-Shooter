@@ -2,8 +2,8 @@ EXTRACTION SHOOTER — MULTIPLAYER-BETA
 =====================================
 
 Danke fuers Mittesten! Du brauchst nur EINE Datei: den Launcher.
-Er laedt das Spiel selbst herunter und haelt es automatisch aktuell —
-du musst nie wieder etwas geschickt bekommen.
+Er laedt das Spiel selbst herunter und haelt sich selbst UND das Spiel
+automatisch aktuell — du musst nie wieder etwas geschickt bekommen.
 
 LOSLEGEN
 --------
