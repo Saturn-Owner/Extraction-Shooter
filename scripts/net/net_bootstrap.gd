@@ -13,6 +13,7 @@
 extends Node
 
 const ARENA_SCENE := "res://scenes/levels/arena_beta.tscn"
+const MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 
 var _menu: MainMenu
 
@@ -75,7 +76,11 @@ func _port_from_args(args: PackedStringArray) -> int:
 
 func _show_menu() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_menu = MainMenu.new()
+	# Das Menü ist jetzt eine echte Szene (Design des Kollegen: Charakter-
+	# vorschau, Einstellungen) statt im Code gebaut — deshalb laden statt
+	# .new(), sonst fehlen die @onready-Kindknoten, die das Skript erwartet.
+	var packed: PackedScene = load(MENU_SCENE)
+	_menu = packed.instantiate()
 	_menu.name = "Menue"
 	_menu.connect_requested.connect(_on_connect_requested)
 	_menu.solo_requested.connect(_on_solo_requested)
