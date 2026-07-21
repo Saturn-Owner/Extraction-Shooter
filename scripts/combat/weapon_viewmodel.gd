@@ -23,6 +23,38 @@
 class_name WeaponViewmodel
 extends Node3D
 
+## ---------------------------------------------------------------------------
+## ABLAUF DER LEEREN NACHLADUNG NACH DEM MAGAZINWECHSEL
+##
+## `_animate_magazine_swap()` ist mit ihren eigenen Bruchteilen (0/0.30/0.45/
+## 0.85, teils abweichend je Waffe) fertig, sobald das neue Magazin sitzt.
+## Was danach passiert, ist in eigene Phasen aufgeteilt, statt alles auf
+## einmal ab 0.85 loszutreten — sonst dreht sich die Waffe, waehrend das
+## Magazin noch gar nicht sitzt, und der Ladehebelzug faellt zeitlich mit der
+## Drehung zusammen. Beides wurde genau so gemeldet und sah dadurch wie eine
+## einzige verwaschene Bewegung aus statt wie drei einzelne Handgriffe.
+##
+##   0.85 -- RACK_TURN_START_PROGRESS      Pause. Nichts bewegt sich.
+##   RACK_TURN_START_PROGRESS -- HANDLE_PULL_START_PROGRESS
+##                                          Die Kamera dreht sich zur Seite
+##                                          (weapon_view.gd liest diese Grenze
+##                                          mit, siehe dort).
+##   HANDLE_PULL_START_PROGRESS -- 1.0      Der Ladehebel wird gezogen.
+##
+## Als Bruchteile von 0..1 und nicht als feste Sekunden, weil der gesamte
+## Nachladevorgang selbst schon in Bruchteilen rechnet (siehe notify_reload).
+## weapon_view.gd braucht dieselben Grenzen fuer die Kameradrehung — deshalb
+## stehen sie hier und nicht als Zahlen, die in zwei Dateien auseinanderlaufen
+## koennten.
+##
+## VARIABLEN, KEINE KONSTANTEN: Eine Waffe mit eigenem, laengerem
+## `reload_time_empty` (siehe WeaponData) und einer eigenen, mehrstufigen
+## `_animate_magazine_swap()` braucht auch eigene Grenzen dafuer, wo ihr
+## Magazinwechsel endet und wo ihre Drehung beginnen darf — siehe
+## `_configure()` der AKM fuer ein Beispiel.
+var rack_turn_start_progress: float = 0.87
+var handle_pull_start_progress: float = 0.93
+
 ## Hoehe der AKTIVEN Visierlinie ueber dem Modellursprung.
 ##
 ## weapon_view.gd senkt das Modell beim Zielen um genau diesen Wert ab, damit
@@ -310,9 +342,15 @@ func notify_reload(progress: float, from_empty: bool,
 	# Waffe nie verlassen hat — siehe Weapon._reload_chamber_only.
 	if not chamber_only:
 		_animate_magazine_swap(progress)
-	# Bei leergeschossener Waffe muss der Verschluss zum Schluss vor.
-	if from_empty and progress > 0.85:
-		_handle_pull = _ramp(progress, 0.85, 1.0)
+	# Bei leergeschossener Waffe muss der Verschluss zum Schluss vor — aber
+	# erst NACH der Pause und der Kameradrehung (siehe handle_pull_start_
+	# progress oben), nicht schon direkt nach dem Magazinwechsel.
+	if from_empty and progress > handle_pull_start_progress:
+		var t := _ramp(progress, handle_pull_start_progress, 1.0)
+		# Quadratisch statt linear: Der Hebel bewegt sich am Anfang kaum und
+		# schnellt zum Schluss. Linear anwuchs sieht aus wie eine gleichmaessig
+		# laufende Maschine; das hier liest sich als Ruck einer echten Hand.
+		_handle_pull = t * t
 	else:
 		_handle_pull = 0.0
 
