@@ -24,8 +24,16 @@ $hash = (git -C $projectPath rev-parse --short HEAD).Trim()
 $version = "b$count-$hash"
 
 Write-Host "Exportiere Client (Version $version)..." -ForegroundColor Cyan
-& $Godot --headless --path $projectPath --export-release "Windows Client" 2>&1 | Out-Null
 $exe = Join-Path $projectPath "build\windows\extraction_shooter.exe"
+if (Test-Path $exe) { Remove-Item $exe }
+# Windows PowerShell 5.1 macht aus jeder harmlosen Godot-Warnung auf
+# stderr einen Abbruch, sobald ErrorActionPreference=Stop gilt. Fuer den
+# einen Aufruf lokal entschaerfen - ob der Export geklappt hat, sagt die
+# Datei selbst.
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+& $Godot --headless --path $projectPath --export-release "Windows Client" 2>&1 | Out-Null
+$ErrorActionPreference = $previousPreference
 if (-not (Test-Path $exe)) {
     Write-Host "Export fehlgeschlagen - keine exe unter build\windows" -ForegroundColor Red
     exit 1

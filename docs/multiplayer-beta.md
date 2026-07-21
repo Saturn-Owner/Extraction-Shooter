@@ -41,6 +41,31 @@ Neue Befehle registriert jedes System selbst über
 `DevConsole.instance.register_command(...)` — die Konsole kennt keine
 Spiellogik.
 
+## Launcher (der Weg für Tester)
+
+Tester bekommen **eine** Datei: `ExtractionLauncher.exe` (eigenes
+Mini-Godot-Projekt unter `launcher/`). Der Launcher
+
+1. **meldet über Steam an** (Web-Login im Browser; Steam bestätigt die ID,
+   unser Server prüft die Antwort gegen — wir speichern keine Passwörter).
+   Anmelden ist optional, Gast geht weiterhin.
+2. **hält das Spiel aktuell**: vergleicht `version.json` vom VPS mit der
+   installierten Version, lädt bei Bedarf das ZIP und entpackt es.
+3. **startet das Spiel** mit `--name`/`--token`; das Menü übernimmt beides.
+
+Neuen Spielstand veröffentlichen (beides nötig, sonst weist der Server
+alte Clients ab — `Net.PROTOCOL_VERSION` bei Protokolländerungen erhöhen!):
+
+    .\tools\publish_client.ps1 -Godot "<Godot-Console-Exe>" -Key "<SSH-Schlüssel>"
+    ./tools/deploy_server.sh root@193.23.160.41 <SSH-Schlüssel>     # Git Bash
+
+Launcher selbst exportieren (nur nötig, wenn sich der Launcher ändert):
+`launcher/export_presets.example.cfg` nach `export_presets.cfg` kopieren,
+dann im Launcher-Ordner `--export-release "Windows Launcher"`.
+
+Dienste auf dem VPS: `extraction-server` (Spiel, UDP 24567 + Auth TCP 24568)
+und `extraction-downloads` (Updates, TCP 24569).
+
 ## Export (Client-.exe und Server-Build)
 
 Einmalig: Im Editor unter *Editor → Exportvorlagen verwalten* die Vorlagen
