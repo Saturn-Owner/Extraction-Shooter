@@ -31,9 +31,12 @@ func _initialize() -> void:
 	_test_chamber_only_reload()
 	await _test_viewmodel_arms()
 	_test_aiming_reduces_spread()
+	_test_aiming_reduces_recoil()
 	_test_generated_meshes_are_closed()
 	_test_every_weapon_builds()
 	_test_viewmodels_are_unique()
+	await _test_handle_rack_kicks_pose()
+	await _test_aiming_reduces_visual_recoil()
 
 	# Laeuft asynchron weiter und ruft am Ende _finish() auf: Der Waffenwechsel
 	# braucht einen echten Frame, damit _ready() im Szenenbaum durchlaeuft.
@@ -572,6 +575,98 @@ func _test_aiming_reduces_spread() -> void:
 	weapon.free()
 
 
+## Wie _test_aiming_reduces_spread, nur fuer den tatsaechlichen Rueckstoss
+## (den, der die Kamera anhebt — siehe Weapon._emit_recoil() und
+## PlayerController._on_recoil_kick()), nicht fuer die Schussstreuung.
+##
+## Beide Werte kommen aus derselben Ursache (Anlage an Schulter und Wange),
+## sind aber zwei unabhaengige Zahlen in den Waffendaten
+## (ads_spread_multiplier / ads_recoil_multiplier) und zwei unabhaengige
+## Codepfade — der eine Test haette den anderen Fehler nicht gefangen.
+func _test_aiming_reduces_recoil() -> void:
+	_section("Zielen verringert den Rueckstoss")
+
+	var weapon := _make_weapon()
+	var kicks: Array[Vector2] = []
+	weapon.recoil_kick.connect(func(v: float, h: float) -> void: kicks.append(Vector2(v, h)))
+
+	# _shots_since_release VOR jedem Schuss zuruecksetzen: _emit_recoil()
+	# laesst den Rueckstoss innerhalb einer Salve anwachsen (siehe dort), das
+	# waere hier nur Rauschen fuer einen Vergleich, der auf das Zielen abzielt.
+	weapon._shots_since_release = 0
+	weapon.aiming = false
+	weapon._emit_recoil()
+	var hip_kick: Vector2 = kicks[-1]
+
+	weapon._shots_since_release = 0
+	weapon.aiming = true
+	weapon._emit_recoil()
+	var ads_kick: Vector2 = kicks[-1]
+
+	_check(ads_kick.length() < hip_kick.length(),
+		"gezielter Rueckstoss ist kleiner (%.3f gegen %.3f)"
+			% [ads_kick.length(), hip_kick.length()])
+
+	var ratio := ads_kick.length() / maxf(0.0001, hip_kick.length())
+	var expected := weapon.data.ads_recoil_multiplier
+	_check(absf(ratio - expected) < 0.02,
+		"Rueckstossfaktor passt zu den Daten (gemessen %.2f, erwartet %.2f)"
+			% [ratio, expected])
+
+	weapon.free()
+
+
+## Derselbe Faktor (ads_recoil_multiplier) muss auch den SICHTBAREN Kick im
+## Bild daempfen, nicht nur den kamerawirksamen Rueckstoss aus dem Test oben.
+##
+## ---------------------------------------------------------------------------
+## WARUM DAS EIN EIGENER TEST IST
+##
+## Vorher stand hier in weapon_view.gd ein fest verdrahteter Wert (0.72) fuer
+## JEDE Waffe gleich — deshalb konnte "beim Zielen weniger Rueckstoss" am
+## kamerawirksamen Wert eingestellt werden, ohne dass sich am sichtbaren Kick
+## etwas aenderte: Die Visierung waere trotzdem aus dem Bild gesprungen. Erst
+## seit `_on_fired()` denselben `ads_recoil_multiplier` liest wie
+## `Weapon._emit_recoil()`, ziehen beide am selben Strang.
+func _test_aiming_reduces_visual_recoil() -> void:
+	_section("Zielen verringert den sichtbaren Waffen-Kick")
+
+	var scene: PackedScene = load("res://scenes/player/player.tscn")
+	var player := scene.instantiate() as PlayerController
+	root.add_child(player)
+	await process_frame
+
+	var view := player.weapon_view
+	_check(view != null, "Waffenansicht vorhanden")
+	if view == null:
+		player.free()
+		return
+
+	view._aim_progress = 0.0
+	view._recoil_velocity = Vector3.ZERO
+	view._recoil_angular_velocity = 0.0
+	view._on_fired(null, 30)
+	var hip_kick := view._recoil_velocity.length() + absf(view._recoil_angular_velocity)
+
+	view._aim_progress = 1.0
+	view._recoil_velocity = Vector3.ZERO
+	view._recoil_angular_velocity = 0.0
+	view._on_fired(null, 30)
+	var ads_kick := view._recoil_velocity.length() + absf(view._recoil_angular_velocity)
+
+	_check(ads_kick < hip_kick,
+		"gezielter Waffen-Kick ist kleiner (%.4f gegen %.4f)" % [ads_kick, hip_kick])
+
+	var ratio := ads_kick / maxf(0.0001, hip_kick)
+	var expected: float = player.weapon.data.ads_recoil_multiplier \
+			if player.weapon != null and player.weapon.data != null else 1.0
+	_check(absf(ratio - expected) < 0.02,
+		"Kick-Faktor passt zu den Daten (gemessen %.2f, erwartet %.2f)"
+			% [ratio, expected])
+
+	player.free()
+
+
 func _average_deviation(weapon: Weapon, forward: Vector3, samples: int) -> float:
 	var total := 0.0
 	for i in range(samples):
@@ -761,6 +856,8 @@ func _test_every_weapon_builds() -> void:
 					% [label, model.muzzle_point.position.z, model.muzzle_z])
 
 		_check_sight_line(model, label)
+		_check_magazine_animates(model, label)
+		_check_charging_handle_animates(model, label)
 
 		if weapon_data.has_own_viewmodel():
 			own += 1
@@ -892,6 +989,210 @@ func _highest_in_corridor(node: Node, transform: Transform3D,
 	return best
 
 
+## Wenn eine Waffe ein Magazin hat, muss es sich beim Nachladen auch bewegen.
+##
+## ---------------------------------------------------------------------------
+## WARUM DAS EIN EIGENER TEST IST
+##
+## `_animate_magazine_swap()` in weapon_viewmodel.gd ist generisch — sie
+## bewegt einfach `magazine.position`, ganz gleich, welche Waffe das Magazin
+## gehoert. Ob eine bestimmte Waffe ueberhaupt einen "Magazine"-Knoten mit der
+## richtigen Ruhelage anbietet, ist dagegen Sache des jeweiligen Modells.
+##
+## Bei der AKM steckte das Magazin als eigenes Mesh im Modellbaum, aber ohne
+## eigenen beweglichen Elternknoten — die Animation lief also ins Leere, ohne
+## dass ein Fehler aufgetaucht waere: `get_node_or_null("Magazine")` liefert
+## bei Nichtfund einfach `null`, und der generische Code ueberspringt still,
+## wenn `magazine == null`. Ein fehlendes Magazin faellt so nur beim Hinsehen
+## auf, nicht im Test. Diese Pruefung schliesst genau diese Luecke: Wo ein
+## Magazin gebaut wird, muss es sich waehrend des Nachladens auch WIRKLICH
+## von seiner Ruhelage entfernen.
+##
+## Waffen ohne Magazin (Flinte, Revolver) haben keinen "Magazine"-Knoten —
+## das ist keine Luecke, sondern Absicht, und wird hier uebersprungen.
+func _check_magazine_animates(model: WeaponViewmodel, label: String) -> void:
+	if model.magazine == null:
+		return
+
+	# Der Pivot selbst muss ohne Grunddrehung starten. `_animate_magazine_swap`
+	# SETZT rotation_degrees waehrend der Animation, statt dazuzuaddieren — eine
+	# Grunddrehung auf dem Pivot wuerde dabei ueberschrieben und das Magazin
+	# stuende verdreht in der Luft, sobald das Nachladen beginnt. Genau das ist
+	# der AKM passiert, weil ihr Magazin-Mesh aus der FBX-Konvertierung eine
+	# krumme Grunddrehung mitbrachte. Die gehoert auf den Mesh-Kindknoten, den
+	# die Animation nie anfasst — nicht auf den Pivot.
+	_check(model.magazine.rotation_degrees.is_equal_approx(Vector3.ZERO),
+		"%s: Magazin-Pivot hat keine Grunddrehung (%s)"
+			% [label, model.magazine.rotation_degrees])
+
+	var home := model.magazine.position
+
+	# Mitten im Wechsel muss das Magazin sichtbar unterwegs sein — heraus-
+	# gefallen oder auf dem Weg zurueck, beides ist ein Abstand von der Ruhe.
+	model.notify_reload(0.15, false)
+	var mid_distance := model.magazine.position.distance_to(home)
+	_check(mid_distance > 0.01,
+		"%s: Magazin bewegt sich beim Nachladen (%.4f m von der Ruhelage)"
+			% [label, mid_distance])
+
+	# Am Ende der Animation muss es wieder sitzen — sonst haengt das neue
+	# Magazin sichtbar daneben.
+	model.notify_sequence_ended()
+	_check(model.magazine.position.distance_to(home) < 0.0001,
+		"%s: Magazin sitzt nach dem Nachladen wieder in der Ruhelage" % label)
+
+
+## Wie _check_magazine_animates, nur fuer den Ladehebel — und nur bei einer
+## LEEREN Nachladung: `notify_reload(progress, from_empty)` bewegt den
+## Ladehebel laut weapon_viewmodel.gd nur, wenn `from_empty == true` und erst
+## im letzten Fuenftel der Zeit (progress > 0.85). Waffen ohne Ladehebel
+## (Pistole, Flinte — die schnellen selbst vor bzw. haben keinen) haben
+## keinen "ChargingHandle"-Knoten und werden hier uebersprungen, keine Luecke.
+func _check_charging_handle_animates(model: WeaponViewmodel, label: String) -> void:
+	if model.charging_handle == null:
+		return
+
+	# Dieselbe Fehlerklasse wie beim Magazin: Der Pivot darf keine
+	# Grunddrehung haben, sonst ueberschreibt eine kuenftige Rotations-
+	# animation sie und das Teil steht verdreht in der Luft.
+	_check(model.charging_handle.rotation_degrees.is_equal_approx(Vector3.ZERO),
+		"%s: Ladehebel-Pivot hat keine Grunddrehung (%s)"
+			% [label, model.charging_handle.rotation_degrees])
+
+	var home := model.charging_handle.position
+
+	# notify_reload() setzt nur _handle_pull — die tatsaechliche Position des
+	# Ladehebels rechnet erst update_mechanics() jeden Frame aus. Ohne den
+	# Aufruf hier wuerde dieser Test immer gruen sein, ganz gleich, was
+	# notify_reload() tut.
+	#
+	# Taktische Nachladung (noch Munition im Magazin): Der Ladehebel bleibt
+	# stehen — er wird nur gezogen, wenn die Waffe wirklich leer war.
+	model.notify_reload(0.95, false)
+	model.update_mechanics(0.0)
+	_check(model.charging_handle.position.distance_to(home) < 0.0001,
+		"%s: Ladehebel bleibt bei taktischer Nachladung stehen" % label)
+
+	# Leere Nachladung, spaet in der Animation: Jetzt muss er sich bewegen.
+	model.notify_reload(0.95, true)
+	model.update_mechanics(0.0)
+	var pulled_distance := model.charging_handle.position.distance_to(home)
+	_check(pulled_distance > 0.001,
+		"%s: Ladehebel wird bei leerer Nachladung gezogen (%.4f m von der Ruhelage)"
+			% [label, pulled_distance])
+
+	# Danach wieder in Ruhelage.
+	model.notify_sequence_ended()
+	model.update_mechanics(0.0)
+	_check(model.charging_handle.position.distance_to(home) < 0.0001,
+		"%s: Ladehebel sitzt nach dem Nachladen wieder in der Ruhelage" % label)
+
+
+## Dreht sich die ganze Waffe waehrend einer leeren Nachladung zur Seite —
+## aber ERST, nachdem das Magazin sitzt, nicht schon waehrend des
+## Magazinwechsels? Und nicht bei einer taktischen Nachladung? Und findet sie
+## am Ende wieder zurueck?
+##
+## ---------------------------------------------------------------------------
+## WARUM DAS EIN EIGENER, VON DER WAFFE UNABHAENGIGER TEST IST
+##
+## Die Drehung in weapon_view.gd ist generisch: Sie haengt nur an
+## `_sequence_kind`/`_sequence_from_empty`/`_sequence_progress` (WeaponView-
+## eigener Zustand) und weiss nichts von Magazinen oder Ladehebel-Meshes. Ob
+## sie tatsaechlich passiert — und zur richtigen Zeit —, haengt deshalb nicht
+## am Modell (das ist oben schon geprueft), sondern an dieser Verdrahtung.
+## Getestet wird hier die AR-15 (Startwaffe) — die Aussage gilt aber fuer
+## jede Waffe.
+##
+## Angestossen wird ueber `_on_reload_started()`, denselben Signal-Handler,
+## den `Weapon.reload_started` im echten Spiel aufruft. Fortgeschritten wird
+## ueber `_update_sequence()`, nicht ueber `_viewmodel.notify_reload()`
+## direkt — nur `_update_sequence()` pflegt `_sequence_progress`, an dem die
+## Drehung haengt.
+func _test_handle_rack_kicks_pose() -> void:
+	_section("Ladehebel-Drehung waehrend einer leeren Nachladung")
+
+	var scene: PackedScene = load("res://scenes/player/player.tscn")
+	var player := scene.instantiate() as PlayerController
+	root.add_child(player)
+	await process_frame
+
+	var view := player.weapon_view
+	var viewmodel := view.get_viewmodel() if view != null else null
+	_check(viewmodel != null, "Waffenansicht mit Modell vorhanden")
+	if viewmodel == null:
+		player.free()
+		return
+
+	var pose := view.get_node_or_null("Pose") as Node3D
+	_check(pose != null, "die Haltungs-Ebene existiert")
+	if pose == null:
+		player.free()
+		return
+
+	var hip := viewmodel.hip_position
+	const DT := 1.0 / 60.0
+	const RELOAD_DURATION := 2.0
+
+	# Leere Nachladung beginnt. Auf halbem Weg — deutlich vor RACK_TURN_START_
+	# PROGRESS (0.87) — sitzt das Magazin zwar schon, aber die Drehung darf
+	# noch nicht eingesetzt haben.
+	view._on_reload_started(RELOAD_DURATION, true, false)
+	for i in int(RELOAD_DURATION / DT * 0.5):
+		view._update_sequence(DT)
+		view._update_pose(DT)
+	_check(pose.position.distance_to(hip) < 0.001,
+		"waehrend des Magazinwechsels dreht sich noch nichts (%.4f m Abstand)"
+			% pose.position.distance_to(hip))
+
+	# Weiter simulieren, bis deutlich ueber RACK_TURN_START_PROGRESS hinaus,
+	# aber vor dem Ende der Sequenz: Jetzt muss die Drehung eingesetzt haben.
+	for i in int(RELOAD_DURATION / DT * 0.45):
+		view._update_sequence(DT)
+		view._update_pose(DT)
+	# Der Versatz selbst ist klein (rack_turn_offset misst nur 0.02 m in der
+	# Spitze) und die Feder ist zu diesem Zeitpunkt erst kurz unterwegs — die
+	# Schwelle testet deshalb "hat sich ueberhaupt geruehrt", nicht "ist schon
+	# fertig gedreht".
+	var turned_distance := pose.position.distance_to(hip)
+	_check(turned_distance > 0.001,
+		"nach dem Magazinwechsel verlagert sich die Waffe (%.4f m von der Hueftlage)"
+			% turned_distance)
+	_check(not pose.rotation_degrees.is_equal_approx(Vector3.ZERO),
+		"...und dreht sich dabei sichtbar (%s)" % pose.rotation_degrees)
+
+	# Sequenz zu Ende laufen lassen — sie endet von selbst ueber
+	# _update_sequence(), kein manuelles Zuruecksetzen noetig.
+	for i in int(RELOAD_DURATION / DT * 0.1):
+		view._update_sequence(DT)
+		view._update_pose(DT)
+	_check(view._sequence_kind == &"", "die Nachladung ist von selbst zu Ende gegangen")
+
+	# Danach muss die Waffe wieder genau in die Hueftlage zurueckfinden. Genug
+	# Zeit fuer die Feder zum Einpendeln geben — `is_equal_approx` waere zu
+	# streng fuer eine Feder, die sich asymptotisch annaehert statt exakt
+	# anzukommen.
+	for i in 180:
+		view._update_pose(DT)
+	var rot_distance := pose.rotation_degrees.distance_to(viewmodel.hip_rotation_degrees)
+	_check(pose.position.distance_to(hip) < 0.001 and rot_distance < 0.5,
+		"nach dem Nachladen steht sie wieder in der Hueftlage (%.4f m, %.3f Grad Abstand)"
+			% [pose.position.distance_to(hip), rot_distance])
+
+	# Taktische Nachladung (noch Munition im Magazin): Kein Ladehebelzug,
+	# also auch keine Drehung — die Waffe bleibt in der Hueftlage, auch weit
+	# ueber RACK_TURN_START_PROGRESS hinaus.
+	view._on_reload_started(RELOAD_DURATION, false, false)
+	for i in int(RELOAD_DURATION / DT * 0.95):
+		view._update_sequence(DT)
+		view._update_pose(DT)
+	_check(pose.position.distance_to(hip) < 0.001,
+		"bei taktischer Nachladung bleibt sie in der Hueftlage (%.4f m Abstand)"
+			% pose.position.distance_to(hip))
+
+	player.free()
+
+
 ## Der Kern des Ganzen: Nimmt der Spieler eine andere Waffe, muss auch ein
 ## anderes Modell in der Hand liegen. Ohne diesen Test faellt ein fehlendes
 ## Signal erst auf, wenn jemand im Spiel die Pistole zieht und weiter ein
@@ -934,8 +1235,78 @@ func _test_weapon_switch_swaps_model() -> void:
 	_check(view.get_viewmodel() is M870Viewmodel,
 		"auch ohne passende Munition wird das Modell gewechselt")
 
+	_check_sway_overshoots(view)
+
 	player.free()
 	_finish()
+
+
+## Schwingt die Waffe beim Drehen ueber ihre eigene Ruhelage hinaus — und
+## bleibt sie DORT haengen, statt von selbst zur Bildmitte zurueckzukriechen?
+##
+## ---------------------------------------------------------------------------
+## ZWEI VERHALTEN, DIE BEIDE GEPRUEFT WERDEN MUESSEN
+##
+## Vorher zog ein `lerp` die Waffe an ihre Ruhelage heran. Eine Exponential-
+## kurve naehert sich ihrem Ziel und ueberholt es nie, und die Ruhelage selbst
+## driftete mit der Zeit gegen null — die Waffe hinkt beim Drehen hinterher
+## und kriecht dann zur Mitte zurueck.
+##
+## Jetzt haengt sie an einer Feder mit zu wenig Daempfung UND die Ruhelage
+## selbst bleibt stehen, wo die letzte Mausbewegung sie hingelegt hat — sie
+## relaxiert nicht mehr von selbst gegen null. Zwei Eigenschaften:
+##
+##   1. Ueberschwung: Der Ausschlag geht ueber die eigene Ruhelage hinaus und
+##      pendelt sich erst danach dort ein — NICHT ueber die Bildmitte
+##      hinweg, denn die Ruhelage selbst ist ja nicht mehr null.
+##   2. Der Versatz bleibt STEHEN, statt nach einer Weile zur Mitte
+##      zurueckzukriechen — ausser beim Zielen, das ist die Ausnahme.
+##
+## Wie es sich anfuehlt, kann dieser Test nicht sagen. Nur, DASS es passiert.
+func _check_sway_overshoots(view: WeaponView) -> void:
+	_section("Nachschwingen: Ueberschwung und bleibt haengen")
+
+	var sway := view.get_node_or_null("Pose/Sway") as Node3D
+	_check(sway != null, "die Schwing-Ebene existiert")
+	if sway == null:
+		return
+
+	# Eine kraeftige Mausbewegung nach rechts, danach Ruhe.
+	view.add_look_delta(Vector2(60.0, 0.0))
+
+	var lowest := 0.0
+	# Eine Sekunde in Sechzigstelschritten — lang genug, dass die Feder
+	# ausschlaegt, zurueckkommt und sich einpendelt.
+	for step in 60:
+		# Bewusst die interne Methode: Sie ist das Verhalten, um das es geht.
+		# Ueber echte Frames zu gehen hiesse, mit schwankendem delta zu messen.
+		view._update_sway(1.0 / 60.0)
+		lowest = minf(lowest, sway.rotation_degrees.y)
+
+	# Die eigentliche Aenderung: Sie kehrt NICHT von selbst zur Mitte zurueck.
+	# Waere hier noch ein lerp gegen null am Werk, stuende sie nach einer
+	# Sekunde wieder bei 0 — dann waere genau das Verhalten weg, um das es geht.
+	var settled := sway.rotation_degrees.y
+	_check(settled < -2.0,
+		"und bleibt haengen, statt zur Mitte zurueckzukriechen (%.2f Grad)"
+			% settled)
+
+	# Ueberschwung heisst hier: Der tiefste Punkt liegt DEUTLICH jenseits der
+	# eigenen Ruhelage — die Feder ist erst daran vorbeigeschossen und dann
+	# zurueckgekommen, statt sich ihr nur anzunaehern.
+	_check(lowest < settled - 0.5,
+		"schwingt dabei ueber die eigene Ruhelage hinaus (%.2f gegen %.2f Grad)"
+			% [lowest, settled])
+
+	# Die Ausnahme: Beim Zielen soll die Visierlinie in der Mitte landen, nicht
+	# der zuletzt aufgesammelte Versatz.
+	view._aim_progress = 1.0
+	for step in 60:
+		view._update_sway(1.0 / 60.0)
+
+	_check(absf(sway.rotation_degrees.y) < 0.5,
+		"beim Zielen findet sie trotzdem zur Mitte zurueck (%.2f Grad)"
+			% sway.rotation_degrees.y)
 
 
 ## Jede Waffe muss ihr eigenes Modell bekommen — verschiedene Waffen duerfen

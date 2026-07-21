@@ -464,9 +464,12 @@ func get_spawn_parent() -> Node:
 func _emit_recoil() -> void:
 	var ergonomics_factor := 1.0 - (float(data.ergonomics) / 200.0)
 	var ramp := 1.0 + minf(float(_shots_since_release) * 0.06, 0.8)
+	# Ueber Kimme und Korn haelt Schulter und Wange den Aufschlag besser im
+	# Zaum als der freie Hueftanschlag — siehe ads_recoil_multiplier.
+	var aim_factor := data.ads_recoil_multiplier if aiming else 1.0
 
-	var vertical := data.recoil_vertical * ergonomics_factor * ramp * 0.01
-	var horizontal := data.recoil_horizontal * ergonomics_factor * ramp * 0.01
+	var vertical := data.recoil_vertical * ergonomics_factor * ramp * aim_factor * 0.01
+	var horizontal := data.recoil_horizontal * ergonomics_factor * ramp * aim_factor * 0.01
 	horizontal *= (1.0 if randf() < 0.5 else -1.0)
 
 	recoil_kick.emit(vertical, horizontal)

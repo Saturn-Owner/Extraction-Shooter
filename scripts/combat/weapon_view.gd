@@ -43,9 +43,6 @@ extends Node3D
 ## liegt anders in der Hand als ein Praezisionsgewehr.
 @export var pose_speed: float = 11.0
 
-## Anteil der Nachladezeit, in dem die Waffe hoch- bzw. wieder zurueckwandert.
-@export_range(0.05, 0.45) var reload_pose_blend: float = 0.16
-
 @export_group("Zielen")
 
 ## Sekunden von der Huefte bis die Visierlinie steht.
@@ -56,13 +53,64 @@ extends Node3D
 @export_group("Nachschwingen")
 
 ## Wie stark die Waffe der Mausbewegung hinterherhaengt (Grad).
-@export var sway_amount: float = 2.6
+@export var sway_amount: float = 4.5
 
-## Wie schnell sie wieder mittig steht.
-@export var sway_return_speed: float = 7.0
+## Federhaerte des Nachschwingens — hoch = kommt schneller zurueck.
+##
+## Zusammen mit sway_damping bestimmt dieser Wert das ganze Gefuehl. Die
+## aperiodische Grenze liegt bei damping = 2 * sqrt(stiffness), also hier bei
+## rund 19. Alles darunter schwingt ueber, alles darueber kriecht zurueck.
+@export var sway_stiffness: float = 90.0
+
+## Daempfung des Nachschwingens — NIEDRIG = schwingt ueber.
+##
+## Das ist die Zahl, an der das Gefuehl haengt. Bei 19 (aperiodisch) kommt die
+## Waffe sauber zur Ruhe und wirkt gebremst; bei 7 schwingt sie deutlich ueber
+## die Mitte hinaus und pendelt sich ein. Weniger als etwa 5 wird zappelig.
+@export var sway_damping: float = 7.0
 
 ## Wieviel Nachschwingen beim Zielen uebrig bleibt.
 @export_range(0.0, 1.0) var sway_ads_factor: float = 0.25
+
+@export_group("Ladehebel")
+
+## Drehung, in die die Waffe waehrend einer leeren Nachladung dreht (Grad,
+## Kameraraum) — damit man die Seite mit dem Ladehebel sieht, statt nur von
+## hinten drauf zu schauen.
+##
+## ---------------------------------------------------------------------------
+## Z (ROLLEN) TRAEGT DIE DREHUNG, Y (GIEREN) BLEIBT KLEIN — NICHT UMGEKEHRT
+##
+## Der erste Versuch drehte ueberwiegend um Y (Gieren, die Muendung schwenkt
+## zur Seite) und liess die Waffe dabei komplett aus dem Bild verschwinden.
+## Der Grund ist die Geometrie: Die Drehung passiert um den Ursprung von
+## `Pose`, ungefaehr am Griff — die Muendung sitzt gut 0.56 m weiter vorn.
+## Bei einer Gierdrehung bewegt sich ein Punkt in dieser Entfernung auf einem
+## KREISBOGEN: 0.56 m * sin(42°) ≈ 0.43 m seitlicher Versatz. Aus der Naehe
+## einer Egoperspektive ist das mehr, als die Kamera ueberhaupt zeigt — die
+## Muendung schwingt schlicht aus dem Bildwinkel heraus.
+##
+## Rollen (Z) hat dieses Problem nicht: Es dreht das Bild um die Blickachse,
+## statt Punkte quer dazu zu verschieben — ein entfernter Punkt bleibt dabei
+## ungefaehr an seinem Platz, er kippt nur. Deshalb traegt hier Z den
+## Hauptanteil der Drehung, Y bleibt klein genug, dass selbst mit dem
+## Ueberschwung der Feder (rack_damping) nichts aus dem Bild laeuft.
+@export var rack_turn_rotation: Vector3 = Vector3(-4.0, -11.0, 38.0)
+
+## Versatz, der die Drehung begleitet (Meter, Kameraraum) — verlagert das
+## Gewicht sichtbar mit, statt nur auf der Stelle zu rotieren.
+@export var rack_turn_offset: Vector3 = Vector3(-0.02, 0.0, 0.0)
+
+## Federhaerte der Drehbewegung. Zusammen mit rack_damping bestimmt das, wie
+## schnell und wie ruckartig die Waffe sich dreht.
+@export var rack_stiffness: float = 40.0
+
+## Daempfung der Drehbewegung — NIEDRIG laesst sie ueber die Zieldrehung
+## hinausschiessen und zurueckfedern, das liest sich als Ruck einer echten
+## Hand statt als servomotorisch glatte Bewegung. Zu niedrig wird zappelig
+## UND vergroessert den Ueberschwung ueber rack_turn_rotation hinaus — bei
+## der Gierkomponente (Y) ist das der Spielraum, der oben einkalkuliert ist.
+@export var rack_damping: float = 8.0
 
 @export_group("Laufwackeln")
 
@@ -112,6 +160,10 @@ var _speed_ratio: float = 0.0
 var _aim_progress: float = 0.0
 var _look_delta: Vector2 = Vector2.ZERO
 var _sway_offset: Vector2 = Vector2.ZERO
+
+## Wie schnell sich das Nachschwingen gerade bewegt (Grad je Sekunde).
+## Ohne diese Groesse gaebe es kein Ueberschwingen — eine Feder braucht Masse.
+var _sway_velocity: Vector2 = Vector2.ZERO
 var _bob_time: float = 0.0
 
 var _recoil_offset: Vector3 = Vector3.ZERO
@@ -119,11 +171,22 @@ var _recoil_velocity: Vector3 = Vector3.ZERO
 var _recoil_angle: float = 0.0
 var _recoil_angular_velocity: float = 0.0
 
+## 0 = normale Haltung, 1 = ganz in die Ladehebel-Drehung gedreht. Wie beim
+## Nachschwingen eine Feder statt eines lerp — siehe _update_pose().
+var _rack_progress: float = 0.0
+var _rack_velocity: float = 0.0
+
 # Nachladen und Ladehemmung laufen als Zeitleiste von 1.0 auf 0.0
 var _sequence_time_left: float = 0.0
 var _sequence_duration: float = 0.0
 var _sequence_kind: StringName = &""
 var _sequence_from_empty: bool = false
+
+## 0..1, wie weit die laufende Sequenz (Nachladen/Ladehemmung) fortgeschritten
+## ist. Von _update_sequence() gepflegt, von _update_pose() gelesen — die
+## Ladehebel-Drehung darf erst ab RACK_TURN_START_PROGRESS beginnen, nicht
+## schon beim Start der Sequenz.
+var _sequence_progress: float = 0.0
 
 ## Magazin bleibt drin, es wird nur durchgeladen — siehe Weapon.
 var _sequence_chamber_only: bool = false
@@ -226,8 +289,16 @@ func _reset_animation_state() -> void:
 	_recoil_velocity = Vector3.ZERO
 	_recoil_angle = 0.0
 	_recoil_angular_velocity = 0.0
+	# Sonst nimmt die neue Waffe den Schwung der alten mit und schlaegt beim
+	# Ziehen einmal aus, ohne dass jemand die Maus bewegt haette.
+	_sway_offset = Vector2.ZERO
+	_sway_velocity = Vector2.ZERO
+	_look_delta = Vector2.ZERO
+	_rack_progress = 0.0
+	_rack_velocity = 0.0
 	_sequence_time_left = 0.0
 	_sequence_kind = &""
+	_sequence_progress = 0.0
 	_aim_progress = 0.0
 
 
@@ -300,20 +371,19 @@ func _update_aim(delta: float) -> void:
 	_aim_progress = clampf(_aim_progress + (step if wants_aim else -step), 0.0, 1.0)
 
 
-## Wie stark die Nachladehaltung gerade wirkt.
-## Faehrt am Anfang hoch und am Ende wieder herunter, damit der Uebergang
-## nicht springt.
-func _get_reload_pose_weight() -> float:
-	if _sequence_time_left <= 0.0 or _sequence_duration <= 0.0:
-		return 0.0
-	var progress := 1.0 - _sequence_time_left / _sequence_duration
-	var blend := clampf(reload_pose_blend, 0.05, 0.45)
-	var rise := _ramp(progress, 0.0, blend)
-	var fall := 1.0 - _ramp(progress, 1.0 - blend, 1.0)
-	# Weiche Kurve statt Gerade — sonst wirkt das Anheben mechanisch.
-	return smoothstep(0.0, 1.0, minf(rise, fall))
-
-
+## ---------------------------------------------------------------------------
+## NACHLADEN HEBT DIE WAFFE NICHT MEHR AN
+##
+## Frueher wanderte die Waffe waehrend des Nachladens in eine eigene Haltung
+## (`reload_position`/`reload_rotation_degrees` am Modell) — angehoben und
+## eingedreht, damit der Magazinwechsel besser im Bild stattfindet. Das sah in
+## der Egoperspektive falsch aus: Die Waffe schwenkte sichtbar nach vorne, statt
+## einfach in der gewohnten Haltung zu bleiben.
+##
+## `reload_position`/`reload_rotation_degrees` existieren am Modell weiterhin —
+## `character_weapon.gd` liest sie fuer die DRITTE Person: Andere Spieler
+## sollen sehen, dass jemand nachlaedt (die Waffe geht dort sichtbar hoch als
+## Erkennungszeichen). Nur die EIGENE Egoperspektive schwenkt nicht mehr dahin.
 func _update_pose(delta: float) -> void:
 	if _viewmodel == null:
 		return
@@ -321,15 +391,6 @@ func _update_pose(delta: float) -> void:
 	var target_pos := _viewmodel.hip_position
 	var target_rot := _viewmodel.hip_rotation_degrees
 	var weight := clampf(pose_speed * delta, 0.0, 1.0)
-
-	var reload_weight := _get_reload_pose_weight()
-	if reload_weight > 0.0:
-		# Nachladen schlaegt alles andere: Wer nachlaedt, zielt nicht.
-		target_pos = target_pos.lerp(_viewmodel.reload_position, reload_weight)
-		target_rot = target_rot.lerp(_viewmodel.reload_rotation_degrees, reload_weight)
-		_pose.position = _pose.position.lerp(target_pos, weight)
-		_pose.rotation_degrees = _pose.rotation_degrees.lerp(target_rot, weight)
-		return
 
 	if _sprinting:
 		target_pos = _viewmodel.sprint_position
@@ -343,21 +404,105 @@ func _update_pose(delta: float) -> void:
 		target_pos = target_pos.lerp(ads_pos, _aim_progress)
 		target_rot = target_rot.lerp(Vector3.ZERO, _aim_progress)
 
+	# Ladehebel-Drehung: Bei einer LEEREN Nachladung dreht die ganze Waffe zur
+	# Seite, damit man den Ladehebel sieht, bleibt dort stehen, waehrend er
+	# gezogen wird, und dreht danach wieder zurueck. Bei einer taktischen
+	# Nachladung (noch Munition im Magazin) bleibt `wants_rack` falsch — die
+	# Waffe bleibt in der normalen Haltung.
+	#
+	# ERST ab _viewmodel.rack_turn_start_progress, NICHT gleich beim Start der
+	# Sequenz: Sonst dreht sich die Waffe schon, waehrend das alte Magazin noch
+	# draussen haengt — Magazinwechsel und Drehung wuerden gleichzeitig
+	# ablaufen statt nacheinander. Derselbe Wert steht am Modell in
+	# weapon_viewmodel.gd, wo der Ladehebel selbst erst NOCH spaeter
+	# (handle_pull_start_progress) einsetzt — jede Waffe kann beide Grenzen
+	# fuer sich selbst verschieben (siehe AKMViewmodel._configure()), ohne dass
+	# sie hier und dort auseinanderlaufen.
+	#
+	# Eine Feder statt eines lerp, aus demselben Grund wie beim Nachschwingen
+	# weiter unten: Ein lerp naehert sich der Drehung sauber an und kommt nie
+	# darueber hinaus — das wirkt glatt und maschinell. Eine schwach gedaempfte
+	# Feder schiesst leicht ueber die Zieldrehung hinaus und federt zurueck,
+	# das liest sich als Ruck einer echten Hand.
+	var wants_rack := _sequence_kind == &"reload" and _sequence_from_empty \
+			and _sequence_progress > _viewmodel.rack_turn_start_progress
+	var rack_target := 1.0 if wants_rack else 0.0
+	var rack_step := minf(delta, 1.0 / 30.0)
+	var rack_accel := (rack_target - _rack_progress) * rack_stiffness - _rack_velocity * rack_damping
+	_rack_velocity += rack_accel * rack_step
+	_rack_progress += _rack_velocity * rack_step
+
+	target_pos += rack_turn_offset * _rack_progress
+	target_rot += rack_turn_rotation * _rack_progress
+
 	_pose.position = _pose.position.lerp(target_pos, weight)
 	_pose.rotation_degrees = _pose.rotation_degrees.lerp(target_rot, weight)
 
 
 ## Die Waffe haengt der Blickrichtung hinterher. Ohne das klebt sie starr
 ## im Bild und wirkt wie aufgemalt.
+##
+## ---------------------------------------------------------------------------
+## FEDER STATT NACHZIEHEN — DARAN HAENGT DAS GEFUEHL
+##
+## Vorher wurde die Waffe mit `lerp` an ihre Zielhaltung herangezogen. Das ist
+## eine Exponentialkurve: Sie naehert sich der Mitte und kommt nie darueber
+## hinaus. Die Waffe hinkt beim Drehen hinterher und kriecht dann zurueck —
+## sie wirkt, als haenge sie an einem Gummiband.
+##
+## Jetzt haengt sie an einer Feder mit Masse, wie der Rueckstoss weiter unten.
+## Der Unterschied ist der eine Punkt, um den es geht: Eine Feder mit zu wenig
+## Daempfung schiesst UEBER die Ruhelage hinaus. Beim Drehen bleibt die Waffe
+## erst zurueck, und wenn die Maus stehenbleibt, holt sie nicht nur auf,
+## sondern schwingt durch die Mitte hindurch und pendelt sich ein.
+##
+## Genau in diesem Moment dreht sich die Waffe schneller als der Spieler —
+## das ist der Ausschlag, den Insurgency Sandstorm und Bodycam so deutlich
+## zeigen. Mit einem lerp ist er nicht zu haben, egal an welcher Zahl man
+## dreht: Eine Exponentialkurve kann ihr Ziel nicht ueberholen.
+##
+## ---------------------------------------------------------------------------
+## DER VERSATZ BLEIBT STEHEN, BIS EINE NEUE DREHUNG IHN AUFHEBT
+##
+## `_look_delta` relaxierte frueher von selbst gegen null — die Waffe schwang
+## also immer zurueck zur Mitte, auch wenn der Spieler laengst stillstand.
+## Das ist jetzt weg: Wer nach links schaut, bekommt einen Versatz nach links,
+## der STEHEN BLEIBT, bis eine Drehung nach rechts ihn wieder abbaut. Nur eine
+## neue Mausbewegung veraendert `_look_delta` noch, keine verstreichende Zeit.
+##
+## Die Klammerung auf den Bereich, den `target` sowieso ausnutzen kann,
+## verhindert dabei, dass `_look_delta` bei einer schnellen Drehung ins
+## Unermessliche waechst: Ohne sie muesste eine Drehung um 360 Grad erst durch
+## eine ebenso grosse Gegendrehung ausgeglichen werden, bevor sich ueberhaupt
+## etwas ruehrt.
+##
+## Die Ausnahme ist das Zielen: Wer zielt, will die Visierlinie in der Mitte
+## haben, nicht den zuletzt aufgesammelten Versatz. Deshalb relaxiert
+## `_look_delta` NUR waehrend `_aim_progress > 0` — das ist die einzige
+## Situation, in der die Waffe von selbst zur Mitte zurueckfindet.
 func _update_sway(delta: float) -> void:
 	var factor := lerpf(1.0, sway_ads_factor, _aim_progress)
+
+	var max_component := sway_amount / 0.35
+	_look_delta.x = clampf(_look_delta.x, -max_component, max_component)
+	_look_delta.y = clampf(_look_delta.y, -max_component, max_component)
+
 	var target := Vector2(
 		clampf(-_look_delta.x * 0.35, -sway_amount, sway_amount),
 		clampf(-_look_delta.y * 0.35, -sway_amount, sway_amount)
 	) * factor
 
-	_sway_offset = _sway_offset.lerp(target, clampf(sway_return_speed * delta, 0.0, 1.0))
-	_look_delta = _look_delta.lerp(Vector2.ZERO, clampf(12.0 * delta, 0.0, 1.0))
+	# Bei einem Ruckler waere der Schritt so gross, dass die Feder sich
+	# aufschaukelt statt einzupendeln — dann fliegt die Waffe aus dem Bild.
+	# Lieber eine Zehntelsekunde zu langsam nachschwingen als einmal explodieren.
+	var step := minf(delta, 1.0 / 30.0)
+
+	var accel := (target - _sway_offset) * sway_stiffness - _sway_velocity * sway_damping
+	_sway_velocity += accel * step
+	_sway_offset += _sway_velocity * step
+
+	if _aim_progress > 0.0:
+		_look_delta = _look_delta.lerp(Vector2.ZERO, clampf(12.0 * delta, 0.0, 1.0))
 
 	_sway.rotation_degrees.y = _sway_offset.x
 	_sway.rotation_degrees.x = -_sway_offset.y
@@ -487,6 +632,7 @@ func _update_sequence(delta: float) -> void:
 
 	_sequence_time_left = maxf(0.0, _sequence_time_left - delta)
 	var progress := 1.0 - _sequence_time_left / maxf(0.01, _sequence_duration)
+	_sequence_progress = progress
 
 	if _viewmodel != null:
 		match _sequence_kind:
@@ -502,12 +648,6 @@ func _update_sequence(delta: float) -> void:
 			_viewmodel.notify_sequence_ended()
 
 
-## Rechnet einen Abschnitt einer Zeitleiste auf 0..1 um.
-static func _ramp(value: float, from: float, to: float) -> float:
-	if to <= from:
-		return 1.0
-	return clampf((value - from) / (to - from), 0.0, 1.0)
-
 
 # --- Reaktionen auf die Waffe ---
 
@@ -515,12 +655,18 @@ func _on_fired(_ammo: AmmoData, rounds_left: int) -> void:
 	# Rueckstoss als Impuls auf die Federgeschwindigkeit, nicht als
 	# Positionssprung — sonst ruckelt es statt zu kicken.
 	var strength := 1.0
+	var aim_recoil_factor := 0.72
 	if _weapon != null and _weapon.data != null:
 		# Schwere Waffen kicken staerker, gute Ergonomie daempft.
 		strength = _weapon.data.recoil_vertical / 120.0
 		strength *= 1.0 - float(_weapon.data.ergonomics) / 250.0
+		# Derselbe Faktor wie beim tatsaechlichen (kamerawirksamen) Rueckstoss
+		# in Weapon._emit_recoil() — siehe ads_recoil_multiplier in
+		# weapon_data.gd. Ohne Waffendaten (z. B. im Renderwerkzeug ohne
+		# Weapon-Knoten) bleibt der alte feste Wert als Rueckfall.
+		aim_recoil_factor = _weapon.data.ads_recoil_multiplier
 	# Beim Zielen liegt die Waffe ruhiger an der Schulter.
-	strength *= lerpf(1.0, 0.72, _aim_progress)
+	strength *= lerpf(1.0, aim_recoil_factor, _aim_progress)
 	# Und jede Waffe springt anders — eine Pistole kippt, ein schweres
 	# Praezisionsgewehr schiebt.
 	if _viewmodel != null:

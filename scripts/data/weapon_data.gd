@@ -98,6 +98,19 @@ enum FireMode {
 ## Wieviel Streuung beim Zielen uebrig bleibt.
 @export_range(0.05, 1.0) var ads_spread_multiplier: float = 0.35
 
+## Wieviel Rueckstoss beim Zielen uebrig bleibt.
+##
+## Ueber Kimme und Korn liegt die Waffe an Schulter und Wange an — das haelt
+## den Aufschlag besser im Zaum als der freie Hueftanschlag. Wirkt auf BEIDE
+## Rueckstossarten mit demselben Faktor:
+##   - den tatsaechlichen Rueckstoss (Weapon._emit_recoil(), bewegt die
+##     Kamera und damit den Treffpunkt)
+##   - den sichtbaren Waffen-Kick im Bild (WeaponView._on_fired())
+## Absichtlich EIN Wert fuer beides: Ein Spieler, der ueber Kimme und Korn
+## ruhiger schiesst, soll auch die Visierung im Bild behalten — sonst
+## widerspricht die Optik der tatsaechlichen Kontrolle.
+@export_range(0.05, 1.0) var ads_recoil_multiplier: float = 0.6
+
 ## Wie stark das Zielen bremst (0.6 = 60 % Tempo).
 @export_range(0.2, 1.0) var ads_move_multiplier: float = 0.62
 
