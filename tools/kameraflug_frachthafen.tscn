@@ -1,0 +1,48 @@
+; Kamerafahrt über den Frachthafen — nur Welt, Himmel und Kamera.
+; Öffnen und F6 drücken; ESC beendet. Siehe kameraflug_frachthafen.gd.
+; Himmel/Licht sind eine Kopie aus frachthafen_quelle.tscn, damit das
+; Video genauso aussieht wie das Spiel.
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://tools/kameraflug_frachthafen.gd" id="1_flug"]
+[ext_resource type="Script" path="res://scripts/levels/frachthafen_layout.gd" id="2_layout"]
+
+[sub_resource type="ProceduralSkyMaterial" id="Sky_hafen"]
+sky_top_color = Color(0.4, 0.46, 0.56, 1)
+sky_horizon_color = Color(0.7, 0.74, 0.79, 1)
+ground_bottom_color = Color(0.58, 0.62, 0.68, 1)
+ground_horizon_color = Color(0.7, 0.74, 0.79, 1)
+
+[sub_resource type="Sky" id="Sky_main"]
+sky_material = SubResource("Sky_hafen")
+
+[sub_resource type="Environment" id="Env_hafen"]
+background_mode = 2
+sky = SubResource("Sky_main")
+ambient_light_source = 3
+ambient_light_color = Color(0.7, 0.75, 0.82, 1)
+ambient_light_sky_contribution = 0.9
+ambient_light_energy = 1.0
+fog_enabled = true
+fog_light_color = Color(0.76, 0.79, 0.84, 1)
+fog_density = 0.006
+fog_sky_affect = 0.4
+
+[node name="KameraflugFrachthafen" type="Node3D"]
+script = ExtResource("1_flug")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_hafen")
+
+[node name="Sonne" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.82, -0.31, 0.48, 0, 0.84, 0.54, -0.57, -0.44, 0.69, 0, 40, 0)
+light_color = Color(1, 0.96, 0.9, 1)
+light_energy = 0.8
+shadow_enabled = true
+
+[node name="Welt" type="Node3D" parent="."]
+script = ExtResource("2_layout")
+
+[node name="Kamera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -60, 32, 150)
+far = 600.0
