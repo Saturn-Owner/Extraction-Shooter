@@ -19,10 +19,21 @@ var _menu: MainMenu
 
 func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
+	_read_launcher_args(args)
 	if "--server" in args or DisplayServer.get_name() == "headless":
 		_start_server(args)
 	else:
 		_show_menu()
+
+
+## Der Launcher gibt dem Spiel Name und Steam-Sitzung mit auf den Weg.
+## Ohne Launcher (Editor, Solo) sind die Argumente einfach nicht da.
+func _read_launcher_args(args: PackedStringArray) -> void:
+	for index in args.size():
+		if args[index] == "--name" and index + 1 < args.size():
+			Net.player_name = args[index + 1]
+		if args[index] == "--token" and index + 1 < args.size():
+			Net.session_token = args[index + 1]
 
 
 # --- Server ---------------------------------------------------------------
@@ -33,6 +44,19 @@ func _start_server(args: PackedStringArray) -> void:
 		push_error("[Bootstrap] " + error)
 		get_tree().quit(1)
 		return
+
+	# Die Steam-Anmeldeprüfung läuft im selben Prozess mit — ein Dienst,
+	# ein Deploy. Schlägt der Port fehl, läuft das Spiel trotzdem: Dann
+	# spielen eben alle als Gast.
+	var auth := AuthService.new()
+	auth.name = "AuthService"
+	add_child(auth)
+	var auth_error := auth.listen()
+	if auth_error.is_empty():
+		Net.auth = auth
+	else:
+		push_warning("[Bootstrap] " + auth_error + " — Anmeldungen laufen als Gast")
+
 	_load_arena()
 
 

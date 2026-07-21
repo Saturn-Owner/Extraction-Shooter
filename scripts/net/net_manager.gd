@@ -46,13 +46,25 @@ const FIRE_INTERVAL_TOLERANCE := 0.75
 ## Großzügig, weil die gefunkte Position dem echten Spieler hinterherläuft.
 const MAX_ORIGIN_DRIFT := 3.5
 
+## Muss auf Client und Server gleich sein — wird bei JEDER Änderung an
+## RPCs, Synchronizer-Feldern oder Spielregeln von Hand hochgezählt.
+## Ein Client mit alter Version bekommt eine klare Absage statt eines
+## Spiels voller Geistereffekte.
+const PROTOCOL_VERSION := 1
+
 enum Mode {OFFLINE, SERVER, CLIENT}
 
 var mode: Mode = Mode.OFFLINE
 ## Anzeigename, den der Client nach dem Verbinden beim Server anmeldet.
 var player_name: String = "Spieler"
-## peer_id -> {name, spawn_index, alive, kills, weapon_id, ready}
+## Sitzungs-Token aus dem Launcher (Steam-Anmeldung). Leer = Gast.
+var session_token: String = ""
+## Die Steam-Anmeldeprüfung — nur auf dem Server gesetzt (net_bootstrap).
+var auth: AuthService = null
+## peer_id -> {name, spawn_index, alive, kills, weapon_id, ready, steam_id}
 var roster: Dictionary = {}
+## Warum der Server uns zuletzt abgewiesen hat (fürs Menü).
+var rejection_reason: String = ""
 
 ## Das gerade laufende Arena-Level meldet sich hier an. Solange keines
 ## angemeldet ist, werden Spawn-RPCs still verworfen — das passiert z. B.
@@ -445,6 +457,7 @@ func _on_peer_connected(peer_id: int) -> void:
 		kills = 0,
 		weapon_id = "",
 		ready = false,
+		steam_id = "",
 	}
 	print("[Net] Peer %d verbunden (Spawn %d)" % [peer_id, roster[peer_id].spawn_index])
 	_push_roster()
@@ -481,25 +494,56 @@ func _push_roster() -> void:
 	_sync_roster.rpc(roster)
 
 
-## Client meldet nach dem Verbinden seinen Namen an.
+## Client meldet nach dem Verbinden Namen, Version und Steam-Sitzung an.
 @rpc("any_peer", "reliable")
-func _register_client(display_name: String) -> void:
+func _register_client(display_name: String, protocol: int, token: String) -> void:
 	if not is_server():
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	if not roster.has(peer_id):
 		return
+
+	# Alte Version? Klare Absage statt stiller Geisterfehler — genau so einer
+	# hat den ersten Beta-Test gekostet.
+	if protocol != PROTOCOL_VERSION:
+		print("[Net] Peer %d abgewiesen: Version %d, Server hat %d"
+			% [peer_id, protocol, PROTOCOL_VERSION])
+		_rejected.rpc_id(peer_id,
+			"Deine Spielversion ist veraltet — Launcher neu starten für das Update.")
+		multiplayer.multiplayer_peer.disconnect_peer(peer_id)
+		return
+
 	var cleaned := display_name.strip_edges().substr(0, 24)
 	if not cleaned.is_empty():
 		roster[peer_id].name = cleaned
+
+	# Steam-Anmeldung: Das Token wurde vom Anmelde-Dienst ausgegeben, die
+	# Zuordnung ist also schon von Steam bestätigt. Ohne Token (Editor,
+	# Gast) läuft es vorerst auch — die Beta soll niemanden aussperren.
+	if not token.is_empty() and auth != null:
+		var steam_id := auth.steam_id_for(token)
+		if steam_id.is_empty():
+			print("[Net] Peer %d: unbekanntes Token — läuft als Gast" % peer_id)
+		else:
+			roster[peer_id].steam_id = steam_id
+			print("[Net] Peer %d angemeldet als Steam %s" % [peer_id, steam_id])
 	_push_roster()
+
+
+## Der Server hat die Verbindung abgelehnt — der Grund gehört dem Spieler
+## gezeigt, bevor gleich darauf die Leitung fällt.
+@rpc("authority", "reliable")
+func _rejected(reason: String) -> void:
+	rejection_reason = reason
+	print("[Net] Abgewiesen: %s" % reason)
 
 
 # --- Client-Seite ---------------------------------------------------------
 
 func _on_connected_to_server() -> void:
 	print("[Net] Verbunden, eigene Peer-ID: %d" % multiplayer.get_unique_id())
-	_register_client.rpc_id(1, player_name)
+	rejection_reason = ""
+	_register_client.rpc_id(1, player_name, PROTOCOL_VERSION, session_token)
 	connection_succeeded.emit()
 
 
@@ -586,7 +630,7 @@ func _cmd_name(args: PackedStringArray) -> String:
 		return "Benutzung: name <spielername>"
 	player_name = " ".join(args).substr(0, 24)
 	if is_client():
-		_register_client.rpc_id(1, player_name)
+		_register_client.rpc_id(1, player_name, PROTOCOL_VERSION, session_token)
 	return "Name: %s" % player_name
 
 

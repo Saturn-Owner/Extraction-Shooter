@@ -101,6 +101,19 @@ func _run_unit_checks() -> void:
 		"Ohne Angabe gilt der Standardport")
 	bootstrap.free()
 
+	# Anmelde-Dienst: die reinen Zerlege-Funktionen.
+	var auth: Node = (load("res://scripts/net/auth_service.gd") as GDScript).new()
+	_check(auth._steam_id_from("openid.claimed_id=" +
+		"https%3A%2F%2Fsteamcommunity.com%2Fopenid%2Fid%2F76561198000000001&a=b")
+		== "76561198000000001", "Steam-ID wird aus der Anmeldeantwort gelesen")
+	_check(auth._steam_id_from("a=b") == "", "Ohne claimed_id gibt es keine ID")
+	_check(auth._request_complete("POST /x HTTP/1.1\r\nContent-Length: 3\r\n\r\nabc"),
+		"Vollständige Anfrage wird erkannt")
+	_check(not auth._request_complete("POST /x HTTP/1.1\r\nContent-Length: 9\r\n\r\nabc"),
+		"Unvollständiger Rumpf heißt warten")
+	_check(auth.steam_id_for("gibtsnicht") == "", "Unbekanntes Token gehört niemandem")
+	auth.free()
+
 	# Spawn-Verteilung: immer die am wenigsten belegte Ecke.
 	# Konstruierte Eingabe ist hier in Ordnung — die Funktion ist pur, und ob
 	# das Roster echt ankommt, prüft der Leitungs-Test unten.

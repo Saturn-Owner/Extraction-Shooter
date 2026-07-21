@@ -24,6 +24,10 @@ var _status_label: Label
 
 func _ready() -> void:
 	_build_layout()
+	# Wer gerade vom Server abgewiesen wurde, soll den Grund lesen können —
+	# die Verbindung ist da längst weg.
+	if Net.rejection_reason != "":
+		set_status(Net.rejection_reason)
 
 
 func _build_layout() -> void:
@@ -57,6 +61,9 @@ func _build_layout() -> void:
 
 	_name_line = LineEdit.new()
 	_name_line.placeholder_text = "Spielername"
+	# Kommt das Spiel aus dem Launcher, ist der Name schon gewählt.
+	if Net.player_name != "Spieler":
+		_name_line.text = Net.player_name
 	column.add_child(_name_line)
 
 	_address_line = LineEdit.new()

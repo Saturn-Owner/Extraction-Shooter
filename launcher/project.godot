@@ -1,0 +1,17 @@
+; Engine configuration file.
+; Der Launcher ist ein eigenes Mini-Projekt: Er wird als eigene .exe
+; exportiert und soll nichts vom Spiel mitschleppen.
+
+config_version=5
+
+[application]
+
+config/name="Extraction Launcher"
+run/main_scene="res://launcher.tscn"
+config/features=PackedStringArray("4.7")
+
+[display]
+
+window/size/viewport_width=560
+window/size/viewport_height=680
+window/size/resizable=false
