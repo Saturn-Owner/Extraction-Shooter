@@ -49,11 +49,13 @@ Mini-Godot-Projekt unter `launcher/`). Der Launcher
 1. **meldet über Steam an** (Web-Login im Browser; Steam bestätigt die ID,
    unser Server prüft die Antwort gegen — wir speichern keine Passwörter).
    Anmelden ist optional, Gast geht weiterhin.
-2. **hält das Spiel aktuell**: vergleicht `version.json` vom VPS mit der
-   installierten Version, lädt bei Bedarf das ZIP herunter, verifiziert
-   dessen SHA-256-Prüfsumme (im Manifest) und entpackt es erst danach. Ist
-   die Prüfsumme falsch oder der Download abgebrochen, wird einmal
-   automatisch neu versucht, bevor ein Fehler steht.
+2. **prüft auf ein neues Spiel-Update**: vergleicht `version.json` vom VPS
+   mit der installierten Version — geladen wird aber NIE von selbst. Gibt
+   es eine neue Version, wird aus dem SPIELEN-Knopf ein HERUNTERLADEN-Knopf;
+   erst ein Klick lädt das ZIP, verifiziert dessen SHA-256-Prüfsumme (im
+   Manifest) und entpackt es. Ist die Prüfsumme falsch oder der Download
+   abgebrochen, wird einmal automatisch neu versucht, bevor ein Fehler steht
+   — die Wiederholung gilt nur für einen bereits manuell gestarteten Download.
 3. **hält sich selbst aktuell**: gleiches Prinzip über ein eigenes Manifest
    `launcher_version.json` — lädt bei Bedarf eine neue `ExtractionLauncher.exe`,
    verifiziert sie, tauscht sich per Batch-Skript aus und startet neu.

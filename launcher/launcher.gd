@@ -1,9 +1,11 @@
-## Der Launcher: Steam-Anmeldung, Auto-Update, News, Spielen.
+## Der Launcher: Steam-Anmeldung, Update-Prüfung, News, Spielen.
 ##
 ## Warum es ihn gibt:
-##   1. Tester bekommen EINMAL diese eine Datei. Ab dann holt der Launcher
-##      vor jedem Spielen die neueste Version vom Server — niemand spielt
-##      mehr mit einer alten .exe gegen einen neuen Server.
+##   1. Tester bekommen EINMAL diese eine Datei. Ab dann PRÜFT der Launcher
+##      vor jedem Spielen, ob eine neue Version vorliegt — niemand spielt
+##      mehr aus Versehen mit einer alten .exe gegen einen neuen Server.
+##      Geladen wird das Update aber nie von selbst: SPIELEN wird so lange
+##      zu HERUNTERLADEN, bis der Tester selbst klickt (siehe _prompt_download).
 ##   2. Anmeldung über Steam (OpenID): Steam bestätigt, wer der Spieler ist,
 ##      und wir bekommen nur seine Steam-ID. ES GIBT KEIN PASSWORT BEI UNS —
 ##      nichts zu speichern, nichts zu verlieren.
@@ -35,7 +37,7 @@ const CALLBACK_PORT := 27444
 ## Version des Launchers selbst (nicht des Spiels) — bei Launcher-Änderungen
 ## von Hand hochzählen, damit Tester sagen können, welchen sie haben, UND
 ## damit der Selbst-Update-Vergleich unten überhaupt etwas zu vergleichen hat.
-const LAUNCHER_VERSION := "1.2"
+const LAUNCHER_VERSION := "1.3"
 
 const SESSION_FILE := "user://session.json"
 const SETTINGS_FILE := "user://settings.json"
@@ -800,7 +802,7 @@ func _build_actionbar() -> Control:
 	_play_button.theme_type_variation = &"PlayButton"
 	_play_button.custom_minimum_size = Vector2(260, 0)
 	_play_button.disabled = true
-	_play_button.pressed.connect(_play)
+	_play_button.pressed.connect(_on_play_button_pressed)
 	bar.add_child(_play_button)
 	return bar
 
@@ -1042,15 +1044,41 @@ func _set_status(text: String) -> void:
 
 func _set_ready() -> void:
 	_state = State.READY
+	_play_button.text = "SPIELEN"
 	_play_button.disabled = false
 	_set_status("Bereit. Der Server wartet.")
-	# Ein ruhiges Pulsieren sagt: Hier geht es weiter.
+	_pulse_play_button()
+
+
+## Ein Update liegt bereit, wird aber NIE von selbst geladen — der Tester
+## entscheidet per Klick, wann die Bandbreite drauf geht (z. B. nicht
+## mitten in einer laufenden Testsitzung). Derselbe Knopf, der sonst
+## SPIELEN heißt, wird so lange zum Download-Auslöser.
+func _prompt_download(status_text: String) -> void:
+	_state = State.NEEDS_UPDATE
+	_play_button.text = "HERUNTERLADEN"
+	_play_button.disabled = false
+	_set_status(status_text)
+	_pulse_play_button()
+
+
+## Ein ruhiges Pulsieren sagt: Hier geht es weiter.
+func _pulse_play_button() -> void:
 	if _pulse == null or not _pulse.is_valid():
 		_pulse = create_tween().set_loops()
 		_pulse.tween_property(_play_button, "modulate",
 			Color(1.12, 1.09, 1.03), 0.9).set_trans(Tween.TRANS_SINE)
 		_pulse.tween_property(_play_button, "modulate",
 			Color.WHITE, 0.9).set_trans(Tween.TRANS_SINE)
+
+
+## SPIELEN und HERUNTERLADEN teilen sich denselben Knopf — was ein Klick
+## auslöst, hängt vom Zustand ab (siehe _prompt_download/_set_ready).
+func _on_play_button_pressed() -> void:
+	if _state == State.NEEDS_UPDATE:
+		_start_download()
+	else:
+		_play()
 
 
 func _refresh_version_label() -> void:
@@ -1138,8 +1166,7 @@ func _on_version_response(result: int, code: int, _headers: PackedStringArray,
 	if _remote_version == _local_version and FileAccess.file_exists(GAME_EXE):
 		_set_ready()
 	else:
-		_state = State.NEEDS_UPDATE
-		_start_download()
+		_prompt_download("Version %s bereit — HERUNTERLADEN klicken." % _remote_version)
 
 
 func _start_download() -> void:

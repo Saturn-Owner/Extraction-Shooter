@@ -2,8 +2,10 @@ EXTRACTION SHOOTER — MULTIPLAYER-BETA
 =====================================
 
 Danke fuers Mittesten! Du brauchst nur EINE Datei: den Launcher.
-Er laedt das Spiel selbst herunter und haelt sich selbst UND das Spiel
-automatisch aktuell — du musst nie wieder etwas geschickt bekommen.
+Er haelt sich selbst automatisch aktuell — du musst nie wieder eine neue
+Launcher-Datei geschickt bekommen. Das SPIEL laedt er dagegen nie von
+selbst herunter: Sobald ein Update da ist, wird aus SPIELEN ein
+HERUNTERLADEN-Knopf, und erst dein Klick startet den Download.
 
 LOSLEGEN
 --------
@@ -11,7 +13,8 @@ LOSLEGEN
    (Windows zeigt beim ersten Mal evtl. eine blaue Warnung
    "Der Computer wurde geschuetzt" — das Spiel ist nur nicht signiert.
    Auf "Weitere Informationen" und dann "Trotzdem ausfuehren" klicken.)
-2. Der Launcher laedt beim ersten Start das Spiel herunter (~70 MB).
+2. Steht unten rechts  HERUNTERLADEN  statt SPIELEN, draufklicken —
+   das Spiel laedt herunter (~70 MB).
 3. Rechts unter KONTO deinen Spielernamen eintragen.
    Optional: "Mit Steam anmelden" — dein Browser geht auf, du bestaetigst
    bei Steam, fertig. (Wir sehen nie dein Passwort, nur deine Steam-ID.
@@ -46,8 +49,8 @@ musst du vorhalten.
 
 WENN ETWAS NICHT GEHT
 ---------------------
-- "Deine Spielversion ist veraltet": Launcher schliessen und neu
-  starten — er holt das Update automatisch.
+- "Deine Spielversion ist veraltet": Launcher schliessen und neu starten
+  — steht dann HERUNTERLADEN da, draufklicken.
 - "Verbindung fehlgeschlagen": Kurz nochmal probieren. Klappt es
   gar nicht, sag Tim Bescheid — vielleicht ist der Server gerade aus.
 - Spiel haengt/abgestuerzt: Launcher neu starten, SPIELEN.
