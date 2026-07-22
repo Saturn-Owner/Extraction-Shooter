@@ -124,7 +124,9 @@ func _configure() -> void:
 	# der AR-15 sitzt hinten OBEN — die Waffe wird deshalb ANGEWINKELT
 	# (Mündung hoch, leicht gerollt und näher ans Auge), damit man den Zug
 	# von oben sieht, statt sie wegzudrehen. Nach dem Spielen eingestellt.
-	rack_turn_rotation_override = Vector3(-14.0, -3.0, 12.0)
+	# Positives X hebt die Muendung — mit -14 kippte sie beim ersten Versuch
+	# nach unten, genau falsch herum.
+	rack_turn_rotation_override = Vector3(14.0, -3.0, 12.0)
 	rack_turn_offset_override = Vector3(0.0, -0.012, 0.03)
 	# Die Anwinkelung rahmt die GANZE Nachladung, nicht nur den Hebelzug:
 	# erst hochwinkeln, DANN Magazin raus, neues rein, zum Schluss der Zug.
