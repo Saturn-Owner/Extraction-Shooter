@@ -1134,22 +1134,30 @@ func _test_handle_rack_kicks_pose() -> void:
 	const DT := 1.0 / 60.0
 	const RELOAD_DURATION := 2.0
 
-	# Leere Nachladung beginnt. Auf halbem Weg — deutlich vor RACK_TURN_START_
-	# PROGRESS (0.87) — sitzt das Magazin zwar schon, aber die Drehung darf
-	# noch nicht eingesetzt haben.
+	# Leere Nachladung beginnt. Geprueft wird gegen die GRENZE DER WAFFE
+	# (rack_turn_start_progress), nicht gegen eine feste Zahl: Die AKM dreht
+	# erst nach dem Magazinwechsel, die AR-15 rahmt die ganze Nachladung mit
+	# ihrer Anwinkelung (Grenze 0.0) — beides ist richtig, solange die Pose
+	# tut, was die Waffe ansagt.
 	view._on_reload_started(RELOAD_DURATION, true, false)
-	for i in int(RELOAD_DURATION / DT * 0.5):
-		view._update_sequence(DT)
-		view._update_pose(DT)
-	_check(pose.position.distance_to(hip) < 0.001,
-		"waehrend des Magazinwechsels dreht sich noch nichts (%.4f m Abstand)"
-			% pose.position.distance_to(hip))
-
-	# Weiter simulieren, bis deutlich ueber RACK_TURN_START_PROGRESS hinaus,
-	# aber vor dem Ende der Sequenz: Jetzt muss die Drehung eingesetzt haben.
-	for i in int(RELOAD_DURATION / DT * 0.45):
-		view._update_sequence(DT)
-		view._update_pose(DT)
+	var turn_start: float = viewmodel.rack_turn_start_progress
+	if turn_start >= 0.2:
+		# Bis zur Haelfte der erlaubten Ruhephase: noch keine Bewegung.
+		for i in int(RELOAD_DURATION / DT * turn_start * 0.5):
+			view._update_sequence(DT)
+			view._update_pose(DT)
+		_check(pose.position.distance_to(hip) < 0.001,
+			"vor der eigenen Drehgrenze dreht sich noch nichts (%.4f m Abstand)"
+				% pose.position.distance_to(hip))
+		# Weiter bis deutlich ueber die Grenze, aber vor dem Ende.
+		for i in int(RELOAD_DURATION / DT * (0.95 - turn_start * 0.5)):
+			view._update_sequence(DT)
+			view._update_pose(DT)
+	else:
+		# Die Waffe winkelt von Anfang an: einfach bis kurz vor Schluss laufen.
+		for i in int(RELOAD_DURATION / DT * 0.95):
+			view._update_sequence(DT)
+			view._update_pose(DT)
 	# Der Versatz selbst ist klein (rack_turn_offset misst nur 0.02 m in der
 	# Spitze) und die Feder ist zu diesem Zeitpunkt erst kurz unterwegs — die
 	# Schwelle testet deshalb "hat sich ueberhaupt geruehrt", nicht "ist schon
