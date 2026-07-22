@@ -121,6 +121,16 @@ var _meshes: Dictionary = {}
 var _hitboxes: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 
+## Woher und wohin der letzte Treffer ging — reiner Zwischenspeicher fuer den
+## Uebergang zum Ragdoll (siehe RagdollRig._on_died()), KEIN Signalparameter:
+## `part_hit` und `died` bleiben unveraendert, jeder bestehende Hoerer braucht
+## keine Anpassung. `apply_damage()` feuert `died` synchron innerhalb von
+## `take_hit_on_part()` — diese Felder stehen also schon fest, bevor `died`
+## irgendwo ankommt.
+var last_hit_part: HealthSystem.Part
+var last_hit_point: Vector3
+var last_hit_direction: Vector3
+
 
 func _ready() -> void:
 	_rng.randomize()
@@ -495,7 +505,7 @@ func hitboxes_of(part: HealthSystem.Part) -> Array:
 ## gibt, an der über Schaden entschieden wird — dieselbe Stelle, die im
 ## Mehrspielerbetrieb auf den Server wandert.
 func take_hit_on_part(part: HealthSystem.Part, ammo: AmmoData, distance: float,
-		_point: Vector3, _direction: Vector3) -> Ballistics.HitResult:
+		point: Vector3, direction: Vector3) -> Ballistics.HitResult:
 	# Eine Platte deckt nur ab, was sie abdeckt. Ein Kopfschuss geht daran
 	# vorbei, auch wenn die Weste noch heil ist — genau darum ist Rüstung in
 	# diesem Spiel kein Stufensystem, sondern Fläche.
@@ -504,6 +514,14 @@ func take_hit_on_part(part: HealthSystem.Part, ammo: AmmoData, distance: float,
 
 	if covering != null:
 		plate_durability = maxf(0.0, plate_durability - result.damage_to_armor)
+
+	# VOR apply_damage() setzen: Ein toedlicher Treffer feuert `died` noch
+	# innerhalb dieses Aufrufs (siehe HealthSystem.apply_damage) — RagdollRig
+	# liest diese drei Felder dort und muss den Schuss finden, der gerade
+	# eingeschlagen ist, nicht den vorherigen.
+	last_hit_part = part
+	last_hit_point = point
+	last_hit_direction = direction
 
 	if health != null and result.damage_to_target > 0.0:
 		health.apply_damage(part, result.damage_to_target)

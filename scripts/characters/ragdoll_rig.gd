@@ -65,6 +65,15 @@ var _pieces: Dictionary = {}
 
 var _joints: Array[Generic6DOFJoint3D] = []
 
+## Koerperteil -> Array[Generic6DOFJoint3D], die dieses Teil an den Rest
+## haengen. gib() braucht das, um GENAU die Gelenke EINES Teils zu loesen,
+## ohne den Rest der Liste durchsuchen zu muessen.
+var _joints_by_part: Dictionary = {}
+
+## Fleischbrocken aus gib() — raeumen sich selbst nach 6 Sekunden weg, aber
+## reset() (z.B. Taste 0 im Schiessstand) darf nicht auf diesen Timer warten.
+var _chunks: Array[RigidBody3D] = []
+
 var _ragdolling: bool = false
 
 
@@ -110,6 +119,15 @@ func _on_died() -> void:
 			var world_dir: Vector3 = global_transform.basis * fall_impulse_dir.normalized()
 			body.apply_central_impulse(world_dir * fall_impulse_strength * body.mass)
 
+	# Der toedliche Treffer selbst sprengt das getroffene Teil ab — siehe
+	# gib(). figure.last_hit_part ist zu diesem Zeitpunkt IMMER Kopf oder
+	# Brust: died() feuert in HealthSystem.apply_damage() nur fuer diese
+	# beiden (VITAL), und last_hit_part wird dort in derselben Funktion
+	# gesetzt, die auch died() ausloest (siehe blocky_character.gd).
+	gib(figure.last_hit_part, figure.last_hit_point, figure.last_hit_direction)
+
+	_spawn_blood_pool()
+
 
 ## Wie kraeftig Knie und Hueften beim Sterben angestossen werden, damit die
 ## Beine sofort einknicken. Reine Gefuehlssache — siehe CLAUDE.md.
@@ -142,6 +160,139 @@ func _buckle_legs() -> void:
 		var bend_axis: Vector3 = lower.global_transform.basis.x
 		upper.apply_torque_impulse(-bend_axis * HIP_BUCKLE_IMPULSE * upper.mass)
 		lower.apply_torque_impulse(-bend_axis * KNEE_BUCKLE_IMPULSE * lower.mass)
+
+
+## Wie kraeftig ein abgesprengtes Teil vom Rumpf wegfliegt.
+const GIB_IMPULSE_STRENGTH := 6.0
+
+## Wie viele Fleischbrocken pro Absprengung wegfliegen, und wie stark.
+const CHUNK_COUNT := 5
+const CHUNK_SIZE := 0.05
+const CHUNK_IMPULSE_STRENGTH := 3.0
+
+## Loest GENAU EIN Koerperteil vom Rest des Ragdolls — anders als die ueblichen
+## Gelenkgrenzen (siehe _joint()), die ein Teil nur einschraenken, wird hier
+## die Verbindung komplett entfernt. Das Teil bekommt dazu einen Stoss in
+## Schussrichtung, damit es sichtbar wegfliegt statt einfach nur locker
+## herunterzuhaengen.
+##
+## Ohne Wirkung, wenn `part` kein bekanntes Teil ist (Dictionary.get faellt auf
+## eine leere Liste zurueck) — so bleibt der Aufruf aus _on_died() gefahrlos,
+## auch falls figure.last_hit_part einmal einen unerwarteten Wert traegt.
+func gib(part: HealthSystem.Part, point: Vector3, direction: Vector3) -> void:
+	var pieces: Array = _pieces.get(part, [])
+	if pieces.is_empty():
+		return
+
+	for joint in _joints_by_part.get(part, []):
+		if is_instance_valid(joint):
+			joint.queue_free()
+		_joints.erase(joint)
+		# Denselben Verweis auch aus jedem ANDEREN Teil streichen, das an
+		# diesem Gelenk haengt — sonst zeigt z.B. das Kopf-Gelenk nach dem
+		# Absprengen der Brust weiter auf ein bereits freigegebenes Gelenk.
+		for other_part in _joints_by_part:
+			(_joints_by_part[other_part] as Array).erase(joint)
+	_joints_by_part.erase(part)
+
+	var kick := direction.normalized() * GIB_IMPULSE_STRENGTH
+	for body in pieces:
+		var rigid := body as RigidBody3D
+		# Am Trefferpunkt ansetzen, nicht am Massenmittelpunkt: Der Stoss
+		# bekommt dadurch einen Drehimpuls mit — das Teil taumelt beim
+		# Wegfliegen, statt sich stocksteif geradlinig zu bewegen.
+		rigid.apply_impulse(kick * rigid.mass, point - rigid.global_position)
+
+	ImpactEffect.spawn(self, point, -direction.normalized(), ImpactEffect.Kind.FLESH)
+	_spawn_chunks(point, direction)
+
+
+## Kleine, eingefaerbte Wuerfel, die vom Trennpunkt wegfliegen — bleibt im
+## blockigen Stil der Figur (siehe BlockyCharacter), statt echte
+## Fleischmodelle vorzutaeuschen, die es hier nicht gibt. Frei fliegende
+## Deko ohne Gelenk, raeumt sich nach kurzer Zeit selbst weg.
+func _spawn_chunks(point: Vector3, direction: Vector3) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+
+	for i in range(CHUNK_COUNT):
+		var chunk := RigidBody3D.new()
+		chunk.mass = 0.2
+		chunk.collision_layer = 1
+		chunk.collision_mask = 1
+		add_child(chunk)
+		chunk.global_position = point
+
+		var visual := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3.ONE * CHUNK_SIZE
+		visual.mesh = box
+		var material := StandardMaterial3D.new()
+		material.albedo_color = ImpactEffect.COLOR_FLESH.darkened(rng.randf_range(0.0, 0.25))
+		material.roughness = 0.85
+		visual.material_override = material
+		chunk.add_child(visual)
+
+		var shape := CollisionShape3D.new()
+		var box_shape := BoxShape3D.new()
+		box_shape.size = box.size
+		shape.shape = box_shape
+		chunk.add_child(shape)
+
+		# Grob in Schussrichtung, aber gestreut — sonst fliegen alle Brocken
+		# wie an einer Schnur aufgereiht in dieselbe Linie.
+		var spread := Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(0.2, 1.0),
+			rng.randf_range(-1.0, 1.0))
+		var kick := (direction.normalized() + spread * 0.6).normalized()
+		chunk.apply_central_impulse(kick * CHUNK_IMPULSE_STRENGTH * chunk.mass)
+		chunk.apply_torque_impulse(Vector3(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0),
+			rng.randf_range(-1.0, 1.0)) * 0.05)
+
+		_chunks.append(chunk)
+		var timer := get_tree().create_timer(6.0)
+		timer.timeout.connect(chunk.queue_free)
+
+
+## Eine Blutlache auf dem Boden unter dem Rumpf, kurz nachdem die Figur
+## gefallen ist — sofort waere sie zu frueh, die Teile fallen ja noch.
+##
+## Der Rumpf selbst liegt nach dem Fallen auf halber Kastenhoehe ueber dem
+## Boden, nicht darauf — deshalb ein kurzer Strahl nach unten, statt die
+## Lache einfach an die Rumpfposition zu haengen (die haenge sonst in der
+## Luft oder in der Wand, je nachdem, wie die Figur gefallen ist).
+func _spawn_blood_pool() -> void:
+	var chest: Array = _pieces.get(HealthSystem.Part.CHEST, [])
+	if chest.is_empty():
+		return
+	var body: RigidBody3D = chest[0]
+
+	var timer := get_tree().create_timer(0.6)
+	timer.timeout.connect(func() -> void:
+		if not is_instance_valid(body):
+			return
+		var space := get_world_3d().direct_space_state
+		var from := body.global_position
+		var to := from + Vector3(0.0, -2.0, 0.0)
+		var query := PhysicsRayQueryParameters3D.create(from, to)
+		query.collision_mask = 1
+		# Sonst faengt der Strahl den eigenen Rumpfkasten (oder ein anderes
+		# Ragdoll-Teil darunter) ab — die teilen sich dieselbe Ebene mit dem
+		# Boden (siehe _build_piece()).
+		query.exclude = _all_piece_rids()
+		var hit := space.intersect_ray(query)
+		var ground: Vector3 = hit.get("position", from)
+		BloodPool.spawn(get_parent(), ground)
+	)
+
+
+## Alle Ragdoll-Kaesten als RID, zum Ausschliessen aus dem Bodenstrahl oben.
+func _all_piece_rids() -> Array[RID]:
+	var rids: Array[RID] = []
+	for part in _pieces:
+		for piece in _pieces[part]:
+			if is_instance_valid(piece):
+				rids.append((piece as RigidBody3D).get_rid())
+	return rids
 
 
 ## Baut einen einzelnen Ragdoll-Kasten aus einem bestehenden Mesh der Figur —
@@ -238,6 +389,13 @@ func _joint(part_a: HealthSystem.Part, index_a: int, part_b: HealthSystem.Part, 
 	joint.node_a = joint.get_path_to(body_a)
 	joint.node_b = joint.get_path_to(body_b)
 
+	if not _joints_by_part.has(part_a):
+		_joints_by_part[part_a] = []
+	if not _joints_by_part.has(part_b):
+		_joints_by_part[part_b] = []
+	_joints_by_part[part_a].append(joint)
+	_joints_by_part[part_b].append(joint)
+
 	# Linear komplett gesperrt auf allen drei Achsen — die Kaesten bleiben am
 	# Drehpunkt zusammen. Nur die Drehung selbst ist je nach Gelenktyp begrenzt
 	# frei.
@@ -333,12 +491,21 @@ func reset() -> void:
 		if is_instance_valid(joint):
 			joint.queue_free()
 	_joints.clear()
+	_joints_by_part.clear()
 
 	for part in _pieces:
 		for body in _pieces[part]:
 			if is_instance_valid(body):
 				(body as RigidBody3D).queue_free()
 	_pieces.clear()
+
+	# gib() haengt Fleischbrocken frei (ohne Gelenk) an dieses Rig — die
+	# raeumen sich zwar nach 6 Sekunden selbst weg, aber ein Reset soll nicht
+	# auf den Timer warten muessen.
+	for chunk in _chunks:
+		if is_instance_valid(chunk):
+			chunk.queue_free()
+	_chunks.clear()
 
 	if figure != null:
 		for part: HealthSystem.Part in BlockyCharacter.VERTICAL:

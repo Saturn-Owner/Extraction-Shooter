@@ -1201,7 +1201,8 @@ func _test_run_in_place() -> void:
 
 
 ## RagdollRig: die Figur zerlegt sich beim Sterben wirklich in einzelne,
-## gelenkig verbundene Kaesten (kein einzelner starrer Koerper) — und
+## gelenkig verbundene Kaesten (kein einzelner starrer Koerper), der
+## toedliche Treffer sprengt sein Teil zusaetzlich ab (siehe gib()) — und
 ## reset() baut die lebende Figur wieder zusammen.
 func _test_ragdoll_rig() -> void:
 	_section("RagdollRig: echtes Ragdoll aus elf Kaesten und zehn Gelenken")
@@ -1222,8 +1223,15 @@ func _test_ragdoll_rig() -> void:
 
 	var spawn_position := rig.global_position
 	var head_before := figure.joint_of(HealthSystem.Part.HEAD).global_position
+	var head_start := figure.joint_of(HealthSystem.Part.HEAD).global_position
 
-	figure.health.apply_damage(HealthSystem.Part.HEAD, 999.0)
+	# UEBER take_hit_on_part(), nicht direkt health.apply_damage(): Nur so
+	# setzt BlockyCharacter last_hit_point/-direction (siehe dort), die
+	# gib() fuer den Wegstoss braucht. Eine seitliche Richtung, damit sich
+	# der Gib-Stoss klar vom blossen Fallen unter Schwerkraft unterscheidet.
+	var ammo := _ammo(&"ammo_556x45_m855a1")
+	figure.take_hit_on_part(HealthSystem.Part.HEAD, ammo, 10.0,
+		head_start, Vector3(1.0, 0.2, 0.0).normalized())
 	await process_frame
 
 	var piece_count := 0
@@ -1231,14 +1239,19 @@ func _test_ragdoll_rig() -> void:
 		piece_count += rig._pieces.get(part, []).size()
 	_check(piece_count == 11,
 		"stirbt sie, entstehen elf einzelne Kaesten (%d)" % piece_count)
-	_check(rig._joints.size() == 10,
-		"...verbunden durch zehn Gelenke (%d)" % rig._joints.size())
 	_check(not figure.visible, "die Originalfigur wird unsichtbar")
 	_check(figure.hitboxes_of(HealthSystem.Part.CHEST)[0].collision_layer == 0,
 		"...und ist selbst nicht mehr treffbar (die Kaesten sind es jetzt)")
 
+	# GIBBING: Der toedliche Treffer loest GENAU das getroffene Teil vom Rest.
+	_check(rig._joints.size() == 9,
+		"der Kopftreffer loest sein eigenes Gelenk, neun bleiben (%d)" % rig._joints.size())
+	_check(rig._joints_by_part.get(HealthSystem.Part.HEAD, []).is_empty(),
+		"der Kopf haengt an keinem Gelenk mehr")
+
 	var chest_piece: RigidBody3D = rig._pieces[HealthSystem.Part.CHEST][0]
 	var head_piece: RigidBody3D = rig._pieces[HealthSystem.Part.HEAD][0]
+	var arm_piece: RigidBody3D = rig._pieces[HealthSystem.Part.LEFT_ARM][0]
 	var chest_start := chest_piece.global_position
 
 	for i in range(60):
@@ -1247,12 +1260,15 @@ func _test_ragdoll_rig() -> void:
 	_check(chest_piece.global_position.y < chest_start.y - 0.05,
 		"die Kaesten fallen wirklich, unter Schwerkraft (%.3f m Abstand in Y)"
 			% (chest_start.y - chest_piece.global_position.y))
-	_check(chest_piece.global_position.distance_to(head_piece.global_position) < 1.0,
-		"...bleiben aber am Gelenk zusammen, statt auseinanderzufliegen (%.3f m Kopf-Brust-Abstand)"
-			% chest_piece.global_position.distance_to(head_piece.global_position))
+	_check(chest_piece.global_position.distance_to(arm_piece.global_position) < 1.0,
+		"...ungibbte Teile bleiben aber am Gelenk zusammen (%.3f m Brust-Arm-Abstand)"
+			% chest_piece.global_position.distance_to(arm_piece.global_position))
+	_check(head_piece.global_position.distance_to(head_start) > 0.3,
+		"...der abgesprengte Kopf ist dagegen wirklich weggeflogen (%.2f m vom Ausgangspunkt)"
+			% head_piece.global_position.distance_to(head_start))
 
 	rig.reset()
-	_check(rig._pieces.is_empty() and rig._joints.is_empty(),
+	_check(rig._pieces.is_empty() and rig._joints.is_empty() and rig._joints_by_part.is_empty(),
 		"reset() entfernt alle Kaesten und Gelenke wieder")
 	_check(figure.visible, "die Figur ist wieder sichtbar")
 	_check(figure.hitboxes_of(HealthSystem.Part.CHEST)[0].collision_layer == figure.hit_layer,
