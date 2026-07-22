@@ -119,6 +119,19 @@ func _test_generate_builds_mesh_and_collision() -> void:
 	terrain.queue_free()
 	await process_frame
 
+	# --- WICKELREIHENFOLGE: DAS GELAENDE MUSS VON OBEN SICHTBAR SEIN ---
+	#
+	# Frueher stand hier eine Wickelreihenfolge, die geometrisch nach +Y
+	# (oben) zeigte und trotzdem von Godots Rueckseitenausblendung verworfen
+	# wurde — das Gelaende war komplett unsichtbar, nur die Kollision
+	# stimmte noch (siehe der lange Kommentar in TerrainGenerator._build_
+	# mesh()). Ein flaches Testfeld (Amplitude 0) macht die Rechnung
+	# eindeutig, ohne dass Gelaende-Rauschen das Ergebnis verwaschen kann.
+	var flat_mesh := TerrainGenerator._build_mesh(4, Vector2(10.0, 10.0),
+		TerrainGenerator.heights_grid(4, 1, 0.0))
+	_check(_first_triangle_is_front_facing_from_above(flat_mesh),
+		"das erste Dreieck ist von oben sichtbar (nicht rueckseiten-ausgeblendet)")
+
 
 ## Der eigentliche Beweis: Ein fallender Koerper bleibt auf dem Gelaende
 ## liegen, statt hindurchzufallen oder darueber zu schweben — dieselbe
@@ -165,3 +178,28 @@ func _test_body_rests_on_terrain() -> void:
 	body.queue_free()
 	terrain.queue_free()
 	await process_frame
+
+
+## Prueft die Wickelreihenfolge des allerersten Dreiecks GEOMETRISCH, ohne
+## zu rendern (headless kann das nicht, siehe render_viewmodel.gd) — das
+## Kreuzprodukt der beiden Kanten muss in die Richtung zeigen, die Godot bei
+## diesem Kamera-/Weltachsen-Setup tatsaechlich als Vorderseite behandelt.
+##
+## AN EINEM ECHTEN RENDERBILD NACHGEMESSEN, NICHT GERATEN: Mit der falschen
+## (aber geometrisch "logisch" wirkenden) Reihenfolge kreuzt das Ergebnis
+## nach +Y — und war trotzdem komplett unsichtbar. Erst -Y liess das
+## Gelaende im Bild erscheinen. Diese Pruefung haelt genau diesen Befund
+## fest, damit ein zukuenftiger "logischer" Umbau ihn nicht wieder umdreht,
+## ohne dass es auffaellt.
+func _first_triangle_is_front_facing_from_above(mesh: ArrayMesh) -> bool:
+	var arrays := mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	if indices.size() < 3:
+		return false
+
+	var v0 := vertices[indices[0]]
+	var v1 := vertices[indices[1]]
+	var v2 := vertices[indices[2]]
+	var cross := (v1 - v0).cross(v2 - v0)
+	return cross.y < -0.0001

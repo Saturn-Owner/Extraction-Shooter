@@ -144,6 +144,17 @@ static func _build_mesh(samples: int, size: Vector2, heights: PackedFloat32Array
 			var slope_z := (up - down) / (2.0 * step_z)
 			normals[z * samples + x] = Vector3(-slope_x, 1.0, -slope_z).normalized()
 
+	# WICKELREIHENFOLGE ENTSCHEIDET, OB DAS DREIECK UEBERHAUPT GEZEICHNET WIRD.
+	#
+	# Ein erster Versuch nahm (a, c, b) / (b, c, d) — nach der Kreuzprodukt-
+	# Rechnung im Objektraum ein nach +Y (oben) zeigendes Dreieck, also
+	# eigentlich richtig herum. Trotzdem blieb das Gelaende unsichtbar: mit
+	# `cull_mode = CULL_DISABLED` erschien es sofort, mit dem normalen
+	# (rueckseiten-ausblendenden) Material nie — Godots tatsaechliche
+	# Vorderseiten-Konvention fuer dieses Kamera-/Weltachsen-Setup ist der
+	# eigenen Objektraum-Rechnung entgegengesetzt. (a, b, c) / (b, d, c) ist
+	# die Wickelreihenfolge, die Godot als Vorderseite (von oben sichtbar)
+	# behandelt — an einem einzelnen Testdreieck nachgemessen, nicht geraten.
 	var indices := PackedInt32Array()
 	indices.resize((samples - 1) * (samples - 1) * 6)
 	var cursor := 0
@@ -153,8 +164,8 @@ static func _build_mesh(samples: int, size: Vector2, heights: PackedFloat32Array
 			var b := a + 1
 			var c := a + samples
 			var d := c + 1
-			indices[cursor] = a; indices[cursor + 1] = c; indices[cursor + 2] = b
-			indices[cursor + 3] = b; indices[cursor + 4] = c; indices[cursor + 5] = d
+			indices[cursor] = a; indices[cursor + 1] = b; indices[cursor + 2] = c
+			indices[cursor + 3] = b; indices[cursor + 4] = d; indices[cursor + 5] = c
 			cursor += 6
 
 	var arrays := []

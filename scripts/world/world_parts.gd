@@ -106,7 +106,19 @@ static func snow_material() -> BaseMaterial3D:
 	# Diese Dellen Buckel und alle Buckel Dellen — es faellt kaum auf und sieht
 	# trotzdem dauerhaft falsch aus.
 	mat.normal_texture = load("%s/snow_normal.jpg" % SNOW_DIR)
-	mat.normal_scale = 1.0
+	#
+	# ---------------------------------------------------------------------
+	# 3.0 STATT 1.0 — SONST SIEHT DER BODEN AUS EINIGER ENTFERNUNG FLACH AUS
+	#
+	# Bei hoch stehender Sonne (fast senkrechtes Licht, wie in schneekarte.tscn
+	# und raid_frachthafen.tscn) wirft eine Normalenkarte mit Staerke 1.0 kaum
+	# sichtbaren Schattenwurf — kleine Bodenunebenheiten brauchen STREIFLICHT,
+	# um aufzufallen, das bei steilem Lichteinfall fehlt. Aus der Naehe (dort,
+	# wo ein Spieler die meiste Zeit hinsieht) wirkte der Schnee dadurch wie
+	# eine einfarbige Flaeche ohne Struktur — nachgemessen durch Renderbilder,
+	# nicht geraten. 3.0 uebertreibt die Bodenunebenheiten, damit auch bei
+	# steilem Licht genug Kontrast durchkommt.
+	mat.normal_scale = 3.0
 
 	mat.roughness_texture = load("%s/snow_roughness.jpg" % SNOW_DIR)
 	mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GRAYSCALE
