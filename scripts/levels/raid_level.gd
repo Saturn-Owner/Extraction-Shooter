@@ -44,6 +44,11 @@ var _message_timer := 0.0
 
 
 func _ready() -> void:
+	# Kompiliert die Shader der AK/AR-15 im Hintergrund, bevor man sie
+	# findet — sonst ruckelt es beim ersten Wechsel zu ihnen mitten im
+	# Gefecht. Siehe WeaponWarmup.
+	add_child(WeaponWarmup.new())
+
 	_spawn = _player.global_position
 	_raid.setup(_player)
 	_raid.raid_ended.connect(_on_raid_ended)
