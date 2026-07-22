@@ -638,7 +638,13 @@ static func reload_hand_path(p: float, handguard: Vector3, magwell: Vector3,
 
 	# 6. Zum Ladehebel greifen — bis zu dem Moment, in dem er sich zu
 	#    bewegen beginnt (pull_start der Waffe), sonst bis zur festen Marke.
-	var grab_end := pull_start if pull_start > 0.0 else RELOAD_CHARGE
+	#
+	# GEKLEMMT AUF MINDESTENS RELOAD_SEAT: Setzt eine Waffe ihren pull_start
+	# VOR das Ende der Magazin-Sitzphase (RELOAD_SEAT), gäbe es kein Fenster
+	# zum Hinreichen mehr — die Hand läge exakt an der Nahtstelle vom
+	# Magazinschacht auf den (dann schon fahrenden) Hebel, ohne Übergang.
+	# Genau das ist der AR-15 passiert, als ihr Ladehebel zu frueh losfuhr.
+	var grab_end := maxf(pull_start, RELOAD_SEAT + 0.02) if pull_start > 0.0 else RELOAD_CHARGE
 	if p < grab_end:
 		return magwell.lerp(handle, smoothstep(RELOAD_SEAT, grab_end, p))
 

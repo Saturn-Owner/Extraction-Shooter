@@ -140,10 +140,17 @@ func _configure() -> void:
 	# Deshalb 0.0 — die Feder in weapon_view zieht die Pose gleich zu Beginn
 	# weich an, und die Waffe bleibt oben, bis alles durch ist.
 	rack_turn_start_progress = 0.0
-	# Der Zug selbst bekommt mehr Zeit: Das Fenster beginnt früher (0.82
+	# Der Zug selbst bekommt mehr Zeit: Das Fenster beginnt früher (0.90
 	# statt 0.93 der Grundklasse), damit die Hand den Hebel sichtbar ZIEHT
 	# statt ihn nur zucken zu lassen.
-	handle_pull_start_progress = 0.82
+	#
+	# MUSS ÜBER CharacterAnimation.RELOAD_SEAT (0.85) LIEGEN: Das ist die
+	# feste, für alle Waffen geteilte Marke, an der das Magazin fertig sitzt
+	# und die Hand danach zum Hebel greift (siehe reload_hand_path). Ein
+	# erster Versuch mit 0.82 lag DARUNTER — der Hebel fing an zu fahren,
+	# bevor die Hand überhaupt beim Magazinschacht fertig war, und sie
+	# sprang ohne Greifbewegung direkt auf den schon fahrenden Hebel.
+	handle_pull_start_progress = 0.90
 
 
 func _build_parts() -> void:
