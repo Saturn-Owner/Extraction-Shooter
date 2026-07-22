@@ -126,11 +126,14 @@ func _configure() -> void:
 	# von oben sieht, statt sie wegzudrehen. Nach dem Spielen eingestellt.
 	rack_turn_rotation_override = Vector3(-14.0, -3.0, 12.0)
 	rack_turn_offset_override = Vector3(0.0, -0.012, 0.03)
-	# Und der Zug selbst bekommt mehr Zeit: Das Fenster beginnt früher
-	# (0.82 statt 0.93 der Grundklasse), damit die Hand den Hebel sichtbar
-	# ZIEHT statt ihn nur zucken zu lassen. Die Drehung beginnt entsprechend
-	# davor, dieselbe Staffelung wie bei der AKM.
-	rack_turn_start_progress = 0.72
+	# Die Anwinkelung rahmt die GANZE Nachladung, nicht nur den Hebelzug:
+	# erst hochwinkeln, DANN Magazin raus, neues rein, zum Schluss der Zug.
+	# Deshalb 0.0 — die Feder in weapon_view zieht die Pose gleich zu Beginn
+	# weich an, und die Waffe bleibt oben, bis alles durch ist.
+	rack_turn_start_progress = 0.0
+	# Der Zug selbst bekommt mehr Zeit: Das Fenster beginnt früher (0.82
+	# statt 0.93 der Grundklasse), damit die Hand den Hebel sichtbar ZIEHT
+	# statt ihn nur zucken zu lassen.
 	handle_pull_start_progress = 0.82
 
 
