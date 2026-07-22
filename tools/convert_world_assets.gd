@@ -42,6 +42,13 @@
 ## gerenderten Ergebnis nachgemessen ist (Kontrollrender neben einer 1,8-m-
 ## Referenzfigur), nicht an _bounds()' Fehlmessung.
 ##
+## Die Sketchfab-Vorlage zeigt zudem ZWEI Windmuehlentuerme nebeneinander
+## (Cylinder011 UND Cylinder012, rund 28 m auseinander) — im Spiel gesehen:
+## Bei jeder Platzierung standen deshalb immer zwei Tuerme zusammen, nie nur
+## einer. Da der Karten-Generator selbst genug Haeuser verteilt, bleibt hier
+## nur EIN Turm (Cylinder012 fliegt mit raus) — wer zwei nebeneinander will,
+## bekommt sie ohnehin durch zwei getrennte Platzierungen.
+##
 ## FEHLT ABSICHTLICH: "Lake Hawea House" (Azimuth Design, CC BY 4.0). Auch
 ## texturverkleinert 80 MB gross (652.000 Dreiecke, Photogrammetrie-Scan) —
 ## reisst die 50-MB-Grenze aus verify_frachthafen.gd. Siehe QUELLEN.md.
@@ -67,7 +74,7 @@ const ASSETS := [
 	{source = "old_wooden_watchtower_house_3.glb", target = TARGET_DIR + "old_wooden_watchtower_house.glb", scale = 1.0},
 	{source = "psx_abandoned_house.glb", target = TARGET_DIR + "psx_abandoned_house.glb", scale = 1.0},
 	{source = "windmill.glb", target = TARGET_DIR + "windmill.glb", scale = 0.01,
-		strip = ["Object_4/Skeleton3D"]},
+		strip = ["Object_4/Skeleton3D", "Object_4/Cylinder012"]},
 	{source = "snow_pine_tree_and_bush_pack_lowpoly.glb", target = TREE_TARGET_DIR + "snow_pine_pack.glb", scale = 1.0},
 ]
 

@@ -48,11 +48,10 @@ const HOUSE_COUNT := 30
 ##
 ## Ein einziger fester Wert (frueher 26 m, an house_home's Diagonale von rund
 ## 24 m bemessen) ging davon aus, dass alle Haeuser aehnlich gross sind. Das
-## stimmte nicht mehr, als sich herausstellte, dass windmill.glb tatsaechlich
-## ZWEI Windmuehlentuerme rund 32 x 30 m einnimmt (siehe WorldHouse.CATALOGUE)
-## — mit 26 m Mindestabstand haette ein Nachbarhaus mitten im zweiten Turm
-## gestanden. Der Abstand wird deshalb je Haus-PAAR aus deren tatsaechlichen
-## Grundflaechen berechnet, nicht mehr pauschal angenommen.
+## Katalog spannt aber von 2,19 m (Wachturm) bis 21,74 m Laenge (house_home)
+## — ein Wert, der fuer die kleinsten passt, ist fuer die groessten zu knapp,
+## und umgekehrt waere die Karte unnoetig leer. Der Abstand wird deshalb je
+## Haus-PAAR aus deren tatsaechlichen Grundflaechen berechnet.
 const HOUSE_CLEARANCE := 6.0
 
 ## Wie nah ein Haus an einen Waldweg heranruecken darf (siehe WorldPath),
