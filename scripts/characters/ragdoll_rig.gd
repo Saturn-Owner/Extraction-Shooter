@@ -92,6 +92,15 @@ var _waist_joint: Generic6DOFJoint3D
 
 var _ragdolling: bool = false
 
+## Zaehlt bei jedem Tod UND jedem reset() hoch. _buckle_legs() und
+## _play_wound_collapse() planen verzoegerte Timer (Motor abschalten,
+## Kippstoss) — wird zwischendurch zurueckgesetzt und die Figur stirbt erneut
+## (z. B. Taste 0 kurz nach dem Tod gedrueckt), wuerde ein solcher Timer sonst
+## noch auf das NEUE Leben wirken, weil er nicht weiss, dass er zu einem
+## laengst vorbeigegangenen Tod gehoert. Jeder Timer merkt sich beim Planen
+## den aktuellen Stand und wirkt nur, wenn der beim Ausloesen noch derselbe ist.
+var _death_generation: int = 0
+
 
 ## Haengt die Figur ein. Sie steht danach exakt dort, wo dieses Rig steht.
 func attach(target: BlockyCharacter) -> void:
@@ -113,6 +122,7 @@ func _on_died(killing_part: HealthSystem.Part, hit_point: Vector3) -> void:
 	if _ragdolling:
 		return
 	_ragdolling = true
+	_death_generation += 1
 
 	for part: HealthSystem.Part in BlockyCharacter.VERTICAL:
 		var built: Array[RigidBody3D] = []
@@ -248,7 +258,17 @@ func _play_wound_collapse(killing_part: HealthSystem.Part, hit_point: Vector3) -
 	_start_wound_waist_bend()
 	_highlight_reaching_arm(reaching_arm)
 
-	get_tree().create_timer(WOUND_TOPPLE_DELAY).timeout.connect(_apply_wound_topple)
+	var generation := _death_generation
+	get_tree().create_timer(WOUND_TOPPLE_DELAY).timeout.connect(
+		func(): _apply_wound_topple_if_current(generation))
+
+
+## Wirkt nur, wenn seit dem Planen dieses Timers weder zurueckgesetzt noch
+## erneut gestorben wurde — siehe _death_generation.
+func _apply_wound_topple_if_current(generation: int) -> void:
+	if generation != _death_generation:
+		return
+	_apply_wound_topple()
 
 
 ## Wie weit sich der Rumpf beim Wundgriff nach vorn beugt (Grad), und wie
@@ -351,7 +371,7 @@ const WOUND_CLUTCH_COLOR := Color(0.5, 0.08, 0.08)
 
 func _highlight_reaching_arm(reaching_arm: HealthSystem.Part) -> void:
 	for body: RigidBody3D in _pieces.get(reaching_arm, []):
-		var visual := body.get_child(0) as MeshInstance3D
+		var visual := body.get_node_or_null("Mesh") as MeshInstance3D
 		var material := visual.material_override as StandardMaterial3D if visual != null else null
 		if material != null:
 			material.albedo_color = WOUND_CLUTCH_COLOR
@@ -424,7 +444,17 @@ func _buckle_legs() -> void:
 		_start_buckle_motor(_leg_hip_joints.get(part), HIP_BUCKLE_SPEED)
 		_start_buckle_motor(_leg_knee_joints.get(part), KNEE_BUCKLE_SPEED)
 
-	get_tree().create_timer(BUCKLE_MOTOR_DURATION).timeout.connect(_stop_buckle_motors)
+	var generation := _death_generation
+	get_tree().create_timer(BUCKLE_MOTOR_DURATION).timeout.connect(
+		func(): _stop_buckle_motors_if_current(generation))
+
+
+## Wirkt nur, wenn seit dem Planen dieses Timers weder zurueckgesetzt noch
+## erneut gestorben wurde — siehe _death_generation.
+func _stop_buckle_motors_if_current(generation: int) -> void:
+	if generation != _death_generation:
+		return
+	_stop_buckle_motors()
 
 
 ## Negative Drehung um die lokale X-Achse ist bei Huefte UND Knie die
@@ -488,6 +518,9 @@ func _build_piece(mesh: MeshInstance3D) -> RigidBody3D:
 	body.global_transform = mesh.global_transform
 
 	var visual := MeshInstance3D.new()
+	# Name statt Kindindex, damit _highlight_reaching_arm() ihn sicher findet —
+	# auch wenn hier je einmal die Reihenfolge von Mesh/Kollisionsform vertauscht wird.
+	visual.name = "Mesh"
 	# Dieselbe Box-Ressource — sie aendert sich nicht mehr, ein Duplikat waere
 	# nur ueberfluessiger Ballast.
 	visual.mesh = box_mesh
@@ -653,6 +686,8 @@ func _limit_angular(joint: Generic6DOFJoint3D, axis: String, lower_deg: float, u
 ## Setzt Figur UND Rig zurueck — Ragdoll-Kaesten und Gelenke verschwinden,
 ## die Originalfigur steht wieder unversehrt an ihrem Platz.
 func reset() -> void:
+	_death_generation += 1
+
 	for joint in _joints:
 		if is_instance_valid(joint):
 			joint.queue_free()
