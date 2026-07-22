@@ -20,20 +20,24 @@ extends Node3D
 ## Grundflaeche der Karte in Metern.
 const MAP_SIZE := Vector2(300.0, 300.0)
 
-## Punkte je Achse fuer das Hoehenfeld — 129 ergibt ein Dreieck alle 2,3 m,
-## fein genug fuer sanfte Huegel, grob genug, um nicht zu ruckeln.
-const TERRAIN_RESOLUTION := 129
+## Punkte je Achse fuer das Hoehenfeld — 161 ergibt ein Dreieck alle 1,9 m,
+## fein genug, dass die groessere Amplitude (siehe TERRAIN_AMPLITUDE) nicht
+## kantig wirkt, grob genug, um nicht zu ruckeln.
+const TERRAIN_RESOLUTION := 161
 
 ## Hoehenunterschied der Karte in Metern. Siehe TerrainGenerator.generate()
-## fuer die Begruendung, warum das zurueckhaltend bleibt.
-const TERRAIN_AMPLITUDE := 4.0
+## fuer die Begruendung, warum das grundsaetzlich zurueckhaltend bleibt — 8
+## statt der urspruenglichen 4 fuer spuerbarere Kuppen und Senken, ohne
+## Godots 45-Grad-Grenze fuer begehbaren Boden zu reissen (dieselbe
+## Rauschfrequenz wie zuvor, nur staerker ausgeschlagen).
+const TERRAIN_AMPLITUDE := 8.0
 
 const MAP_SEED := 20260722
 
 ## Wie viele Haeuser insgesamt stehen — mehr als CATALOGUE.size(), weil
 ## Haeuser mehrfach vorkommen duerfen (sonst waere eine 300x300-Karte mit nur
 ## sechs Gebaeuden sehr leer).
-const HOUSE_COUNT := 14
+const HOUSE_COUNT := 30
 
 ## Mindestabstand zwischen zwei Haus-Mittelpunkten, damit sich ihre
 ## Grundflaechen nicht ueberlappen. Grosszuegig ueber der groessten
@@ -41,12 +45,20 @@ const HOUSE_COUNT := 14
 ## auch nach der zufaelligen Drehung noch Luft bleibt.
 const HOUSE_MIN_DISTANCE := 26.0
 
+## Wie nah ein Haus an einen Waldweg heranruecken darf (siehe WorldPath) —
+## grosszuegig ueber der halben Wegbreite, sonst haette ein Weg eine Ecke des
+## Hauses angeschnitten.
+const HOUSE_PATH_CLEARANCE := 15.0
+
+## Wie viele Waldwege quer ueber die Karte fuehren.
+const PATH_COUNT := 5
+
 ## Wie viele EINZELNE Pflanzen verteilt werden (siehe WorldTree — jede fuer
 ## sich, nicht immer derselbe Dreier-Klumpen). Deutlich mehr als bei Klumpen
 ## sinnvoll waeren: eine einzelne Pflanze braucht viel weniger Platz als drei
 ## zusammen, und ein Wald aus vier verschiedenen Arten an unabhaengigen
 ## Stellen sieht erst ab einer gewissen Dichte nach Wald aus.
-const TREE_COUNT := 260
+const TREE_COUNT := 900
 
 ## Mindestabstand zwischen zwei Pflanzen — eng genug fuer einen dichten
 ## Wald, weit genug, dass sich Kronen nicht sichtbar durchdringen.
@@ -56,12 +68,17 @@ const TREE_MIN_DISTANCE := 3.0
 ## Wand, sonst wirken Baum und Haus wie ineinander gesteckt.
 const TREE_HOUSE_CLEARANCE := 4.0
 
+## Wie nah eine Pflanze an einen Waldweg heranruecken darf, ueber die halbe
+## Wegbreite hinaus — sonst haengt eine Baumkrone sichtbar ueber den Weg.
+const TREE_PATH_CLEARANCE := 1.5
+
 @onready var _player: PlayerController = $Player
 @onready var _label: Label = $HUD/DebugPanel/DebugLabel
 
 var _rng := RandomNumberGenerator.new()
 var _heights: PackedFloat32Array
 var _house_positions: Array[Vector2] = []
+var _paths: Array = []
 
 
 func _ready() -> void:
@@ -71,7 +88,13 @@ func _ready() -> void:
 	add_child(TerrainGenerator.generate(MAP_SIZE, TERRAIN_RESOLUTION, MAP_SEED,
 		TERRAIN_AMPLITUDE, WorldParts.snow_material()))
 
+	# Wege ZUERST erzeugen (nur die Wegpunkte, noch nicht die sichtbare
+	# Flaeche) — Haeuser und Baeume muessen wissen, wo sie verlaufen, bevor
+	# sie ihre Plaetze auswuerfeln.
+	_paths = WorldPath.generate(_rng, MAP_SIZE, PATH_COUNT)
+
 	_place_houses()
+	_build_paths()
 	_place_trees()
 	_place_player()
 
@@ -95,7 +118,7 @@ func _place_houses() -> void:
 	# Obergrenze gegen Endlosschleifen: Wird die Karte zu voll (oder
 	# HOUSE_COUNT zu hoch fuer HOUSE_MIN_DISTANCE), bricht die Platzierung
 	# lieber mit weniger Haeusern ab, als ewig zu suchen.
-	var max_attempts := HOUSE_COUNT * 50
+	var max_attempts := HOUSE_COUNT * 80
 
 	while placed < HOUSE_COUNT and attempts < max_attempts:
 		attempts += 1
@@ -104,6 +127,8 @@ func _place_houses() -> void:
 			_rng.randf_range(-MAP_SIZE.y * 0.5 + 20.0, MAP_SIZE.y * 0.5 - 20.0))
 
 		if _too_close(candidate, HOUSE_MIN_DISTANCE):
+			continue
+		if _near_any_path(candidate, HOUSE_PATH_CLEARANCE):
 			continue
 
 		var entry: Dictionary = WorldHouse.CATALOGUE[_rng.randi() % WorldHouse.CATALOGUE.size()]
@@ -127,6 +152,27 @@ func _too_close(candidate: Vector2, min_distance: float) -> bool:
 	return false
 
 
+## Ob `candidate` einem der erzeugten Waldwege naeher als `clearance` kommt.
+func _near_any_path(candidate: Vector2, clearance: float) -> bool:
+	for path in _paths:
+		if WorldPath.distance_to_path(candidate, path) < clearance:
+			return true
+	return false
+
+
+## Baut die sichtbaren Wegflaechen aus den in _ready() erzeugten Wegpunkten.
+func _build_paths() -> void:
+	var container := Node3D.new()
+	container.name = "Waldwege"
+	add_child(container)
+
+	var mat := WorldPath.trail_material()
+	for i in range(_paths.size()):
+		var mesh := WorldPath.build_mesh(_paths[i], _heights, TERRAIN_RESOLUTION, MAP_SIZE, mat)
+		mesh.name = "Weg%02d" % i
+		container.add_child(mesh)
+
+
 ## Einzelne Pflanzen (siehe WorldTree) — dieselbe Zurueckweisungs-Stichprobe
 ## wie bei den Haeusern, nur mit kleinerem Mindestabstand zueinander UND
 ## einem Sicherheitsabstand zu jedem Haus.
@@ -142,7 +188,8 @@ func _place_trees() -> void:
 	var positions: Array[Vector2] = []
 	var placed := 0
 	var attempts := 0
-	var max_attempts := TREE_COUNT * 50
+	var max_attempts := TREE_COUNT * 80
+	var tree_path_clearance := WorldPath.WIDTH * 0.5 + TREE_PATH_CLEARANCE
 
 	while placed < TREE_COUNT and attempts < max_attempts:
 		attempts += 1
@@ -156,6 +203,8 @@ func _place_trees() -> void:
 				too_close_to_tree = true
 				break
 		if too_close_to_tree or _too_close(candidate, HOUSE_MIN_DISTANCE * 0.5 + TREE_HOUSE_CLEARANCE):
+			continue
+		if _near_any_path(candidate, tree_path_clearance):
 			continue
 
 		var plant_name: String = WorldTree.PLANT_NAMES[_rng.randi() % WorldTree.PLANT_NAMES.size()]
@@ -182,5 +231,5 @@ func _place_player() -> void:
 
 
 func _process(_delta: float) -> void:
-	_label.text = "Schneekarte — Seed %d\n%d Haeuser, %d Pflanzen" % [
-		MAP_SEED, _house_positions.size(), TREE_COUNT]
+	_label.text = "Schneekarte — Seed %d\n%d Haeuser, %d Pflanzen, %d Waldwege" % [
+		MAP_SEED, _house_positions.size(), TREE_COUNT, _paths.size()]

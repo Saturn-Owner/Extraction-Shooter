@@ -86,7 +86,8 @@ $suites = @(
     "verify_container_window",
     "verify_frachthafen",
     "verify_character",
-    "verify_terrain"
+    "verify_terrain",
+    "verify_world_path"
 )
 
 $failed = @()
