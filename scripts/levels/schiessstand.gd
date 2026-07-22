@@ -117,13 +117,14 @@ func _place_running() -> void:
 		_humanoids.append(figure)
 
 
-## Figuren, die beim Sterben gegen eine Wand hinter ihnen fallen.
+## Figuren, die mit einer Wand hinter sich stehen — als Hindernis fuer den
+## Sturz, nicht als vorgegebene Sturzrichtung.
 ##
-## Die Wand steht bei fall_impulse_dir = (0,0,-1) automatisch in genau der
-## Richtung, in die die Figur beim Tod kippt — siehe RagdollRig. Das Rig
-## selbst bleibt UNGEDREHT (Identität), nur die Figur als sein Kind bekommt
-## die Blickrichtung zum Spieler. Damit ist fall_impulse_dir hier direkt eine
-## Weltrichtung und keine, die man erst zurückrechnen müsste.
+## FRUEHER bekamen sie fall_impulse_dir = (0,0,-1) und wurden damit aktiv
+## GEGEN die Wand hinter sich gestossen — sah aus, als schmissen sie sich
+## selbst hinein, statt zu fallen. Jetzt fallen sie wie die stehenden Dummys
+## ganz normal auf der Stelle (siehe RagdollRig._apply_self_topple()); die
+## Wand ist nur noch da, falls eine Figur zufaellig nach hinten kippt.
 func _place_wall_dummies() -> void:
 	var walls := get_node_or_null("Waende")
 	var container := get_node_or_null("Ziele")
@@ -137,8 +138,8 @@ func _place_wall_dummies() -> void:
 		var wall_center := place + Vector3(0.0, WALL_SIZE.y * 0.5, -WALL_SETBACK)
 		_build_wall(walls, "Wand%02d" % number, wall_center)
 
-		var figure := _make_figure("Wandfigur%02d" % number, "#%d fällt zur Wand" % number)
-		_spawn_ragdoll(container, "WandRig%02d" % number, figure, place, Vector3(0.0, 0.0, -1.0))
+		var figure := _make_figure("Wandfigur%02d" % number, "#%d steht vor der Wand" % number)
+		_spawn_ragdoll(container, "WandRig%02d" % number, figure, place)
 		_humanoids.append(figure)
 
 
@@ -183,7 +184,8 @@ func _place_hanging_dummies() -> void:
 		number += 1
 
 		var figure := _make_figure("Haengefigur%02d" % number, "#%d hängt" % number)
-		_spawn_ragdoll(container, "HaengeRig%02d" % number, figure, place)
+		_spawn_ragdoll(container, "HaengeRig%02d" % number, figure, place,
+			Vector3.ZERO, false)
 		_humanoids.append(figure)
 
 
@@ -191,10 +193,12 @@ func _place_hanging_dummies() -> void:
 ## JEDER Dummy im Schiessstand bekommt das echte Ragdoll beim Sterben, nicht
 ## nur die Wand-/Hänge-Varianten.
 func _spawn_ragdoll(container: Node3D, rig_name: String, figure: HumanoidTarget,
-		place: Vector3, fall_impulse_dir: Vector3 = Vector3.ZERO) -> RagdollRig:
+		place: Vector3, fall_impulse_dir: Vector3 = Vector3.ZERO,
+		self_topple_when_standing: bool = true) -> RagdollRig:
 	var rig := RagdollRig.new()
 	rig.name = rig_name
 	rig.fall_impulse_dir = fall_impulse_dir
+	rig.self_topple_when_standing = self_topple_when_standing
 	container.add_child(rig)
 	rig.global_position = place
 	rig.attach(figure)

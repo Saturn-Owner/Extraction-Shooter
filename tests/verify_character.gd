@@ -254,7 +254,7 @@ func _test_damage_reaches_the_right_part() -> void:
 	var doomed := _make()
 	await process_frame
 	var died := [false]
-	doomed.died.connect(func(): died[0] = true)
+	doomed.died.connect(func(_killing_part, _at): died[0] = true)
 	doomed.take_hit_on_part(HealthSystem.Part.HEAD, ammo, 10.0,
 		Vector3.ZERO, Vector3.FORWARD)
 	_check(doomed.health.is_dead, "ein Kopftreffer tötet")
