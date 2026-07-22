@@ -39,16 +39,26 @@ const MAP_SEED := 20260722
 ## sechs Gebaeuden sehr leer).
 const HOUSE_COUNT := 30
 
-## Mindestabstand zwischen zwei Haus-Mittelpunkten, damit sich ihre
-## Grundflaechen nicht ueberlappen. Grosszuegig ueber der groessten
-## Haus-Diagonale (house_home: 11 x 22 m, Diagonale ~24 m) gewaehlt, damit
-## auch nach der zufaelligen Drehung noch Luft bleibt.
-const HOUSE_MIN_DISTANCE := 26.0
+## Luft ZWISCHEN zwei Haus-Grundflaechen (nicht zwischen ihren Mittelpunkten!)
+## — der noetige Mindestabstand ergibt sich aus WorldHouse.footprint_radius()
+## der beiden beteiligten Haeuser plus dieser Zugabe.
+##
+## ---------------------------------------------------------------------------
+## WARUM NICHT LAENGER EIN FESTER ABSTAND
+##
+## Ein einziger fester Wert (frueher 26 m, an house_home's Diagonale von rund
+## 24 m bemessen) ging davon aus, dass alle Haeuser aehnlich gross sind. Das
+## stimmte nicht mehr, als sich herausstellte, dass windmill.glb tatsaechlich
+## ZWEI Windmuehlentuerme rund 32 x 30 m einnimmt (siehe WorldHouse.CATALOGUE)
+## — mit 26 m Mindestabstand haette ein Nachbarhaus mitten im zweiten Turm
+## gestanden. Der Abstand wird deshalb je Haus-PAAR aus deren tatsaechlichen
+## Grundflaechen berechnet, nicht mehr pauschal angenommen.
+const HOUSE_CLEARANCE := 6.0
 
-## Wie nah ein Haus an einen Waldweg heranruecken darf (siehe WorldPath) —
-## grosszuegig ueber der halben Wegbreite, sonst haette ein Weg eine Ecke des
-## Hauses angeschnitten.
-const HOUSE_PATH_CLEARANCE := 15.0
+## Wie nah ein Haus an einen Waldweg heranruecken darf (siehe WorldPath),
+## ZUSAETZLICH zu seinem eigenen Grundflaechen-Radius — sonst haette ein Weg
+## eine Ecke des Hauses angeschnitten.
+const HOUSE_PATH_CLEARANCE := 4.0
 
 ## Wie viele Waldwege quer ueber die Karte fuehren.
 const PATH_COUNT := 5
@@ -77,7 +87,10 @@ const TREE_PATH_CLEARANCE := 1.5
 
 var _rng := RandomNumberGenerator.new()
 var _heights: PackedFloat32Array
-var _house_positions: Array[Vector2] = []
+## Je platziertes Haus: {pos: Vector2, radius: float} — der Radius kommt aus
+## WorldHouse.footprint_radius() DES JEWEILS GEWAEHLTEN Katalogeintrags, nicht
+## aus einem pauschalen Wert (siehe HOUSE_CLEARANCE).
+var _house_placements: Array[Dictionary] = []
 var _paths: Array = []
 
 
@@ -116,38 +129,55 @@ func _place_houses() -> void:
 	var placed := 0
 	var attempts := 0
 	# Obergrenze gegen Endlosschleifen: Wird die Karte zu voll (oder
-	# HOUSE_COUNT zu hoch fuer HOUSE_MIN_DISTANCE), bricht die Platzierung
+	# HOUSE_COUNT zu hoch fuer die Grundflaechen), bricht die Platzierung
 	# lieber mit weniger Haeusern ab, als ewig zu suchen.
 	var max_attempts := HOUSE_COUNT * 80
 
 	while placed < HOUSE_COUNT and attempts < max_attempts:
 		attempts += 1
+		# Der Katalogeintrag steht schon VOR der Abstandspruefung fest — sein
+		# Radius entscheidet mit, ob die Stelle taugt (siehe HOUSE_CLEARANCE).
+		var entry: Dictionary = WorldHouse.CATALOGUE[_rng.randi() % WorldHouse.CATALOGUE.size()]
+		var radius: float = WorldHouse.footprint_radius(entry)
+
 		var candidate := Vector2(
 			_rng.randf_range(-MAP_SIZE.x * 0.5 + 20.0, MAP_SIZE.x * 0.5 - 20.0),
 			_rng.randf_range(-MAP_SIZE.y * 0.5 + 20.0, MAP_SIZE.y * 0.5 - 20.0))
 
-		if _too_close(candidate, HOUSE_MIN_DISTANCE):
+		if _too_close_to_house(candidate, radius):
 			continue
-		if _near_any_path(candidate, HOUSE_PATH_CLEARANCE):
+		if _near_any_path(candidate, radius + HOUSE_PATH_CLEARANCE):
 			continue
 
-		var entry: Dictionary = WorldHouse.CATALOGUE[_rng.randi() % WorldHouse.CATALOGUE.size()]
 		var rotation_deg := _rng.randf_range(0.0, 360.0)
 		var height := _ground_height(candidate)
 		var pos := Vector3(candidate.x, height, candidate.y)
 
 		container.add_child(WorldHouse.place("Haus%02d" % placed,
 			WorldHouse.HOUSES_DIR + String(entry.file), pos, rotation_deg))
-		_house_positions.append(candidate)
+		_house_placements.append({pos = candidate, radius = radius})
 		placed += 1
 
 	print("[Schneekarte] %d von %d Haeusern platziert (%d Versuche)"
 		% [placed, HOUSE_COUNT, attempts])
 
 
-func _too_close(candidate: Vector2, min_distance: float) -> bool:
-	for existing in _house_positions:
-		if existing.distance_to(candidate) < min_distance:
+## Ob `candidate` (mit eigenem `radius`) einem schon platzierten Haus zu nahe
+## kommt — der noetige Abstand ist die Summe BEIDER Radien plus HOUSE_CLEARANCE.
+func _too_close_to_house(candidate: Vector2, radius: float) -> bool:
+	for placement: Dictionary in _house_placements:
+		var required: float = placement.radius + radius + HOUSE_CLEARANCE
+		if (placement.pos as Vector2).distance_to(candidate) < required:
+			return true
+	return false
+
+
+## Ob `candidate` einem platzierten Haus naeher als sein Grundflaechen-Radius
+## plus `clearance` kommt — fuer Baeume, die keinen eigenen Radius mitbringen.
+func _too_close_to_any_house(candidate: Vector2, clearance: float) -> bool:
+	for placement: Dictionary in _house_placements:
+		var required: float = placement.radius + clearance
+		if (placement.pos as Vector2).distance_to(candidate) < required:
 			return true
 	return false
 
@@ -202,7 +232,7 @@ func _place_trees() -> void:
 			if existing.distance_to(candidate) < TREE_MIN_DISTANCE:
 				too_close_to_tree = true
 				break
-		if too_close_to_tree or _too_close(candidate, HOUSE_MIN_DISTANCE * 0.5 + TREE_HOUSE_CLEARANCE):
+		if too_close_to_tree or _too_close_to_any_house(candidate, TREE_HOUSE_CLEARANCE):
 			continue
 		if _near_any_path(candidate, tree_path_clearance):
 			continue
@@ -232,4 +262,4 @@ func _place_player() -> void:
 
 func _process(_delta: float) -> void:
 	_label.text = "Schneekarte — Seed %d\n%d Haeuser, %d Pflanzen, %d Waldwege" % [
-		MAP_SEED, _house_positions.size(), TREE_COUNT, _paths.size()]
+		MAP_SEED, _house_placements.size(), TREE_COUNT, _paths.size()]

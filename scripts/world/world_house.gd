@@ -27,14 +27,28 @@ const HOUSES_DIR := "res://assets/models/world/houses/"
 ## Metern, aus tools/convert_world_assets.gd) — der Karten-Generator braucht
 ## das, um Haeuser so weit auseinanderzustellen, dass sie sich nicht
 ## ueberlappen, ohne jedes Modell selbst laden zu muessen.
+##
+## windmill.glb IST KEIN TIPPFEHLER: Die Datei enthaelt laut Sketchfab-Vorlage
+## ZWEI Windmuehlentuerme nebeneinander (siehe convert_world_assets.gd), rund
+## 32 x 30 m insgesamt einnehmend — deutlich groesser als jedes einzelne Haus.
+## Ohne diese korrekte Grundflaeche wuerden Nachbarn (siehe HOUSE_CLEARANCE in
+## schneekarte.gd) mitten in den zweiten Turm hineinrutschen.
 const CATALOGUE := [
 	{file = "house_home.glb", footprint = Vector2(11.04, 21.74)},
 	{file = "old_house.glb", footprint = Vector2(7.22, 6.83)},
 	{file = "old_wooden_barn_house.glb", footprint = Vector2(3.99, 9.04)},
 	{file = "old_wooden_watchtower_house.glb", footprint = Vector2(2.19, 2.19)},
 	{file = "psx_abandoned_house.glb", footprint = Vector2(6.79, 7.56)},
-	{file = "windmill.glb", footprint = Vector2(19.08, 8.13)},
+	{file = "windmill.glb", footprint = Vector2(31.91, 29.96)},
 ]
+
+
+## Radius eines Kreises, der die Grundflaeche in JEDER Drehung noch umschliesst
+## — die halbe Diagonale. Haeuser werden zufaellig gedreht (siehe
+## schneekarte.gd), ein achsparalleler Vergleich waere deshalb bei manchen
+## Drehwinkeln zu optimistisch.
+static func footprint_radius(entry: Dictionary) -> float:
+	return (entry.footprint as Vector2).length() * 0.5
 
 
 ## Laedt EIN BELIEBIGES Modell (Haus oder Baumgruppe, siehe schneekarte.gd)

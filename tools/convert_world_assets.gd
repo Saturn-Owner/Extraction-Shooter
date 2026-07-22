@@ -19,6 +19,29 @@
 ## (windmill) zu groß. Das ist keine Codeaufgabe, sondern Messarbeit — SCALE
 ## unten ist das Ergebnis, keine Annahme.
 ##
+## ---------------------------------------------------------------------------
+## AUSNAHME: windmill.glb HAT _bounds() GETÄUSCHT
+##
+## Im Spiel sah die Windmühle wie ein Gartenzwerg aus, kaum 1,9 m hoch — obwohl
+## _bounds() unten beim Konvertieren plausible 19 x 23 x 8 m gemeldet hatte
+## (genau diese Zahl stand fälschlich als Grundfläche in WorldHouse.CATALOGUE).
+## Grund: Die Datei enthält die Windmühle ZWEIMAL — einmal als normale Mesh
+## (Cylinder011/012, Node3D-Skalierung 0,1) und einmal als SKINNED Mesh an
+## einem Skeleton3D (Object_7/9, vermutlich fuer eine nie genutzte Flügel-
+## Animation gedacht). `_bounds()` läuft nur die Node3D-Transformkette ab und
+## kennt weder Skin noch Skeleton-Gelenke — bei der skinned Kopie hat es
+## deshalb blanke Rohgrößen ohne jede Skalierung gemeldet, eine Zahl, die mit
+## der tatsächlich gerenderten (durch Bind-Pose-Skalierung UND denselben
+## uebersehenen 0,1-Faktor verkleinerten) Geometrie nichts zu tun hat.
+##
+## Behoben durch STRIP statt durch Messkorrektur: Die ungenutzte skinned
+## Kopie (samt Skeleton3D) fliegt beim Konvertieren komplett raus — sie wird
+## im Spiel ohnehin nie animiert, taugt also nur als Verwirrung UND als
+## unnoetige, moeglicherweise falsch platzierte Kollisionsflaeche. Übrig
+## bleibt die normale Mesh, deren SCALE (siehe unten) jetzt am tatsaechlich
+## gerenderten Ergebnis nachgemessen ist (Kontrollrender neben einer 1,8-m-
+## Referenzfigur), nicht an _bounds()' Fehlmessung.
+##
 ## FEHLT ABSICHTLICH: "Lake Hawea House" (Azimuth Design, CC BY 4.0). Auch
 ## texturverkleinert 80 MB gross (652.000 Dreiecke, Photogrammetrie-Scan) —
 ## reisst die 50-MB-Grenze aus verify_frachthafen.gd. Siehe QUELLEN.md.
@@ -33,14 +56,18 @@ const TARGET_DIR := "res://assets/models/world/houses/"
 const TREE_TARGET_DIR := "res://assets/models/world/trees/"
 
 ## source: Rohdatei im SOURCE_DIR. target: Zieldatei. scale: gemessener
-## Korrekturfaktor (siehe Kopfkommentar).
+## Korrekturfaktor (siehe Kopfkommentar). strip: optionale Liste von Pfaden
+## (relativ zum neuen Wurzelknoten "Root"), die vor dem Schreiben entfernt
+## werden — fuer Datenmuell, der die Messung verfaelscht oder im Spiel nur
+## stoert (siehe windmill.glb im Kopfkommentar).
 const ASSETS := [
 	{source = "house_home_-_53mb.glb", target = TARGET_DIR + "house_home.glb", scale = 1.0},
 	{source = "old_house.glb", target = TARGET_DIR + "old_house.glb", scale = 0.01},
 	{source = "old_wooden_barn_house_4.glb", target = TARGET_DIR + "old_wooden_barn_house.glb", scale = 1.0},
 	{source = "old_wooden_watchtower_house_3.glb", target = TARGET_DIR + "old_wooden_watchtower_house.glb", scale = 1.0},
 	{source = "psx_abandoned_house.glb", target = TARGET_DIR + "psx_abandoned_house.glb", scale = 1.0},
-	{source = "windmill.glb", target = TARGET_DIR + "windmill.glb", scale = 0.001},
+	{source = "windmill.glb", target = TARGET_DIR + "windmill.glb", scale = 0.01,
+		strip = ["Object_4/Skeleton3D"]},
 	{source = "snow_pine_tree_and_bush_pack_lowpoly.glb", target = TREE_TARGET_DIR + "snow_pine_pack.glb", scale = 1.0},
 ]
 
@@ -84,6 +111,13 @@ func _convert(entry: Dictionary) -> void:
 		_own_recursive(child, root)
 	scene.free()
 
+	for doomed_path: String in entry.get("strip", []):
+		var doomed := root.get_node_or_null(NodePath(doomed_path))
+		if doomed != null:
+			doomed.free()
+		else:
+			print("  WARNUNG: strip-Pfad nicht gefunden: %s" % doomed_path)
+
 	# Der Massstab sitzt auf dem NEUEN Wurzelknoten, nicht auf den Teilen
 	# selbst — dieselbe Ueberlegung wie bei AR15Viewmodel.fit_transform(): eine
 	# einzige Stelle, an der die Korrektur steht.
@@ -106,7 +140,12 @@ func _convert(entry: Dictionary) -> void:
 		return
 
 	var written := FileAccess.get_file_as_bytes(target_path)
-	var bounds := _bounds(root, Transform3D.IDENTITY)
+	# root.transform selbst muss hier als Startwert rein, nicht IDENTITY —
+	# sonst fehlt genau die Korrektur aus SCALE im Diagnosetext, und "Groesse
+	# nach Korrektur" zeigt in Wahrheit die Groesse VOR der Korrektur. Bei
+	# windmill.glb hat genau das eine 10-fach zu kleine Windmuehle als
+	# plausibel aussehen lassen (siehe Kopfkommentar).
+	var bounds := _bounds(root, root.transform)
 	print("  Geschrieben: %.1f MB, %d Texturen verkleinert" % [written.size() / 1048576.0, shrunk])
 	print("  Groesse nach Korrektur: %.2f x %.2f x %.2f m"
 		% [bounds.size.x, bounds.size.y, bounds.size.z])
