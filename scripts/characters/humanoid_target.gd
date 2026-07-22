@@ -51,6 +51,17 @@ const LABEL_HEIGHT := 0.32
 
 @export var patrol_speed: float = 1.4
 
+## Läuft auf der Stelle, ohne sich zu bewegen — reines Animationsspiel.
+##
+## Anders als `patrol_width`: Dort bewegt sich die Figur wirklich und die
+## Animation folgt der tatsächlichen Geschwindigkeit. Hier läuft nur der
+## Gehzyklus, die Position bleibt stehen — eine dritte, eigene Zielart, kein
+## Sonderfall von patrol_width == 0.
+##
+## Nur wirksam, wenn `patrol_width <= 0` ist — sonst hat die Pendelbewegung
+## Vorrang und bestimmt die Animationsgeschwindigkeit selbst.
+@export var run_in_place_speed: float = 0.0
+
 ## Ob und wie die Figur eine Waffe führt. Leer = keine.
 @export var weapon_id: StringName = &""
 
@@ -296,7 +307,9 @@ func _process(delta: float) -> void:
 		_patrol_ready = true
 
 	if patrol_width <= 0.0 or (health != null and health.is_dead):
-		_animation.speed = 0.0
+		# Tot laeuft niemand mehr auf der Stelle — sonst zuckt eine Leiche
+		# weiter mit den Beinen.
+		_animation.speed = 0.0 if (health != null and health.is_dead) else run_in_place_speed
 		return
 
 	_patrol_time += delta
