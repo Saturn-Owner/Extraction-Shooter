@@ -163,7 +163,8 @@ func _buckle_legs() -> void:
 
 
 ## Wie kraeftig ein abgesprengtes Teil vom Rumpf wegfliegt.
-const GIB_IMPULSE_STRENGTH := 6.0
+## War 6.0 — flog nach dem ersten Ansehen im Spiel viel zu weit weg.
+const GIB_IMPULSE_STRENGTH := 2.0
 
 ## Wie viele Fleischbrocken pro Absprengung wegfliegen, und wie stark.
 const CHUNK_COUNT := 5
