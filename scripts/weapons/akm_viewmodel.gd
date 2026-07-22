@@ -136,12 +136,20 @@ func _configure() -> void:
 	# steht in hip_position und bleibt davon unberuehrt.
 	ads_distance = -0.09
 	muzzle_z = -0.560
-	# Deutlich gezaehmt gegenueber dem ersten Wert (1.35): Sowohl der
-	# sichtbare Kick hier als auch der tatsaechliche Rueckstoss in
-	# rifle_akm.tres (recoil_vertical/recoil_horizontal) wurden auf Wunsch
-	# stark gesenkt — beide zusammen, sonst sieht man ein sanftes Zurueck-
-	# schlagen im Bild, waehrend die Zielgenauigkeit trotzdem einbricht.
-	recoil_scale = 0.85
+	# Erst stark gesenkt (1.35 -> 0.85), dann auf Wunsch ein Stueck wieder
+	# angehoben — spuerbar mehr als 0.85, aber bei weitem nicht zurueck zum
+	# anfaenglichen 1.35. rifle_akm.tres' recoil_vertical/recoil_horizontal
+	# wurden im gleichen Schritt mit angehoben, damit Bild und tatsaechliche
+	# Zielgenauigkeit weiterhin zusammenpassen.
+	recoil_scale = 1.0
+
+	# Erst auf ein ausgewogenes Verhaeltnis gebracht (0.45 gegen 1.6), dann auf
+	# Wunsch das Hochreissen der Muendung wieder verstaerkt — rifle_akm.tres'
+	# recoil_vertical (der tatsaechliche Aufschlag, der die Kamera hebt) wurde
+	# im selben Schritt mit angehoben, damit Bild und echter Rueckstoss
+	# weiterhin zusammenpassen.
+	recoil_rise_scale = 0.8
+	recoil_push_scale = 1.6
 	action_travel = 0.090
 	action_cycle_time = 0.062
 	magazine_drop = 0.40
@@ -159,6 +167,13 @@ func _configure() -> void:
 	# statt der engen 15 % der Grundklasse.
 	rack_turn_start_progress = 0.68
 	handle_pull_start_progress = 0.88
+
+	# Das Magazin sitzt hier schon bei MAG_IN_END (0.63), nicht erst bei der
+	# geerbten 0.85 — siehe dort. weapon_view.gd braucht diese Zahl, um die
+	# Stuetzhand rechtzeitig vor der Drehung an den Handschutz zurueckkehren
+	# zu lassen (siehe magazine_seated_progress in weapon_viewmodel.gd) und um
+	# das Magazin nur bis dahin an die Hand zu binden.
+	magazine_seated_progress = MAG_IN_END
 
 	# Der Bildausschnitt im Hueftanschlag gehoert HIERHER und nicht in die
 	# Modellverschiebung: `weapon_view` blendet die Hueftposition beim Zielen
@@ -190,6 +205,8 @@ func _build_parts() -> void:
 	# hier. Solange er leer ist, bewegt die Mechanik nur Luft — ohne Schaden.
 	add_child(ViewmodelParts.pivot("Action", Vector3(0.019, 0.030, -0.120)))
 	add_child(ViewmodelParts.pivot("Trigger", Vector3(0.0, -0.020, -0.086)))
+
+	_build_hand_points()
 
 
 ## Setzt die beiden Punkte, ueber die gezielt wird — ohne Geometrie.
@@ -223,6 +240,55 @@ func _build_sight_points() -> void:
 	# Schaft. Dort laege eine Kimme, wenn die Waffe eine haette.
 	add_child(ViewmodelParts.pivot("RearSight",
 			Vector3(0.0, SIGHT_LINE, REAR_SIGHT_Z)))
+
+
+## Wo die Haende anfassen — wie bei der AR-15 (siehe dort), aber am
+## AK-typischen Griff und Handschutz dieses Modells gemessen.
+##
+## ---------------------------------------------------------------------------
+## AM MODELL GEMESSEN, NICHT VOM ANDEREN GEWEHR UEBERNOMMEN
+##
+## Der Pistolengriff ist ein eigenes Mesh im GLB ("agr47_001_agr47_0",
+## gefunden wie Magazin und Ladehebel per Einfaerben und Rendern). Seine AABB
+## im Kameraraum: z von -0,228 bis -0,179, y von -0,028 bis 0,042. GripPoint
+## liegt in der Mitte der Tiefe und im unteren Drittel der Hoehe — dort, wo
+## sich eine Faust um den Griff schliesst, nicht an seiner Oberkante, wo er
+## in den Abzugsbuegel uebergeht.
+##
+## Der Handschutz ("cmrd_001_cmrd_0") reicht von z = -0,521 bis -0,330, y von
+## 0,039 bis 0,082 — das ist die GANZE Rohrdicke samt Oberschiene, keine 4,3 cm
+## Luft darueber. Eine erste Fassung setzte die Hoehe geschaetzt auf -0,015
+## und liess die Stuetzhand sichtbar frei neben der Waffe schweben, weit
+## unterhalb jeder Geometrie — sichtbar in einem Testrender mit Markierungen
+## an allen drei Punkten, nicht erst im Spiel. Jetzt an der Unterkante des
+## gemessenen Rohrs: Die Hand umschliesst es von unten.
+##
+## In der Tiefe sitzt sie in der Mitte des Handschutzes, nicht an seinem
+## hinteren Ende: Anders als bei der AR-15 sitzt die AKM naeher an der
+## Bildmitte (hip_position.x = 0,075 gegen 0,115), das Risiko, durch den
+## eigenen Torso zu greifen, ist entsprechend kleiner.
+##
+## shows_hands wird erst HIER gesetzt, nicht vorher: Der Schalter gilt fuer
+## das ganze Modell, aber die Begruendung gehoert zu den Punkten, die ihn
+## rechtfertigen.
+func _build_hand_points() -> void:
+	shows_hands = true
+
+	# Der Ladehebel steckt rechts am Gehaeuse (siehe MOUNT-Kommentar zu
+	# "barrel_002_barrel_0_001" in _build_body()) — genau dort, wo die
+	# Schiesshand liegt. Die zieht ihn, waehrend die Stuetzhand an den
+	# Handschutz zurueckkehrt und die Waffe allein haelt. Anders als beim
+	# AR-15, dessen Ladehebel mittig hinten sitzt und nur von der Stuetzhand
+	# ueber das Gehaeuse zu erreichen ist.
+	right_hand_racks_charging_handle = true
+
+	add_child(ViewmodelParts.pivot("GripPoint", Vector3(0.0, -0.005, -0.204)))
+	add_child(ViewmodelParts.pivot("SupportPoint", Vector3(0.0, 0.032, -0.425)))
+
+	# Magazinschacht: am unteren Drittel des sitzenden Magazins (y von -0,060
+	# bis 0,055), in der Mitte seiner Tiefe (z von -0,349 bis -0,264) — genau
+	# wie bei der AR-15 gemessen, nur mit den Massen dieses Magazins.
+	add_child(ViewmodelParts.pivot("MagwellPoint", Vector3(0.0, -0.022, -0.307)))
 
 
 # --- Eigene Zeitleiste fuer den Magazinwechsel: der AK-typische "Dog-Leg" ---
@@ -291,9 +357,12 @@ func _animate_magazine_swap(progress: float) -> void:
 					lerpf(-MAG_FORWARD_PULL, -MAG_FORWARD_PULL * 0.3, t))
 			magazine.rotation_degrees = Vector3(
 					lerpf(MAG_TILT_DEG, MAG_HANG_DEG, t), 0.0, lerpf(4.0, 2.0, t))
+		magazine_held_by_hand = true
 	elif progress < MAG_GAP_END:
 		magazine.visible = false
+		magazine_held_by_hand = false
 	else:
+		magazine_held_by_hand = progress < magazine_seated_progress
 		var half := MAG_GAP_END + (MAG_IN_END - MAG_GAP_END) * 0.5
 		if progress < half:
 			# Das neue Magazin kommt von unten herauf, noch im Haltewinkel.

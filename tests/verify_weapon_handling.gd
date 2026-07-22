@@ -37,6 +37,10 @@ func _initialize() -> void:
 	_test_viewmodels_are_unique()
 	await _test_handle_rack_kicks_pose()
 	await _test_aiming_reduces_visual_recoil()
+	await _test_recoil_rise_push_balance()
+	await _test_akm_right_hand_racks_charging_handle()
+	await _test_magazine_follows_hand()
+	await _test_magazine_hand_follows_camera_turn()
 
 	# Laeuft asynchron weiter und ruft am Ende _finish() auf: Der Waffenwechsel
 	# braucht einen echten Frame, damit _ready() im Szenenbaum durchlaeuft.
@@ -436,8 +440,14 @@ func _test_viewmodel_arms() -> void:
 
 	_check(with_hands.size() >= 1,
 		"mindestens eine Waffe hat Haende (%s)" % ", ".join(with_hands))
-	_check(with_hands.size() == 1 and with_hands[0] == "weapon_rifle_ar15",
-		"und zwar vorerst nur die AR-15 (%s)" % ", ".join(with_hands))
+	# Arbeitsliste, kein Zufall: Wer eine weitere Waffe vermisst und
+	# `shows_hands` setzt, traegt sie hier nach — die Liste soll waechst mit,
+	# bis sie irgendwann jede Waffe im Arsenal nennt.
+	_check(with_hands.size() == 2
+			and with_hands.has("weapon_rifle_ar15") and with_hands.has("weapon_rifle_akm"),
+		"und zwar bisher AR-15 und AKM (%s)" % ", ".join(with_hands))
+
+	await _check_hand_points_reachable(&"weapon_rifle_akm", reach)
 
 	# Wie weit muessen die Haende wirklich? Aus den Griffpunkten der AR-15 in
 	# ihrer Ruhelage, nicht geschaetzt.
@@ -547,6 +557,47 @@ func _test_viewmodel_arms() -> void:
 	_check(fetching.y < magwell.y - 0.10,
 		"beim Holen greift sie deutlich nach unten (%.3f gegen %.3f m)"
 			% [fetching.y, magwell.y])
+
+	model.queue_free()
+
+
+## Reichweite fuer eine beliebige Waffe mit shows_hands=true — dieselbe
+## Rechnung wie oben fuer die AR-15, nur allgemein gehalten, damit jede
+## weitere Waffe mit Haenden diese Pruefung automatisch mitbekommt.
+func _check_hand_points_reachable(weapon_id: StringName, reach: float) -> void:
+	var data := ItemRegistry.get_item(weapon_id) as WeaponData
+	var model := data.create_viewmodel()
+	model.weapon_data = data
+	root.add_child(model)
+	await process_frame
+	model.position = model.hip_position
+	model.rotation_degrees = model.hip_rotation_degrees
+
+	if model.grip_point == null or model.support_point == null:
+		model.queue_free()
+		return
+
+	var to_grip := ViewmodelArms.RIGHT_SHOULDER.distance_to(
+		model.grip_point.position + model.position)
+	var to_fore := ViewmodelArms.LEFT_SHOULDER.distance_to(
+		model.support_point.position + model.position)
+
+	_check(reach > to_grip,
+		"%s: der rechte Arm reicht an den Griff (%.3f von %.3f m)"
+			% [weapon_id, to_grip, reach])
+	_check(reach > to_fore,
+		"%s: der linke an den Vorderschaft (%.3f von %.3f m)"
+			% [weapon_id, to_fore, reach])
+	_check(reach < to_fore + 0.20,
+		"%s: und nicht unnoetig weit darueber (%.3f gegen %.3f m)"
+			% [weapon_id, reach, to_fore])
+
+	if model.magwell_point != null:
+		var to_well := ViewmodelArms.LEFT_SHOULDER.distance_to(
+			model.magwell_point.position + model.position)
+		_check(reach > to_well,
+			"%s: und an den Magazinschacht (%.3f von %.3f m)"
+				% [weapon_id, to_well, reach])
 
 	model.queue_free()
 
@@ -663,6 +714,300 @@ func _test_aiming_reduces_visual_recoil() -> void:
 	_check(absf(ratio - expected) < 0.02,
 		"Kick-Faktor passt zu den Daten (gemessen %.2f, erwartet %.2f)"
 			% [ratio, expected])
+
+	player.free()
+
+
+## Die AKM soll beim sichtbaren Rueckstoss weniger die Muendung hochreissen
+## (Drehung) und staerker nach hinten schieben (Translation) als andere
+## Gewehre — recoil_rise_scale/recoil_push_scale in akm_viewmodel.gd sollen
+## genau das bewirken, ohne recoil_scale selbst (die Gesamtstaerke) oder das
+## Verhalten anderer Waffen anzutasten.
+func _test_recoil_rise_push_balance() -> void:
+	_section("Rueckstoss-Balance: hoch gegen hinten")
+
+	var scene: PackedScene = load("res://scenes/player/player.tscn")
+	var player := scene.instantiate() as PlayerController
+	root.add_child(player)
+	await process_frame
+
+	var view := player.weapon_view
+	_check(view != null, "Waffenansicht vorhanden")
+	if view == null:
+		player.free()
+		return
+
+	# AR-15 ist die Startwaffe und laesst recoil_rise_scale/recoil_push_scale
+	# auf ihrem Grundwert 1.0 — Referenz fuer "unveraendertes Verhaeltnis".
+	view._recoil_velocity = Vector3.ZERO
+	view._recoil_angular_velocity = 0.0
+	view._on_fired(null, 30)
+	var ar15_ratio := absf(view._recoil_angular_velocity) / maxf(0.0001, view._recoil_velocity.length())
+
+	player.weapon.setup(&"weapon_rifle_akm", &"ammo_762x39_ps")
+	view._recoil_velocity = Vector3.ZERO
+	view._recoil_angular_velocity = 0.0
+	view._on_fired(null, 30)
+	var akm_ratio := absf(view._recoil_angular_velocity) / maxf(0.0001, view._recoil_velocity.length())
+
+	_check(akm_ratio < ar15_ratio,
+		"AKM reisst weniger hoch, schiebt mehr nach hinten (Verhaeltnis %.2f gegen %.2f bei der AR-15)"
+			% [akm_ratio, ar15_ratio])
+
+	player.free()
+
+
+## Bei der AK zieht die rechte (Griff-)Hand den Ladehebel, nicht die linke wie
+## bei der AR-15 — siehe right_hand_racks_charging_handle in weapon_viewmodel.gd
+## und _grip_hand_while_reloading()/_support_hand_while_reloading() in
+## weapon_view.gd. Angefordert war genau das: Nach dem Magazinwechsel haelt
+## die linke die Waffe, die rechte holt den Hebel, und bekommt danach Zeit,
+## wieder an den Griff zu finden, statt zurueckzuschnappen.
+func _test_akm_right_hand_racks_charging_handle() -> void:
+	_section("AK: die rechte Hand zieht den Ladehebel, nicht die linke")
+
+	var scene: PackedScene = load("res://scenes/player/player.tscn")
+	var player := scene.instantiate() as PlayerController
+	root.add_child(player)
+	await process_frame
+
+	var view := player.weapon_view
+	_check(view != null, "Waffenansicht vorhanden")
+	if view == null:
+		player.free()
+		return
+
+	# Referenz: Die AR-15 zieht ihren Ladehebel weiterhin mit der linken Hand.
+	var ar15_model := view.get_viewmodel()
+	_check(ar15_model != null and not ar15_model.right_hand_racks_charging_handle,
+		"AR-15 bleibt beim alten Verhalten (linke Hand zieht)")
+
+	player.weapon.setup(&"weapon_rifle_akm", &"ammo_762x39_ps")
+	var viewmodel := view.get_viewmodel()
+	_check(viewmodel != null and viewmodel.right_hand_racks_charging_handle,
+		"AKM meldet, dass die rechte Hand den Ladehebel zieht")
+	if viewmodel == null or viewmodel.charging_handle == null:
+		player.free()
+		return
+
+	var grip := viewmodel.grip_point.global_position
+	var handguard := viewmodel.support_point.global_position
+	var handle := viewmodel.charging_handle.global_position
+
+	# Lange vor der Drehung: beide Haende noch an ihrem gewohnten Platz.
+	var early_grip := view._grip_hand_while_reloading(0.2, grip, handle)
+	_check(early_grip.distance_to(grip) < 0.001,
+		"lange vor dem Ladehebelzug haelt die rechte noch den Griff (%.4f m Abstand)"
+			% early_grip.distance_to(grip))
+
+	# Die eigentliche Reihenfolge, die verlangt wurde: Die rechte darf erst
+	# zum Hebel greifen, wenn die linke schon wieder am Handschutz ist — nicht
+	# gleichzeitig. Genau bei rack_turn_start_progress, wo die rechte ihre
+	# Bewegung beginnt, muss die linke schon fertig angekommen sein.
+	var handoff_support := view._support_hand_while_reloading(
+		viewmodel.rack_turn_start_progress, handguard, true)
+	_check(handoff_support.distance_to(handguard) < 0.001,
+		"die linke ist wieder am Handschutz, sobald die rechte sich in Bewegung setzt (%.4f m Abstand)"
+			% handoff_support.distance_to(handguard))
+	var handoff_grip := view._grip_hand_while_reloading(
+		viewmodel.rack_turn_start_progress + 0.01, grip, handle)
+	_check(handoff_grip.distance_to(grip) > 0.0,
+		"...und kurz danach faengt die rechte an, sich vom Griff zu loesen (%.4f m)"
+			% handoff_grip.distance_to(grip))
+
+	# Mitten im Ziehen: die rechte muss am Hebel sein, deutlich weg vom Griff.
+	var release := lerpf(viewmodel.handle_pull_start_progress, 1.0, 0.4)
+	var pull_mid := lerpf(viewmodel.handle_pull_start_progress, release, 0.5)
+	var mid_grip := view._grip_hand_while_reloading(pull_mid, grip, handle)
+	_check(mid_grip.distance_to(handle) < 0.001,
+		"waehrend des Zugs ist die rechte am Ladehebel (%.4f m Abstand)"
+			% mid_grip.distance_to(handle))
+	_check(mid_grip.distance_to(grip) > 0.02,
+		"...und dabei spuerbar weg vom Griff (%.4f m)" % mid_grip.distance_to(grip))
+
+	# Zur selben Zeit haelt die linke unbeteiligt den Handschutz — sie greift
+	# nie zum Hebel, das ist jetzt Sache der rechten.
+	var mid_support := view._support_hand_while_reloading(pull_mid, handguard, true)
+	_check(mid_support.distance_to(handle) > 0.02,
+		"...waehrenddessen bleibt die linke weit vom Ladehebel entfernt (%.4f m)"
+			% mid_support.distance_to(handle))
+
+	# Ohne die Umschaltung (skip_handle = false, wie bei der AR-15) wuerde
+	# dieselbe Stuetzhand stattdessen selbst zum Hebel greifen — Gegenprobe,
+	# dass der Unterschied wirklich am skip_handle-Zweig haengt.
+	var mid_support_unswitched := view._support_hand_while_reloading(pull_mid, handguard, false)
+	_check(mid_support_unswitched.distance_to(handle) < mid_support.distance_to(handle),
+		"ohne Umschaltung waere die linke naeher am Hebel (%.4f gegen %.4f m)"
+			% [mid_support_unswitched.distance_to(handle), mid_support.distance_to(handle)])
+
+	# Nach Ende der Sequenz: die rechte muss wieder am Griff angekommen sein —
+	# das war ausdruecklich verlangt ("Zeit, die Hand wieder an den Griff zu
+	# machen"), nicht ein Zurueckschnappen im letzten Frame.
+	var end_grip := view._grip_hand_while_reloading(1.0, grip, handle)
+	_check(end_grip.distance_to(grip) < 0.001,
+		"am Ende der Nachladung ist die rechte zurueck am Griff (%.4f m Abstand)"
+			% end_grip.distance_to(grip))
+
+	player.free()
+
+
+## Die Hand soll waehrend des Wechsels wirklich zum Magazin gehen, nicht
+## umgekehrt — die eigens getunte Kippbewegung des Magazins bleibt dabei
+## unangetastet. magazine_held_by_hand in weapon_viewmodel.gd sagt
+## weapon_view.gd, wann das gilt, siehe _update_arms().
+##
+## Greifen und Loslassen duerfen dabei nicht teleportieren: _support_hand_pos
+## in weapon_view.gd hinkt ihrem jeweiligen Ziel mit hand_reach_speed
+## hinterher, statt im Bild des Umschaltens direkt dorthin zu springen.
+func _test_magazine_follows_hand() -> void:
+	_section("Die Hand geht beim Wechsel wirklich zum Magazin — ohne zu teleportieren")
+
+	var scene: PackedScene = load("res://scenes/player/player.tscn")
+	var player := scene.instantiate() as PlayerController
+	root.add_child(player)
+	await process_frame
+
+	var view := player.weapon_view
+	_check(view != null, "Waffenansicht vorhanden")
+	if view == null:
+		player.free()
+		return
+
+	player.weapon.setup(&"weapon_rifle_akm", &"ammo_762x39_ps")
+	var viewmodel := view.get_viewmodel()
+	_check(viewmodel != null and viewmodel.magazine != null,
+		"AKM hat ein bewegliches Magazin")
+	if viewmodel == null or viewmodel.magazine == null:
+		player.free()
+		return
+
+	const DT := 1.0 / 60.0
+	const RELOAD_DURATION := 2.0
+
+	var handguard := viewmodel.support_point.global_position
+	var hand_node := view._arms.get_node("LeftArm/Elbow/Hand") as Node3D
+
+	# Die Hand zuerst an ihrer Ruhelage verankern, bevor ueberhaupt nachgeladen
+	# wird — sonst waere der naechste Aufruf der allererste ueberhaupt, und der
+	# setzt bewusst direkt (Bootstrap-Fall, siehe _support_hand_ready), was das
+	# eigentliche "kein Sprung"-Verhalten gar nicht pruefen wuerde.
+	view._update_arms(DT)
+	_check(hand_node.global_position.distance_to(handguard) < 0.01,
+		"vor dem Nachladen liegt die Hand am Handschutz")
+
+	view._on_reload_started(RELOAD_DURATION, true, false)
+	# Frueh im Herausziehen, weit vor MAG_OUT_END: Das Magazin muss als
+	# gehalten gemeldet werden, und die Hand muss ihm folgen — es selbst darf
+	# davon unberuehrt bleiben.
+	for i in int(RELOAD_DURATION / DT * 0.08):
+		view._update_sequence(DT)
+	_check(viewmodel.magazine_held_by_hand,
+		"waehrend des Herausziehens haelt die Hand das Magazin")
+
+	var magazine_pos := viewmodel.magazine.global_position
+	var distance_before_grab := hand_node.global_position.distance_to(magazine_pos)
+
+	# EIN Bild, in dem das Magazin gerade erst als gehalten gilt: Die Hand darf
+	# sich nur annaehern, nicht schon vollstaendig dort sein.
+	view._update_arms(DT)
+	var distance_after_one_frame := hand_node.global_position.distance_to(magazine_pos)
+	_check(distance_after_one_frame > 0.001 and distance_after_one_frame < distance_before_grab,
+		"...die Hand naehert sich dem Magazin nur schrittweise an, statt zu springen (%.4f m nach einem Bild, vorher %.4f m)"
+			% [distance_after_one_frame, distance_before_grab])
+	_check(viewmodel.magazine.global_position.distance_to(magazine_pos) < 0.0001,
+		"...und das Magazin selbst bleibt dabei unberuehrt auf seiner eigenen Bahn")
+
+	# Genug Bilder spaeter ist sie wirklich angekommen.
+	for i in 90:
+		view._update_arms(DT)
+	_check(hand_node.global_position.distance_to(magazine_pos) < 0.001,
+		"...und erreicht es nach kurzer Zeit vollstaendig (%.4f m Abstand)"
+			% hand_node.global_position.distance_to(magazine_pos))
+
+	# Deutlich nach dem Einsetzen (MAG_IN_END = 0.63): Die Hand haelt es nicht
+	# mehr, es bleibt fest im Schacht — und der Rueckweg zum Handschutz soll
+	# genauso wenig springen wie das Greifen.
+	for i in int(RELOAD_DURATION / DT * (0.80 - 0.08)):
+		view._update_sequence(DT)
+	_check(not viewmodel.magazine_held_by_hand,
+		"nach dem Einsetzen haelt die Hand das Magazin nicht mehr")
+
+	var distance_before_release := hand_node.global_position.distance_to(handguard)
+	view._update_arms(DT)
+	var distance_after_release_frame := hand_node.global_position.distance_to(handguard)
+	_check(distance_after_release_frame > 0.001 and distance_after_release_frame < distance_before_release,
+		"...beim Loslassen bewegt sich die Hand nur schrittweise zum Handschutz (%.4f m nach einem Bild, vorher %.4f m)"
+			% [distance_after_release_frame, distance_before_release])
+
+	for i in 90:
+		view._update_arms(DT)
+	_check(hand_node.global_position.distance_to(handguard) < 0.001,
+		"...und kommt nach kurzer Zeit dort an (%.4f m Abstand)"
+			% hand_node.global_position.distance_to(handguard))
+	_check(viewmodel.magazine.position.distance_to(viewmodel._magazine_home) < 0.001,
+		"...das Magazin selbst sitzt unabhaengig davon schon wieder zuhause")
+
+	player.free()
+
+
+## Regressionstest fuer genau den Fehler, der gemeldet wurde: Beim schnellen
+## Umsehen blieb die Hand an ihrer alten WELTPOSITION haengen, waehrend Griff,
+## Handschutz und Magazin sich mit der Kamera weiterdrehten — sie schien sich
+## von der Waffe zu loesen. Der Uebergang laeuft jetzt ueber einen reinen
+## Zahlenwert (_magazine_hold_blend), dessen beide Enden jeden Frame frisch
+## aus der aktuellen Kamerahaltung berechnet werden, siehe _update_arms().
+func _test_magazine_hand_follows_camera_turn() -> void:
+	_section("Beim Umsehen bleibt die Hand an der Waffe, statt in der Luft haengen zu bleiben")
+
+	var scene: PackedScene = load("res://scenes/player/player.tscn")
+	var player := scene.instantiate() as PlayerController
+	root.add_child(player)
+	await process_frame
+
+	var view := player.weapon_view
+	_check(view != null, "Waffenansicht vorhanden")
+	if view == null:
+		player.free()
+		return
+
+	player.weapon.setup(&"weapon_rifle_akm", &"ammo_762x39_ps")
+	var viewmodel := view.get_viewmodel()
+	_check(viewmodel != null and viewmodel.magazine != null,
+		"AKM hat ein bewegliches Magazin")
+	if viewmodel == null or viewmodel.magazine == null:
+		player.free()
+		return
+
+	const DT := 1.0 / 60.0
+	const RELOAD_DURATION := 2.0
+
+	view._on_reload_started(RELOAD_DURATION, true, false)
+	for i in int(RELOAD_DURATION / DT * 0.08):
+		view._update_sequence(DT)
+	# Ein paar Bilder, damit der Uebergang mitten zwischen Pfad und Magazin
+	# haengt (weder 0 noch 1) — genau da schlaegt der Fehler zu, nicht an den
+	# beiden Enden.
+	for i in 3:
+		view._update_arms(DT)
+	_check(view._magazine_hold_blend > 0.01 and view._magazine_hold_blend < 0.99,
+		"der Uebergang steht mitten zwischen Pfad und Magazin (%.2f)"
+			% view._magazine_hold_blend)
+
+	# Der Spieler dreht sich schnell um 90 Grad — Griff, Handschutz und
+	# Magazin drehen mit, weil sie alle Nachfahren von WeaponView sind.
+	view.rotate_y(deg_to_rad(90.0))
+
+	var handguard := viewmodel.support_point.global_position
+	var magazine_pos := viewmodel.magazine.global_position
+	var progress := 1.0 - view._sequence_time_left / view._sequence_duration
+	var path_support := view._support_hand_while_reloading(progress, handguard, true)
+	var expected := path_support.lerp(magazine_pos, view._magazine_hold_blend)
+
+	view._update_arms(DT)
+	var hand_node := view._arms.get_node("LeftArm/Elbow/Hand") as Node3D
+	_check(hand_node.global_position.distance_to(expected) < 0.01,
+		"die Hand folgt der Drehung sofort, statt an der alten Weltposition haengen zu bleiben (%.4f m Abstand)"
+			% hand_node.global_position.distance_to(expected))
 
 	player.free()
 
