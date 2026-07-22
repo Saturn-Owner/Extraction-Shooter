@@ -41,15 +41,20 @@ const HOUSE_COUNT := 14
 ## auch nach der zufaelligen Drehung noch Luft bleibt.
 const HOUSE_MIN_DISTANCE := 26.0
 
-## Wie viele Baumgruppen (je eine Kopie von trees/snow_pine_pack.glb, das
-## selbst schon mehrere Baeume und Straeucher enthaelt) verteilt werden.
-const TREE_CLUMP_COUNT := 60
+## Wie viele EINZELNE Pflanzen verteilt werden (siehe WorldTree — jede fuer
+## sich, nicht immer derselbe Dreier-Klumpen). Deutlich mehr als bei Klumpen
+## sinnvoll waeren: eine einzelne Pflanze braucht viel weniger Platz als drei
+## zusammen, und ein Wald aus vier verschiedenen Arten an unabhaengigen
+## Stellen sieht erst ab einer gewissen Dichte nach Wald aus.
+const TREE_COUNT := 260
 
-const TREE_MODEL := "res://assets/models/world/trees/snow_pine_pack.glb"
+## Mindestabstand zwischen zwei Pflanzen — eng genug fuer einen dichten
+## Wald, weit genug, dass sich Kronen nicht sichtbar durchdringen.
+const TREE_MIN_DISTANCE := 3.0
 
-## Wie nah eine Baumgruppe an ein Haus heranruecken darf — nicht direkt an
-## der Wand, sonst wirken Baum und Haus wie ineinander gesteckt.
-const TREE_HOUSE_CLEARANCE := 6.0
+## Wie nah eine Pflanze an ein Haus heranruecken darf — nicht direkt an der
+## Wand, sonst wirken Baum und Haus wie ineinander gesteckt.
+const TREE_HOUSE_CLEARANCE := 4.0
 
 @onready var _player: PlayerController = $Player
 @onready var _label: Label = $HUD/DebugPanel/DebugLabel
@@ -122,9 +127,13 @@ func _too_close(candidate: Vector2, min_distance: float) -> bool:
 	return false
 
 
-## Baumgruppen — dieselbe Zurueckweisungs-Stichprobe wie bei den Haeusern,
-## nur mit kleinerem Mindestabstand zueinander UND einem Sicherheitsabstand
-## zu jedem Haus.
+## Einzelne Pflanzen (siehe WorldTree) — dieselbe Zurueckweisungs-Stichprobe
+## wie bei den Haeusern, nur mit kleinerem Mindestabstand zueinander UND
+## einem Sicherheitsabstand zu jedem Haus.
+##
+## Rein dekorativ (keine Kollision) — duenne, sich kreuzende Blattebenen
+## ohne Innenraum liessen den Spieler im Spiel darin haengen bleiben (siehe
+## WorldHouse.place()), bis es eine eigene, einfache Stamm-Kollision gibt.
 func _place_trees() -> void:
 	var container := Node3D.new()
 	container.name = "Baeume"
@@ -133,9 +142,9 @@ func _place_trees() -> void:
 	var positions: Array[Vector2] = []
 	var placed := 0
 	var attempts := 0
-	var max_attempts := TREE_CLUMP_COUNT * 50
+	var max_attempts := TREE_COUNT * 50
 
-	while placed < TREE_CLUMP_COUNT and attempts < max_attempts:
+	while placed < TREE_COUNT and attempts < max_attempts:
 		attempts += 1
 		var candidate := Vector2(
 			_rng.randf_range(-MAP_SIZE.x * 0.5 + 5.0, MAP_SIZE.x * 0.5 - 5.0),
@@ -143,33 +152,25 @@ func _place_trees() -> void:
 
 		var too_close_to_tree := false
 		for existing in positions:
-			if existing.distance_to(candidate) < 10.0:
+			if existing.distance_to(candidate) < TREE_MIN_DISTANCE:
 				too_close_to_tree = true
 				break
 		if too_close_to_tree or _too_close(candidate, HOUSE_MIN_DISTANCE * 0.5 + TREE_HOUSE_CLEARANCE):
 			continue
 
+		var plant_name: String = WorldTree.PLANT_NAMES[_rng.randi() % WorldTree.PLANT_NAMES.size()]
 		var rotation_deg := _rng.randf_range(0.0, 360.0)
+		var scale := _rng.randf_range(0.85, 1.2)
 		var height := _ground_height(candidate)
 		var pos := Vector3(candidate.x, height, candidate.y)
 
-		# add_collision = false: Im Spiel getestet, wer in einen Baum lief,
-		# blieb darin haengen (siehe die lange Begruendung in
-		# WorldHouse.place()) — duenne, sich kreuzende Blattebenen statt
-		# Volumenkoerper. Baeume sind deshalb vorerst rein dekorativ, bis es
-		# eine eigene, einfache Stamm-Kollision gibt.
-		#
-		# strip_names = ["Plane"]: Das Paket bringt eine 2x2-m-Bodenplatte
-		# mit, auf der die Baeume im Sketchfab-Vorschaubild stehen — auf der
-		# eigenen Schneekarte ergab das sichtbare, scharf begrenzte Flecken
-		# (im Spiel gesehen), die nicht zum echten Gelaende passen.
-		container.add_child(WorldHouse.place("Baumgruppe%02d" % placed, TREE_MODEL, pos,
-			rotation_deg, false, ["Plane"]))
+		container.add_child(WorldTree.place("Pflanze%03d" % placed, plant_name, pos,
+			rotation_deg, scale))
 		positions.append(candidate)
 		placed += 1
 
-	print("[Schneekarte] %d von %d Baumgruppen platziert (%d Versuche)"
-		% [placed, TREE_CLUMP_COUNT, attempts])
+	print("[Schneekarte] %d von %d Pflanzen platziert (%d Versuche)"
+		% [placed, TREE_COUNT, attempts])
 
 
 ## Der Spieler steht in der Kartenmitte auf dem tatsaechlichen Gelaende, nicht
@@ -181,5 +182,5 @@ func _place_player() -> void:
 
 
 func _process(_delta: float) -> void:
-	_label.text = "Schneekarte — Seed %d\n%d Haeuser, %d Baumgruppen" % [
-		MAP_SEED, _house_positions.size(), TREE_CLUMP_COUNT]
+	_label.text = "Schneekarte — Seed %d\n%d Haeuser, %d Pflanzen" % [
+		MAP_SEED, _house_positions.size(), TREE_COUNT]
