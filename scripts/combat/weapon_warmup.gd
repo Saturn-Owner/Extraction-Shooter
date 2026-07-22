@@ -69,6 +69,11 @@ var _viewport: SubViewport
 var _weapons: Array[WeaponData] = []
 var _index := 0
 
+## Sichtbare Anzeige, wie weit das Aufwärmen ist — reine Rückmeldung fürs
+## Testen, kein Spielinhalt. Verschwindet mit diesem Knoten von selbst,
+## sobald die letzte Waffe durch ist.
+var _status_label: Label
+
 
 func _ready() -> void:
 	ItemRegistry.ensure_loaded()
@@ -101,7 +106,26 @@ func _ready() -> void:
 	_viewport.add_child(camera)
 	camera.make_current()
 
+	_build_status_label()
 	_warm_next()
+
+
+## Unten rechts, weil beide Level-HUDs (InfoPanel/DebugPanel) oben links
+## sitzen — so überlappt nichts.
+func _build_status_label() -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	panel.position -= Vector2(16.0, 16.0)
+	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	layer.add_child(panel)
+
+	_status_label = Label.new()
+	panel.add_child(_status_label)
+	_update_status_label()
 
 
 func _warm_next() -> void:
@@ -110,6 +134,7 @@ func _warm_next() -> void:
 		return
 
 	var data := _weapons[_index]
+	_update_status_label()
 	var model := data.create_viewmodel()
 	# Auch die Anbauteile aufwärmen, nicht nur den Waffenkörper — sonst
 	# ruckelt es stattdessen beim ersten Anbau an der Werkbank. Weapon_data
@@ -131,6 +156,13 @@ func _warm_next() -> void:
 	# fällige Kompilier-Ruckler nicht mit dem der nächsten Waffe verklumpt.
 	await get_tree().process_frame
 	_warm_next()
+
+
+func _update_status_label() -> void:
+	if _status_label == null:
+		return
+	_status_label.text = "Waffen werden vorbereitet: %s (%d/%d)" % [
+		_weapons[_index].display_name, _index + 1, _weapons.size()]
 
 
 ## Je ein Anbauteil pro Steckplatz, den diese Waffe hat — wortgleiches
