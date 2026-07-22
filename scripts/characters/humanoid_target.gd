@@ -192,16 +192,13 @@ func _put_on_vest() -> void:
 ## Ein zweites, aehnliches waere eine Kopie, die beim naechsten Aendern
 ## zurueckbleibt.
 func _add_spare_magazine() -> void:
-	const MAGAZINE := "res://assets/models/weapons/ar15/AR15_Magazin.glb"
-	if not ResourceLoader.exists(MAGAZINE):
-		return
-
 	_spare_magazine = Node3D.new()
 	_spare_magazine.name = "Ersatzmagazin"
 	add_child(_spare_magazine)
 
-	var model := (load(MAGAZINE) as PackedScene).instantiate()
-	_spare_magazine.add_child(model)
+	# Seit dem Sketchfab-Modell aus ar15.glb herausgelöst statt aus einer
+	# Einzeldatei — der Helfer liefert dasselbe PMAG wie in der Waffe.
+	_spare_magazine.add_child(AR15Viewmodel.spare_magazine_model())
 	# Das Magazin ist ein Waffenteil und schaut entlang +X, das Spiel erwartet
 	# -Z. Die Drehung kommt deshalb von GlbParts, nicht von der Weste: Hier
 	# stand frueher CharacterVest.TURN, was nur zufaellig stimmte, solange

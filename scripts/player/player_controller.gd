@@ -518,14 +518,12 @@ func _put_on_vest() -> void:
 		_body_animation.pouch_target = vest.front_pouch()
 
 	# Ein sichtbares Ersatzmagazin, das in der Tasche steckt und beim Nachladen
-	# mitwandert. DASSELBE Modell wie in der Waffe, kein zweites.
-	const MAGAZINE := "res://assets/models/weapons/ar15/AR15_Magazin.glb"
-	if not ResourceLoader.exists(MAGAZINE):
-		return
+	# mitwandert. DASSELBE Modell wie in der Waffe, kein zweites — seit dem
+	# Sketchfab-Modell aus ar15.glb herausgelöst statt aus einer Einzeldatei.
 	_spare_magazine = Node3D.new()
 	_spare_magazine.name = "Ersatzmagazin"
 	add_child(_spare_magazine)
-	_spare_magazine.add_child((load(MAGAZINE) as PackedScene).instantiate())
+	_spare_magazine.add_child(AR15Viewmodel.spare_magazine_model())
 	# Waffenteil: schaut entlang +X, das Spiel erwartet -Z.
 	_spare_magazine.rotation_degrees = GlbParts.TURN
 
