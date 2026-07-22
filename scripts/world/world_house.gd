@@ -59,8 +59,17 @@ const CATALOGUE := [
 ## Bei Haeusern (geschlossene Waende, Boeden, Daecher) tritt das nicht auf.
 ## Deshalb bekommen Baumgruppen HIER KEINE Kollision — rein dekorativ, bis
 ## es eine echte Stamm-Kollision gibt (siehe schneekarte.gd).
+##
+## `strip_names`: Kindknoten (per Name, direkt unter der Modellwurzel), die
+## VOR dem Einhaengen entfernt werden. Das Kiefernpack bringt einen Knoten
+## "Plane" mit — eine 2x2-m-Bodenplatte, auf der die drei Baeume im
+## Sketchfab-Vorschaubild stehen. Auf der eigenen Schneekarte erzeugt diese
+## Platte sichtbare, scharf begrenzte Flecken, die nicht zum echten
+## Gelaende passen (im Spiel gesehen, nicht nur vermutet) — sie gehoert
+## nicht mit hierher.
 static func place(node_name: String, model_path: String, pos: Vector3,
-		rotation_deg: float = 0.0, add_collision: bool = true) -> Node3D:
+		rotation_deg: float = 0.0, add_collision: bool = true,
+		strip_names: Array[String] = []) -> Node3D:
 	var root := Node3D.new()
 	root.name = node_name
 	root.position = pos
@@ -73,6 +82,10 @@ static func place(node_name: String, model_path: String, pos: Vector3,
 
 	var visual := scene.instantiate()
 	visual.name = "Mesh"
+	for doomed_name in strip_names:
+		var doomed := visual.get_node_or_null(NodePath(doomed_name))
+		if doomed != null:
+			doomed.free()
 	root.add_child(visual)
 
 	if not add_collision:

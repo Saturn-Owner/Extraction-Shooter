@@ -158,8 +158,13 @@ func _place_trees() -> void:
 		# WorldHouse.place()) — duenne, sich kreuzende Blattebenen statt
 		# Volumenkoerper. Baeume sind deshalb vorerst rein dekorativ, bis es
 		# eine eigene, einfache Stamm-Kollision gibt.
+		#
+		# strip_names = ["Plane"]: Das Paket bringt eine 2x2-m-Bodenplatte
+		# mit, auf der die Baeume im Sketchfab-Vorschaubild stehen — auf der
+		# eigenen Schneekarte ergab das sichtbare, scharf begrenzte Flecken
+		# (im Spiel gesehen), die nicht zum echten Gelaende passen.
 		container.add_child(WorldHouse.place("Baumgruppe%02d" % placed, TREE_MODEL, pos,
-			rotation_deg, false))
+			rotation_deg, false, ["Plane"]))
 		positions.append(candidate)
 		placed += 1
 
