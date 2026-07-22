@@ -55,6 +55,30 @@ extends Node3D
 var rack_turn_start_progress: float = 0.87
 var handle_pull_start_progress: float = 0.93
 
+## WOHIN die Waffe fuer den Ladehebelzug dreht — null heisst: die Vorgabe
+## der Kamera gilt (rack_turn_rotation/-offset in weapon_view.gd, entworfen
+## fuer seitliche Hebel wie am AK).
+##
+## Eine Waffe, deren Ladehebel woanders sitzt, setzt hier ihre eigene Pose:
+## Die AR-15 hat ihn hinten OBEN — sie wird zum Durchladen angewinkelt statt
+## zur Seite gedreht (siehe AR15Viewmodel._configure()). Bewusst am Modell
+## statt in weapon_view: weapon_view kennt keine Waffenteile, aber das
+## Modell weiss, wo sein Hebel sitzt.
+var rack_turn_rotation_override: Variant = null
+var rack_turn_offset_override: Variant = null
+
+## Ob die Nachladepose auch bei TAKTISCHER Nachladung gilt (noch Munition im
+## Magazin, kein Hebelzug am Ende). Vorgabe nein — die AK dreht nur zum
+## Hebelzug. Eine Waffe, die ihre ganze Nachladung rahmt (AR-15: anwinkeln,
+## wechseln, absenken), setzt das auf true.
+var rack_turn_also_tactical: bool = false
+
+## Bei taktischer Nachladung geht die Stützhand nach dem Einsetzen direkt
+## zurück an den Schaft, statt noch zum Ladehebel zu greifen — die Kammer
+## ist geladen, es gibt nichts zu ziehen. Vorgabe aus (die übrigen Waffen
+## behalten ihre bisherige Choreografie), die AR-15 setzt es auf true.
+var hand_skips_handle_on_tactical: bool = false
+
 ## Ab wann das Magazin wieder fest im Schacht sitzt (Bruchteil von notify_
 ## reload()s progress). Muss zum LETZTEN Bruch in _animate_magazine_swap()
 ## passen — hier 0.85, siehe dort. Eine Waffe mit eigener, kuerzerer Version
@@ -204,6 +228,24 @@ var muzzle_point: Node3D
 var grip_point: Node3D
 var support_point: Node3D
 
+## Wo die STUETZHAND IM KAMERARAUM anfassen soll — fuer den Spieler selbst.
+##
+## ---------------------------------------------------------------------------
+## WARUM NICHT EINFACH support_point
+##
+## Ein Vordergriff verschiebt, wo die Hand ergonomisch hingehoert. Am
+## Kameramodell (ViewmodelArms, deutlich kuerzere Arme, siehe dort) passt das
+## ohne Weiteres. Am von aussen sichtbaren Koerper (CharacterAnimation) reicht
+## der Arm der Blockfigur dagegen nicht mehr hin — sie steht mit dem blossen
+## Handschutz (support_point) schon fast gestreckt an ihrer Reichweitengrenze,
+## und der gemessene Griffpunkt des Vordergriffs liegt gut 13 cm weiter vorn,
+## als sie ueberhaupt fassen kann.
+##
+## Deshalb zwei Punkte: `support_point` bleibt fuer den Koerper unangetastet
+## der Handschutz, `camera_support_point` darf fuer die Kamera-Arme auf den
+## Vordergriff wandern. Ohne Vordergriff zeigen beide auf denselben Knoten.
+var camera_support_point: Node3D
+
 ## Wer den Ladehebel zieht, wenn die Waffe leergeschossen nachlaedt.
 ##
 ## Standardmaessig die STUETZHAND (links) — so liegt es bei einem Ladehebel,
@@ -334,6 +376,19 @@ func _adopt_attachment_geometry(mount: WeaponMount, part: AttachmentViewmodel) -
 		# an der Spitze des Daempfers erscheint und nicht mittendrin.
 		if muzzle_point != null:
 			muzzle_point.position.z = muzzle_z
+
+	if mount.slot == AttachmentData.Slot.FOREGRIP and part.grip_point != null:
+		# Nur die KAMERA-Stuetzhand wandert auf den Vordergriff — support_point
+		# selbst bleibt der Handschutz, siehe die Begruendung bei
+		# camera_support_point oben. Ein eigener Knoten statt Wiederverwendung
+		# von SupportPoint, weil beide gleichzeitig gebraucht werden: der
+		# Koerper haelt weiter den Handschutz, waehrend die Kamera-Arme schon
+		# auf den Griff zielen.
+		var camera_point := Node3D.new()
+		camera_point.name = "CameraSupportPoint"
+		camera_point.position = position_in_model(part.grip_point)
+		add_child(camera_point)
+		camera_support_point = camera_point
 
 
 ## Wo dieser Knoten im Koordinatensystem des Modells liegt.
@@ -490,6 +545,9 @@ func _collect_parts() -> void:
 	muzzle_point = get_node_or_null("MuzzlePoint") as Node3D
 	grip_point = get_node_or_null("GripPoint") as Node3D
 	support_point = get_node_or_null("SupportPoint") as Node3D
+	# Vorgabe: dieselbe Stelle wie der Koerper. _adopt_attachment_geometry()
+	# haengt bei angebautem Vordergriff einen eigenen Knoten hier ein.
+	camera_support_point = support_point
 	magwell_point = get_node_or_null("MagwellPoint") as Node3D
 
 	if action != null:

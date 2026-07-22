@@ -482,6 +482,33 @@ func _test_viewmodel_arms() -> void:
 	_check(reach < to_fore + 0.20,
 		"und nicht unnoetig weit darueber (%.3f gegen %.3f m)" % [reach, to_fore])
 
+	# --- MIT VORDERGRIFF WANDERT NUR DIE KAMERA-STUETZHAND ---
+	#
+	# camera_support_point in weapon_viewmodel.gd wandert bei angebautem
+	# Vordergriff auf dessen gemessenen Griffpunkt — das darf hier aber nur
+	# fuer die KURZEN Kamera-Arme gelten. Der Koerper (verify_character.gd)
+	# reicht dorthin nicht und bleibt bewusst beim Handschutz.
+	var with_grip := data.create_viewmodel()
+	with_grip.weapon_data = data
+	with_grip.attachments = {int(AttachmentData.Slot.FOREGRIP): &"ar15_foregrip_vertical"}
+	root.add_child(with_grip)
+	await process_frame
+	with_grip.position = with_grip.hip_position
+	with_grip.rotation_degrees = with_grip.hip_rotation_degrees
+
+	_check(with_grip.mounted.has(int(AttachmentData.Slot.FOREGRIP)),
+		"der Vordergriff ist fuer diesen Test angebaut")
+	_check(with_grip.camera_support_point != with_grip.support_point,
+		"die Kamera-Stuetzhand bekommt einen eigenen Punkt")
+
+	var to_foregrip := ViewmodelArms.LEFT_SHOULDER.distance_to(
+		with_grip.camera_support_point.position + with_grip.position)
+	_check(reach > to_foregrip,
+		"die Kamera-Stuetzhand erreicht auch den Vordergriff (%.3f von %.3f m)"
+			% [to_foregrip, reach])
+
+	with_grip.queue_free()
+
 	# Duenner als ein Weltglied — das war der eigentliche Punkt an
 	# "Kameragroesse".
 	_check(ViewmodelArms.UPPER_THICK < 0.10,
@@ -1479,22 +1506,30 @@ func _test_handle_rack_kicks_pose() -> void:
 	const DT := 1.0 / 60.0
 	const RELOAD_DURATION := 2.0
 
-	# Leere Nachladung beginnt. Auf halbem Weg — deutlich vor RACK_TURN_START_
-	# PROGRESS (0.87) — sitzt das Magazin zwar schon, aber die Drehung darf
-	# noch nicht eingesetzt haben.
+	# Leere Nachladung beginnt. Geprueft wird gegen die GRENZE DER WAFFE
+	# (rack_turn_start_progress), nicht gegen eine feste Zahl: Die AKM dreht
+	# erst nach dem Magazinwechsel, die AR-15 rahmt die ganze Nachladung mit
+	# ihrer Anwinkelung (Grenze 0.0) — beides ist richtig, solange die Pose
+	# tut, was die Waffe ansagt.
 	view._on_reload_started(RELOAD_DURATION, true, false)
-	for i in int(RELOAD_DURATION / DT * 0.5):
-		view._update_sequence(DT)
-		view._update_pose(DT)
-	_check(pose.position.distance_to(hip) < 0.001,
-		"waehrend des Magazinwechsels dreht sich noch nichts (%.4f m Abstand)"
-			% pose.position.distance_to(hip))
-
-	# Weiter simulieren, bis deutlich ueber RACK_TURN_START_PROGRESS hinaus,
-	# aber vor dem Ende der Sequenz: Jetzt muss die Drehung eingesetzt haben.
-	for i in int(RELOAD_DURATION / DT * 0.45):
-		view._update_sequence(DT)
-		view._update_pose(DT)
+	var turn_start: float = viewmodel.rack_turn_start_progress
+	if turn_start >= 0.2:
+		# Bis zur Haelfte der erlaubten Ruhephase: noch keine Bewegung.
+		for i in int(RELOAD_DURATION / DT * turn_start * 0.5):
+			view._update_sequence(DT)
+			view._update_pose(DT)
+		_check(pose.position.distance_to(hip) < 0.001,
+			"vor der eigenen Drehgrenze dreht sich noch nichts (%.4f m Abstand)"
+				% pose.position.distance_to(hip))
+		# Weiter bis deutlich ueber die Grenze, aber vor dem Ende.
+		for i in int(RELOAD_DURATION / DT * (0.95 - turn_start * 0.5)):
+			view._update_sequence(DT)
+			view._update_pose(DT)
+	else:
+		# Die Waffe winkelt von Anfang an: einfach bis kurz vor Schluss laufen.
+		for i in int(RELOAD_DURATION / DT * 0.95):
+			view._update_sequence(DT)
+			view._update_pose(DT)
 	# Der Versatz selbst ist klein (rack_turn_offset misst nur 0.02 m in der
 	# Spitze) und die Feder ist zu diesem Zeitpunkt erst kurz unterwegs — die
 	# Schwelle testet deshalb "hat sich ueberhaupt geruehrt", nicht "ist schon
@@ -1524,16 +1559,21 @@ func _test_handle_rack_kicks_pose() -> void:
 		"nach dem Nachladen steht sie wieder in der Hueftlage (%.4f m, %.3f Grad Abstand)"
 			% [pose.position.distance_to(hip), rot_distance])
 
-	# Taktische Nachladung (noch Munition im Magazin): Kein Ladehebelzug,
-	# also auch keine Drehung — die Waffe bleibt in der Hueftlage, auch weit
-	# ueber RACK_TURN_START_PROGRESS hinaus.
+	# Taktische Nachladung (noch Munition im Magazin): Ob sich die Waffe
+	# dabei bewegt, sagt die Waffe selbst (rack_turn_also_tactical) — die AK
+	# bleibt liegen, die AR-15 rahmt jede Nachladung mit ihrer Anwinkelung.
 	view._on_reload_started(RELOAD_DURATION, false, false)
 	for i in int(RELOAD_DURATION / DT * 0.95):
 		view._update_sequence(DT)
 		view._update_pose(DT)
-	_check(pose.position.distance_to(hip) < 0.001,
-		"bei taktischer Nachladung bleibt sie in der Hueftlage (%.4f m Abstand)"
-			% pose.position.distance_to(hip))
+	if viewmodel.rack_turn_also_tactical:
+		_check(pose.position.distance_to(hip) > 0.001,
+			"taktische Nachladung laeuft in der eigenen Pose (%.4f m Abstand)"
+				% pose.position.distance_to(hip))
+	else:
+		_check(pose.position.distance_to(hip) < 0.001,
+			"bei taktischer Nachladung bleibt sie in der Hueftlage (%.4f m Abstand)"
+				% pose.position.distance_to(hip))
 
 	player.free()
 

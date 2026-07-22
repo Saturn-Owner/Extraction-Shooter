@@ -1,51 +1,116 @@
-## Gemeinsame Grundlage für AR-15-Anbauteile, die als .glb aus Blender kommen.
+## Gemeinsame Grundlage für AR-15-Anbauteile.
 ##
-## Diese Klasse baut KEIN Teil. Sie nimmt jedem Teil nur die immer gleiche
-## Arbeit ab: Datei laden, Achsen drehen, an die Einbaustelle setzen. Was ein
-## Teil ausmacht — wo man hindurchschaut, wie lang es den Lauf macht — steht
-## weiterhin in seiner eigenen Datei, wie Grundsatz 5 es verlangt.
+## Seit dem Sketchfab-Modell (siehe ar15_viewmodel.gd) gibt es ZWEI Sorten:
 ##
-## Ohne sie stünde dieselbe Umrechnung fünfmal da, und beim sechsten Teil
-## stünde sie einmal falsch.
+##   1. TEILE AUS DEM WAFFENMODELL SELBST (extract_node): EOtech, GEMTECH-
+##      Dämpfer und Frontgriff stecken bereits in ar15.glb — der Grundkörper
+##      wirft sie beim Laden raus, und dieses Skript holt genau denselben
+##      Knoten zurück, wenn das Item angebaut ist. Eine Quelle, kein doppelt
+##      gepflegtes Modell, und das Teil sitzt zwangsläufig exakt dort, wo der
+##      Modellierer es hingebaut hat.
+##
+##   2. ALTE EINZELDATEIEN (file + place): Rotpunkt und Winkelgriff haben im
+##      neuen Modell kein Gegenstück. Ihre alten Dateien bleiben, aber ihre
+##      eingebaute Einbaustelle stammt vom ALTEN Modell — deshalb wird sie
+##      verworfen und das Teil an einen gemessenen Punkt der neuen Schiene
+##      gesetzt (place). Übergangslösung, bis Blender-Ersatz existiert.
+##
+## Diese Klasse baut kein Teil — sie nimmt jedem Teil nur die immer gleiche
+## Arbeit ab, wie es Grundsatz 5 verlangt.
 class_name Ar15GlbPart
 extends AttachmentViewmodel
 
-## Dateiname ohne Endung. Muss die Unterklasse setzen.
+## Knotenname in ar15.glb — Sorte 1. Hat Vorrang vor `file`.
+var extract_node: String = ""
+
+## Dateiname ohne Endung unter assets/models/weapons/ar15/ — Sorte 2.
 var file: String = ""
+
+## Sitz für Sorte 2, in Viewmodel-Achsen (gemessen an der neuen Schiene).
+var place: Vector3 = Vector3.ZERO
 
 
 func _build_parts() -> void:
-	if file == "":
-		push_error("[%s] kein Modell angegeben" % get_model_name())
+	if extract_node != "":
+		_build_from_weapon_model()
+	elif file != "":
+		_build_from_own_file()
+	else:
+		push_error("[%s] weder extract_node noch file angegeben" % get_model_name())
+
+
+## Sorte 1: den Knoten aus dem Waffenmodell herauslösen.
+func _build_from_weapon_model() -> void:
+	var scene := load(AR15Viewmodel.MODEL) as PackedScene
+	if scene == null:
+		push_warning("[%s] Waffenmodell fehlt" % get_model_name())
 		return
 
-	var model := GlbParts.load_part(file, "Modell")
-	if model == null:
+	var instance := scene.instantiate()
+	var part := AR15Viewmodel.find_model_node(instance, extract_node)
+	if part == null:
+		push_warning("[%s] Knoten '%s' nicht im Waffenmodell" % [get_model_name(), extract_node])
+		instance.free()
 		return
-	add_child(model)
 
-	# Die Aufnahme liegt im Ursprung, das Teil bringt seine Stelle selbst mit —
-	# siehe AR15Viewmodel._build_mounts().
-	position = GlbParts.mount_point(file)
+	# Dieselbe Einpassung wie der Waffenkörper — nur so landet das Teil exakt
+	# an seiner modellierten Stelle.
+	var fit := AR15Viewmodel.fit_transform_for(AR15Viewmodel.MUZZLE_Z)
+	var full := fit * _accumulate(instance, part)
+
+	part.get_parent().remove_child(part)
+	part.owner = null
+	add_child(part)
+	# Position auf den Anbauteil-Knoten, Drehung/Skalierung auf das Mesh —
+	# gleiche Aufteilung wie bei den beweglichen Teilen, gleiche Begründung
+	# (siehe akm_viewmodel.gd).
+	position = full.origin
+	(part as Node3D).transform = Transform3D(full.basis, Vector3.ZERO)
+
+	# Der Rest des instanzierten Modells wird nicht mehr gebraucht.
+	instance.free()
 
 
-## Mitte des Leuchtpunkts, in Viewmodel-Achsen. Das ist die optische Achse.
-##
-## ---------------------------------------------------------------------------
-## WARUM GEMESSEN UND NICHT DER URSPRUNG DES TEILS
-##
-## Der Zielpunkt lag vorher im Ursprung des Visiers. Der Leuchtpunkt sitzt aber
-## nicht dort: beim Rotpunkt 6,8 mm darueber, beim Holovisier 2,7 mm.
-##
-## Beim Zielen senkt weapon_view.gd die Waffe um sight_height ab, damit die
-## Visierlinie in der Bildmitte landet. War der Wert 6,8 mm zu klein, stand der
-## Punkt um denselben Betrag ueber der Mitte — und die Kugel ging in die Mitte,
-## also unter den Punkt. Auf 0,24 m Zielabstand sind das 1,6 Grad: auf 25 m
-## rund 70 cm zu tief. Man zielt sauber und trifft nichts.
-##
-## Gesucht wird die Flaeche mit dem Material "dot", ersatzweise "glass". Damit
-## stimmt die Visierlinie automatisch, auch wenn der Modellierer das Absehen
-## verschiebt.
+## Sorte 2: alte Einzeldatei laden und an die gemessene Stelle setzen.
+func _build_from_own_file() -> void:
+	var packed := load("res://assets/models/weapons/ar15/" + file + ".glb") as PackedScene
+	if packed == null:
+		push_warning("[%s] Modell fehlt: %s" % [get_model_name(), file])
+		return
+
+	var instance := packed.instantiate()
+	# Der Trägerknoten der Datei bleibt UNANGETASTET: Sein Versatz ist genau
+	# das, was die Geometrie um den Ursprung zentriert (gemessen: mit Träger
+	# liegt die Hülle symmetrisch um null, ohne ihn läge sie irgendwo im
+	# Raum). Die Einbaustelle des alten Modells steckt NICHT hier, sondern
+	# war im alten GlbParts.mount_point verrechnet — das wird nicht mehr
+	# benutzt, `place` übernimmt.
+	var holder := Node3D.new()
+	holder.name = "Modell"
+	# Blender-Achsen (+X Mündung) auf Spielachsen (-Z Mündung).
+	holder.rotation_degrees = Vector3(0.0, 90.0, 0.0)
+	holder.add_child(instance)
+	add_child(holder)
+	position = place
+
+
+static func _accumulate(root_node: Node, target: Node) -> Transform3D:
+	var chain: Array[Node3D] = []
+	var walker := target
+	while walker != root_node and walker != null:
+		if walker is Node3D:
+			chain.append(walker)
+		walker = walker.get_parent()
+	var result := Transform3D.IDENTITY
+	for i in range(chain.size() - 1, -1, -1):
+		result = result * (chain[i] as Node3D).transform
+	return result
+
+
+## Mitte des Leuchtpunkts, in Viewmodel-Achsen relativ zum Teil. Gesucht wird
+## die Fläche mit dem Material "dot", ersatzweise "glass" — funktioniert für
+## die alten Einzeldateien. Das Sketchfab-EOtech hat nur ein Sammelmaterial;
+## sein Zielpunkt steht deshalb als gemessene Konstante in ar15_holo.gd.
 func aim_centre() -> Vector3:
 	var found: Variant = _surface_centre(self, Transform3D.IDENTITY, "dot")
 	if found == null:
@@ -85,15 +150,12 @@ func _surface_centre(node: Node, transform: Transform3D, material_name: String) 
 	return null
 
 
-## Vorderste Spitze des Teils, in Viewmodel-Achsen.
-##
-## Wird aus der Geometrie gemessen statt als Zahl gepflegt: Ein Wert, der
-## neben dem Modell steht, passt irgendwann nicht mehr zu ihm.
+## Vorderste Spitze des Teils, in Viewmodel-Achsen relativ zum Teil.
+## Aus der Geometrie gemessen statt als Zahl gepflegt.
 func forward_tip() -> float:
 	var bounds := _model_bounds(self, Transform3D.IDENTITY)
 	if bounds.size == Vector3.ZERO:
 		return 0.0
-	# -Z ist vorne, also die kleinste Z-Koordinate.
 	return bounds.position.z
 
 

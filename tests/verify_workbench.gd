@@ -124,8 +124,18 @@ func _run() -> void:
 	# Beim Verschieben würde der Spieler den Bereich verlassen, `user` fiele
 	# auf null, und die Anfrage scheiterte dann an der fehlenden Waffe statt
 	# an der Entfernung — der Test wäre grün, ohne das Richtige zu prüfen.
+	#
+	# DIE SCHWELLE RELATIV ZUR ECHTEN ENTFERNUNG, NICHT FEST 0.01: Wie nah der
+	# Spieler nach dem Hinsetzen an der Bank landet, hängt von der Physik-
+	# Zeitleiste ab — mal 0,11 m, mal (nach mehr Ticks eingesunken) nur noch
+	# 0,0003 m. Eine feste Schwelle war damit mal groesser, mal kleiner als
+	# dieser Abstand, und der Test hing von Zufaelligkeiten der Physik statt
+	# vom eigentlich geprueften Verhalten ab. Ein winziges Stueck UNTER der
+	# tatsaechlich gemessenen Entfernung ist dagegen garantiert ausserhalb,
+	# egal wie nah der Spieler diesmal gelandet ist.
 	var real_range := station.use_range
-	station.use_range = 0.01
+	var real_distance := station.global_position.distance_to(player.global_position)
+	station.use_range = maxf(0.0, real_distance - 0.0001)
 	_check(station.request_attach(stack.instance_id, AttachmentData.Slot.SIGHT, &"sight_micro_dot") != "",
 		"ausser Reichweite nimmt die Bank nichts an")
 	station.use_range = real_range

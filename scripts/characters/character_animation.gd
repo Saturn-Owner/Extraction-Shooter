@@ -172,6 +172,11 @@ const RELOAD_CHARGE := 0.96  ## Ladehebel greifen und durchziehen
 ## Wie weit die Hand das Magazin herauszieht, bevor sie es loslässt.
 const PULL_DISTANCE := 0.08
 
+## Wann die Hand den durchgezogenen Ladehebel loslässt und zum Schaft
+## zurückkehrt — nur im synchronisierten Ablauf (siehe reload_hand_path,
+## Parameter pull_start).
+const RELOAD_RELEASE := 0.985
+
 
 ## Haltung mit Waffe. Werte in Grad.
 ##
@@ -599,8 +604,15 @@ func _support_hand_goal() -> Vector3:
 ##
 ## Alle Punkte in Weltkoordinaten, alle Abschnitte mit `smoothstep`: Die Hand
 ## fährt an und bremst ab, statt zwischen den Marken zu springen.
+## `pull_start` synchronisiert die Hand mit dem Ladehebel der Waffe: Ab
+## diesem Fortschritt fährt der Hebel (handle wird jeden Frame live an
+## seiner Position abgefragt), und die Hand KLEBT an ihm, statt eine eigene
+## Bahn zu laufen — vorher lief sie los, bevor der Hebel sich rührte, oder
+## ging zurück, während er noch fuhr. Ohne den Parameter (-1) gilt die alte
+## feste Zeitleiste; die Figuren im Level nutzen sie weiterhin.
 static func reload_hand_path(p: float, handguard: Vector3, magwell: Vector3,
-		pulled: Vector3, pouch: Vector3, handle: Vector3) -> Vector3:
+		pulled: Vector3, pouch: Vector3, handle: Vector3,
+		pull_start: float = -1.0) -> Vector3:
 	# 1. Hinreichen.
 	if p < RELOAD_REACH:
 		return handguard.lerp(magwell, smoothstep(0.0, RELOAD_REACH, p))
@@ -624,13 +636,26 @@ static func reload_hand_path(p: float, handguard: Vector3, magwell: Vector3,
 	if p < RELOAD_SEAT:
 		return pulled.lerp(magwell, smoothstep(RELOAD_CARRY, RELOAD_SEAT, p))
 
-	# 6. Ladehebel. Das Modell zieht ihn ab 0,85 nach hinten — die Hand
-	#    folgt ihm einfach, statt eine eigene Bahn zu laufen.
-	if p < RELOAD_CHARGE:
-		return magwell.lerp(handle, smoothstep(RELOAD_SEAT, RELOAD_CHARGE, p))
+	# 6. Zum Ladehebel greifen — bis zu dem Moment, in dem er sich zu
+	#    bewegen beginnt (pull_start der Waffe), sonst bis zur festen Marke.
+	#
+	# GEKLEMMT AUF MINDESTENS RELOAD_SEAT: Setzt eine Waffe ihren pull_start
+	# VOR das Ende der Magazin-Sitzphase (RELOAD_SEAT), gäbe es kein Fenster
+	# zum Hinreichen mehr — die Hand läge exakt an der Nahtstelle vom
+	# Magazinschacht auf den (dann schon fahrenden) Hebel, ohne Übergang.
+	# Genau das ist der AR-15 passiert, als ihr Ladehebel zu frueh losfuhr.
+	var grab_end := maxf(pull_start, RELOAD_SEAT + 0.02) if pull_start > 0.0 else RELOAD_CHARGE
+	if p < grab_end:
+		return magwell.lerp(handle, smoothstep(RELOAD_SEAT, grab_end, p))
+
+	# 6b. Am Hebel BLEIBEN, solange er fährt: `handle` ist die live
+	#     abgefragte Hebelposition, die Hand fährt also exakt mit.
+	if pull_start > 0.0 and p < RELOAD_RELEASE:
+		return handle
 
 	# Zurück an den Schaft.
-	return handle.lerp(handguard, smoothstep(RELOAD_CHARGE, 1.0, p))
+	var back_start := RELOAD_RELEASE if pull_start > 0.0 else RELOAD_CHARGE
+	return handle.lerp(handguard, smoothstep(back_start, 1.0, p))
 
 
 ## Stellt einen Arm so, dass die Hand auf dem Zielpunkt liegt.

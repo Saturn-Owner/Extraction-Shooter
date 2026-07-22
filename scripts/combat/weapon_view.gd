@@ -459,7 +459,11 @@ func _update_pose(delta: float) -> void:
 	# darueber hinaus — das wirkt glatt und maschinell. Eine schwach gedaempfte
 	# Feder schiesst leicht ueber die Zieldrehung hinaus und federt zurueck,
 	# das liest sich als Ruck einer echten Hand.
-	var wants_rack := _sequence_kind == &"reload" and _sequence_from_empty \
+	# Waffen mit rack_turn_also_tactical rahmen JEDE Nachladung mit ihrer
+	# Pose, nicht nur die leere — die AR-15 winkelt z. B. immer an, auch
+	# wenn am Ende kein Hebelzug kommt.
+	var wants_rack := _sequence_kind == &"reload" \
+			and (_sequence_from_empty or _viewmodel.rack_turn_also_tactical) \
 			and _sequence_progress > _viewmodel.rack_turn_start_progress
 	var rack_target := 1.0 if wants_rack else 0.0
 	var rack_step := minf(delta, 1.0 / 30.0)
@@ -467,8 +471,17 @@ func _update_pose(delta: float) -> void:
 	_rack_velocity += rack_accel * rack_step
 	_rack_progress += _rack_velocity * rack_step
 
-	target_pos += rack_turn_offset * _rack_progress
-	target_rot += rack_turn_rotation * _rack_progress
+	# Die Drehpose kommt vom Modell, wenn es eine eigene mitbringt: Die
+	# Vorgaben hier sind fuer seitliche Hebel (AK) entworfen, eine AR-15
+	# winkelt stattdessen an (siehe rack_turn_rotation_override im Modell).
+	var turn_offset: Vector3 = rack_turn_offset
+	var turn_rotation: Vector3 = rack_turn_rotation
+	if _viewmodel.rack_turn_offset_override != null:
+		turn_offset = _viewmodel.rack_turn_offset_override
+	if _viewmodel.rack_turn_rotation_override != null:
+		turn_rotation = _viewmodel.rack_turn_rotation_override
+	target_pos += turn_offset * _rack_progress
+	target_rot += turn_rotation * _rack_progress
 
 	_pose.position = _pose.position.lerp(target_pos, weight)
 	_pose.rotation_degrees = _pose.rotation_degrees.lerp(target_rot, weight)
@@ -617,7 +630,11 @@ func _update_arms(delta: float) -> void:
 		return
 
 	var grip := _viewmodel.grip_point.global_position
-	var handguard := _viewmodel.support_point.global_position
+	# Kamera-Version des Stuetzpunkts: dieselbe Stelle wie am Koerper, ausser
+	# ein Vordergriff verschiebt sie (siehe camera_support_point in
+	# weapon_viewmodel.gd) — der Arm der Blockfigur reicht dorthin nicht,
+	# die kurzen Kamera-Arme schon.
+	var handguard := _viewmodel.camera_support_point.global_position
 	var support := handguard
 
 	if _sequence_kind == &"reload" and _sequence_duration > 0.0:
@@ -675,29 +692,41 @@ func _support_hand_while_reloading(progress: float, handguard: Vector3,
 	# Nachladen ist sie gekippt.
 	var down := -_viewmodel.magwell_point.global_basis.y.normalized()
 	var pulled := magwell + down * CharacterAnimation.PULL_DISTANCE
+	var handle := magwell
+	if _viewmodel.charging_handle != null:
+		handle = _viewmodel.charging_handle.global_position
 
 	# Beim blossen Durchladen wird kein Magazin gewechselt: Die Hand bleibt am
-	# Schaft und zieht nur zum Schluss den Ladehebel — ausser die rechte Hand
-	# uebernimmt das, dann bleibt die linke die ganze Zeit am Handschutz.
+	# Schaft, greift rechtzeitig zum Hebel und faehrt mit ihm mit — dieselbe
+	# Synchronisation wie am Ende der vollen Nachladung. Zieht stattdessen die
+	# rechte (Griff-)Hand den Hebel (skip_handle), hat die linke damit nichts
+	# zu tun und bleibt am Schaft.
 	if _sequence_chamber_only:
 		if skip_handle:
 			return handguard
-		var handle := magwell
-		if _viewmodel.charging_handle != null:
-			handle = _viewmodel.charging_handle.global_position
-		if progress < CharacterAnimation.RELOAD_SEAT:
+		var pull_start: float = _viewmodel.handle_pull_start_progress
+		var reach_start := maxf(0.0, pull_start - 0.15)
+		if progress < reach_start:
 			return handguard
-		if progress < CharacterAnimation.RELOAD_CHARGE:
+		if progress < pull_start:
 			return handguard.lerp(handle,
-				smoothstep(CharacterAnimation.RELOAD_SEAT,
-					CharacterAnimation.RELOAD_CHARGE, progress))
+				smoothstep(reach_start, pull_start, progress))
+		if progress < CharacterAnimation.RELOAD_RELEASE:
+			return handle
 		return handle.lerp(handguard,
-			smoothstep(CharacterAnimation.RELOAD_CHARGE, 1.0, progress))
+			smoothstep(CharacterAnimation.RELOAD_RELEASE, 1.0, progress))
 
 	# Wo das frische Magazin herkommt. Im Kameraraum gibt es keine Weste, also
 	# ein Punkt unten links ausserhalb des Bildes — dorthin greift man auch in
 	# Wirklichkeit, zur Tasche an der Brust.
 	var pouch: Vector3 = global_transform * POUCH_IN_VIEW
+
+	# Taktische Nachladung ohne Hebelzug: Der Hebel-Abschnitt der Choreografie
+	# wird zum Schaft umgeleitet — die Hand setzt das Magazin und geht direkt
+	# zurueck, statt grundlos zum Ladehebel zu greifen.
+	if not _sequence_from_empty and _viewmodel.hand_skips_handle_on_tactical:
+		return CharacterAnimation.reload_hand_path(progress, handguard, magwell,
+			pulled, pouch, handguard)
 
 	if skip_handle:
 		# WICHTIG: Die linke muss FERTIG sein (schon wieder am Handschutz),
@@ -723,12 +752,10 @@ func _support_hand_while_reloading(progress: float, handguard: Vector3,
 		return CharacterAnimation.reload_hand_path(local_progress, handguard,
 			magwell, pulled, pouch, handguard)
 
-	var handle := magwell
-	if _viewmodel.charging_handle != null:
-		handle = _viewmodel.charging_handle.global_position
-
+	# Der letzte Parameter synchronisiert die Hand mit dem Hebel DIESER Waffe:
+	# Sie greift ihn, wenn er losfaehrt, und bleibt dran, bis er zurueck ist.
 	return CharacterAnimation.reload_hand_path(progress, handguard, magwell,
-		pulled, pouch, handle)
+		pulled, pouch, handle, _viewmodel.handle_pull_start_progress)
 
 
 ## Wo die rechte (Griff-)Hand waehrend einer leergeschossenen Nachladung

@@ -366,7 +366,10 @@ func _play_shot_feedback() -> void:
 	# Zielen mitwandert. Geschosse starten weiter am festen Muzzle-Knoten —
 	# die Flugbahn darf nicht davon abhaengen, wo das Modell gerade wackelt.
 	var flash_from := _visual_muzzle if _visual_muzzle != null else _muzzle
-	if flash_from != null:
+	# Ein Schalldämpfer kühlt und bremst die Mündungsgase — genau das nimmt
+	# dem Blitz seine Helligkeit. Sichtbar bleibt allenfalls der Rauch
+	# (siehe MuzzleBlast), das grelle Feuer selbst fehlt.
+	if flash_from != null and not WeaponAudio.is_suppressed(data):
 		var power := WeaponAudio.get_power_for_weapon(data)
 		MuzzleFlash.spawn(get_spawn_parent(), flash_from.global_transform, 0.6 + power)
 

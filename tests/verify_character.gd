@@ -28,6 +28,7 @@ func _initialize() -> void:
 	await _test_movement()
 	await _test_hinges()
 	await _test_weapon_in_hand()
+	await _test_weapon_in_hand_with_foregrip()
 	await _test_vest()
 	await _test_stances()
 	await _test_marking()
@@ -805,6 +806,57 @@ func _test_weapon_in_hand() -> void:
 	_check(bare.weapon == null, "ohne weapon_id bleibt die Figur unbewaffnet")
 	_check(not bare._animation.holding_weapon, "und ihre Arme schwingen frei")
 	bare.queue_free()
+
+
+## Mit angebautem Vordergriff bleibt die KOERPER-Stuetzhand am Handschutz.
+##
+## Der gemessene Griffpunkt des Vordergriffs liegt gut 13 cm weiter vorn, als
+## der Arm der Blockfigur reicht (sie steht schon ohne Vordergriff fast
+## gestreckt an ihrer Grenze — siehe camera_support_point in
+## weapon_viewmodel.gd). Nur die Kamera-Arme (ViewmodelArms, siehe
+## verify_weapon_handling.gd) wandern deshalb auf den Griff; support_point
+## selbst darf sich durch einen Vordergriff nicht veraendern. Dieser Test ist
+## die Gegenprobe dazu — er waere rot, wenn support_point versehentlich statt
+## camera_support_point verschoben wuerde.
+func _test_weapon_in_hand_with_foregrip() -> void:
+	_section("Waffe mit Vordergriff")
+
+	var figure := HumanoidTarget.new()
+	figure.label_text = "Träger"
+	figure.weapon_id = &"weapon_rifle_ar15"
+	figure.weapon_attachments = [&"ar15_foregrip_vertical"] as Array[StringName]
+	figure.weapon_behaviour = CharacterWeapon.Behaviour.HOLD
+	root.add_child(figure)
+	await process_frame
+
+	_check(figure.weapon != null and figure.weapon.viewmodel != null,
+		"die Figur hat eine Waffe mit Modell")
+	if figure.weapon == null or figure.weapon.viewmodel == null:
+		figure.queue_free()
+		return
+
+	var vm := figure.weapon.viewmodel
+	_check(vm.mounted.has(int(AttachmentData.Slot.FOREGRIP)),
+		"der Vordergriff ist angebaut")
+
+	var without := AR15Viewmodel.new()
+	without.build()
+	_check(vm.support_point.position.distance_to(without.support_point.position) < 0.001,
+		"der Koerper haelt trotz Vordergriff weiter den Handschutz (%.2f m Unterschied)"
+			% vm.support_point.position.distance_to(without.support_point.position))
+	_check(vm.camera_support_point.position.distance_to(vm.support_point.position) > 0.02,
+		"nur der Kamera-Punkt zeigt auf den Vordergriff (%.2f m Unterschied)"
+			% vm.camera_support_point.position.distance_to(vm.support_point.position))
+	without.queue_free()
+
+	figure._animation._process(1.0 / 60.0)
+	var hand := figure.hand_of(HealthSystem.Part.LEFT_ARM)
+	var gap := hand.global_position.distance_to(vm.support_point.global_position)
+	_check(gap < 0.02,
+		"die linke Hand liegt weiter auf dem Handschutz (%.1f mm daneben)"
+			% (gap * 1000.0))
+
+	figure.queue_free()
 
 
 ## Die taktische Weste und das Magazin, das aus ihr gezogen wird.

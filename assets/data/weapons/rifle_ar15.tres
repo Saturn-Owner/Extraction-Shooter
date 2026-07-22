@@ -24,8 +24,9 @@ anchor = &"MountForegrip"
 [resource]
 script = ExtResource("1_c4ck0")
 fire_rate_rpm = 750
-recoil_vertical = 118.0
-recoil_horizontal = 42.0
+recoil_vertical = 82.0
+recoil_horizontal = 32.0
+ads_recoil_multiplier = 0.12
 ergonomics = 54
 accuracy_moa = 2.4
 viewmodel = ExtResource("2_view")

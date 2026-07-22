@@ -52,6 +52,10 @@ var _last_action := ""
 
 
 func _ready() -> void:
+	# Siehe raid_level.gd: kompiliert AK/AR-15-Shader im Hintergrund, bevor
+	# man zu ihnen wechselt.
+	add_child(WeaponWarmup.new())
+
 	_spawn = _player.global_position
 
 	for target in _find_targets():

@@ -14,12 +14,23 @@ const COLOR := Color(1.0, 0.82, 0.45)
 
 ## scale_factor skaliert mit dem Kaliber: grosse Waffen blitzen stärker.
 ##
+## `layers` reicht die Sichtbarkeits-Ebene weiter, auf der das Licht und die
+## Partikel liegen — Vorgabe 1 (Standard, fuer jede Kamera sichtbar). Das
+## Koerpermodell des Spielers wird vor der eigenen Kamera versteckt (siehe
+## PlayerController._hide_own_body_from_camera), aber dieser Knoten haengt
+## NICHT unter dem Koerpermodell (spawn_parent ist die Szenenwurzel, siehe
+## dort) und erbt die Versteckung deshalb nicht von selbst — ohne diesen
+## Parameter blitzte das eigene Koerpermodell zusaetzlich zum Kameramodell,
+## mitten im Bild, an der wahren Position der Waffe am Arm.
+##
 ## Die Transformation wird gemerkt und erst in _ready() gesetzt — global_transform
 ## funktioniert nur, wenn der Knoten wirklich im Szenenbaum haengt.
-static func spawn(parent: Node, at: Transform3D, scale_factor: float = 1.0) -> MuzzleFlash:
+static func spawn(parent: Node, at: Transform3D, scale_factor: float = 1.0,
+		layers: int = 1) -> MuzzleFlash:
 	var flash := MuzzleFlash.new()
 	flash.intensity = clampf(scale_factor, 0.4, 2.5)
 	flash._spawn_transform = at
+	flash._layers = layers
 	parent.add_child(flash)
 	return flash
 
@@ -27,6 +38,7 @@ static func spawn(parent: Node, at: Transform3D, scale_factor: float = 1.0) -> M
 var intensity: float = 1.0
 
 var _spawn_transform: Transform3D = Transform3D.IDENTITY
+var _layers: int = 1
 
 
 func _ready() -> void:
@@ -41,6 +53,7 @@ func _build_light() -> void:
 	light.light_color = COLOR
 	light.light_energy = 4.5 * intensity
 	light.omni_range = 6.0 * intensity
+	light.layers = _layers
 	add_child(light)
 
 	var tween := create_tween()
@@ -54,6 +67,7 @@ func _build_particles() -> void:
 	particles.one_shot = true
 	particles.explosiveness = 1.0
 	particles.emitting = true
+	particles.layers = _layers
 
 	var process := ParticleProcessMaterial.new()
 	# Nach vorn aus dem Lauf heraus.
