@@ -153,11 +153,13 @@ func _place_trees() -> void:
 		var height := _ground_height(candidate)
 		var pos := Vector3(candidate.x, height, candidate.y)
 
-		# Dieselbe Platzierungsfunktion wie fuer Haeuser: WorldHouse.place()
-		# kennt keinen Unterschied zwischen einem Haus und einer Baumgruppe,
-		# es laedt irgendein Modell aus irgendeinem Pfad und baut Trimesh-
-		# Kollision dafuer.
-		container.add_child(WorldHouse.place("Baumgruppe%02d" % placed, TREE_MODEL, pos, rotation_deg))
+		# add_collision = false: Im Spiel getestet, wer in einen Baum lief,
+		# blieb darin haengen (siehe die lange Begruendung in
+		# WorldHouse.place()) — duenne, sich kreuzende Blattebenen statt
+		# Volumenkoerper. Baeume sind deshalb vorerst rein dekorativ, bis es
+		# eine eigene, einfache Stamm-Kollision gibt.
+		container.add_child(WorldHouse.place("Baumgruppe%02d" % placed, TREE_MODEL, pos,
+			rotation_deg, false))
 		positions.append(candidate)
 		placed += 1
 

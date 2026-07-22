@@ -45,8 +45,22 @@ const CATALOGUE := [
 ## `model_path` ist der VOLLE res://-Pfad, nicht nur ein Dateiname — diese
 ## Funktion kennt HOUSES_DIR nicht mehr, damit sie genauso gut fuer
 ## trees/snow_pine_pack.glb taugt wie fuer ein Haus.
+##
+## ---------------------------------------------------------------------------
+## `add_collision = false` — WARUM TRIMESH NICHT FUER JEDES MODELL PASST
+##
+## Im Spiel getestet: Wer in einen Baum aus dem Kiefernpack lief, blieb
+## darin haengen und konnte sich nicht mehr bewegen. Grund: Nadelbaeume in
+## einem Low-Poly-Pack bestehen aus duennen, sich kreuzenden Blattebenen,
+## keinen Volumenkoerpern. `create_trimesh_shape()` baut daraus offene,
+## papierduenne Kollisionsflaechen ohne Innenraum — steckt der Spieler
+## einmal leicht darin, hat die Physik keine Richtung, in die sie ihn
+## herausschieben koennte (das geht nur bei Formen mit einer Innenseite).
+## Bei Haeusern (geschlossene Waende, Boeden, Daecher) tritt das nicht auf.
+## Deshalb bekommen Baumgruppen HIER KEINE Kollision — rein dekorativ, bis
+## es eine echte Stamm-Kollision gibt (siehe schneekarte.gd).
 static func place(node_name: String, model_path: String, pos: Vector3,
-		rotation_deg: float = 0.0) -> Node3D:
+		rotation_deg: float = 0.0, add_collision: bool = true) -> Node3D:
 	var root := Node3D.new()
 	root.name = node_name
 	root.position = pos
@@ -60,6 +74,9 @@ static func place(node_name: String, model_path: String, pos: Vector3,
 	var visual := scene.instantiate()
 	visual.name = "Mesh"
 	root.add_child(visual)
+
+	if not add_collision:
+		return root
 
 	var body := StaticBody3D.new()
 	body.name = "Kollision"
