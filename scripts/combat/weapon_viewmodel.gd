@@ -79,6 +79,39 @@ var rack_turn_also_tactical: bool = false
 ## behalten ihre bisherige Choreografie), die AR-15 setzt es auf true.
 var hand_skips_handle_on_tactical: bool = false
 
+## Ab wann das Magazin wieder fest im Schacht sitzt (Bruchteil von notify_
+## reload()s progress). Muss zum LETZTEN Bruch in _animate_magazine_swap()
+## passen — hier 0.85, siehe dort. Eine Waffe mit eigener, kuerzerer Version
+## (siehe AKMs MAG_IN_END) setzt hier ihren eigenen Wert.
+##
+## weapon_view.gd braucht das fuer zwei Dinge: Damit die Stuetzhand ihren
+## Rueckweg an den Handschutz rechtzeitig fertig hat (siehe
+## _support_hand_while_reloading()), und um zu wissen, bis wann die Hand noch
+## dem Magazin folgen darf, statt zum Handschutz zurueckzukehren — siehe
+## magazine_held_by_hand.
+var magazine_seated_progress: float = 0.85
+
+## Ob das Magazin GERADE von der Hand gehalten wird: waehrend es aus dem
+## Schacht kommt oder wieder hineingeht. FALSE waehrend der Luecke (es faellt
+## gerade, niemand haelt ein unsichtbares Magazin) und sobald es sitzt.
+## `_animate_magazine_swap()` pflegt dieses Feld selbst.
+##
+## ---------------------------------------------------------------------------
+## WARUM: DAS MAGAZIN SCHWEBTE UNABHAENGIG VON DER HAND
+##
+## Das Magazin bewegt sich hier in WAFFENraum (die eigens gebaute, AK-typische
+## Kippbewegung aus _animate_magazine_swap()), die Stuetzhand aber in
+## KAMERAraum, entlang einer ganz anderen, generischen Bahn (siehe
+## CharacterAnimation.reload_hand_path()). Ohne Verbindung zwischen beidem
+## sieht es aus, als schwebte das Magazin neben der Hand her, statt wirklich
+## GEGRIFFEN zu sein.
+##
+## Die Hand geht deshalb ans Magazin, nicht umgekehrt: weapon_view.gd setzt
+## das Handziel waehrend dieses Feld wahr ist auf die tatsaechliche Position
+## des Magazins, siehe _update_arms(). Die eigens getunte Bewegung des
+## Magazins selbst bleibt dabei unangetastet.
+var magazine_held_by_hand: bool = false
+
 ## Hoehe der AKTIVEN Visierlinie ueber dem Modellursprung.
 ##
 ## weapon_view.gd senkt das Modell beim Zielen um genau diesen Wert ab, damit
@@ -157,6 +190,15 @@ var reload_rotation_degrees := Vector3(24.0, 17.0, -34.0)
 ## als ein Praezisionsgewehr, auch bei gleichem Kaliber.
 var recoil_scale: float = 1.0
 
+## Zusaetzlich zu recoil_scale, aber getrennt: Wie stark die Muendung dabei
+## hochreisst (Drehung) gegenueber wie stark die Waffe nach hinten geschoben
+## wird (Translation). Beide zusammen wuerden mit recoil_scale immer im
+## gleichen Schritt skalieren — diese beiden Werte lassen eine Waffe das
+## VERHAELTNIS von "geht hoch" zu "geht nach hinten" fuer sich selbst
+## einstellen. 1.0 = Grundverhalten von weapon_view.gd, unveraendert.
+var recoil_rise_scale: float = 1.0
+var recoil_push_scale: float = 1.0
+
 ## Wie weit der Verschluss zurueckfaehrt und wie lange er dafuer braucht.
 var action_travel: float = 0.075
 var action_cycle_time: float = 0.055
@@ -203,6 +245,16 @@ var support_point: Node3D
 ## der Handschutz, `camera_support_point` darf fuer die Kamera-Arme auf den
 ## Vordergriff wandern. Ohne Vordergriff zeigen beide auf denselben Knoten.
 var camera_support_point: Node3D
+
+## Wer den Ladehebel zieht, wenn die Waffe leergeschossen nachlaedt.
+##
+## Standardmaessig die STUETZHAND (links) — so liegt es bei einem Ladehebel,
+## der mittig hinten sitzt und sich nur ueber das Gehaeuse erreichen laesst
+## (AR-15). Sitzt der Hebel dagegen seitlich genau dort, wo die SCHIESSHAND
+## ohnehin liegt (AK-Baureihe), zieht diese ihn stattdessen — die Stuetzhand
+## kehrt an den Handschutz zurueck und haelt die Waffe waehrenddessen allein.
+## `weapon_view.gd` liest dieses Feld in _update_arms(); siehe dort.
+var right_hand_racks_charging_handle: bool = false
 
 ## Wo die Hand beim Nachladen hingreift: an den Magazinschacht.
 ##
@@ -431,6 +483,7 @@ func notify_fire_mode(mode: WeaponData.FireMode) -> void:
 ## Alle beweglichen Teile in die Ruhelage.
 func notify_sequence_ended() -> void:
 	_handle_pull = 0.0
+	magazine_held_by_hand = false
 	if magazine != null:
 		magazine.position = _magazine_home
 		magazine.rotation_degrees = Vector3.ZERO
@@ -470,13 +523,16 @@ func _animate_magazine_swap(progress: float) -> void:
 		magazine.visible = true
 		magazine.position = _magazine_home + Vector3(0.0, -magazine_drop * t, 0.02 * t)
 		magazine.rotation_degrees = Vector3(18.0 * t, 0.0, 6.0 * t)
+		magazine_held_by_hand = true
 	elif progress < 0.45:
 		magazine.visible = false
+		magazine_held_by_hand = false
 	else:
 		var t := _ramp(progress, 0.45, 0.85)
 		magazine.visible = true
 		magazine.position = _magazine_home + Vector3(0.0, -magazine_drop * 0.88 * (1.0 - t), 0.0)
 		magazine.rotation_degrees = Vector3(12.0 * (1.0 - t), 0.0, 0.0)
+		magazine_held_by_hand = progress < magazine_seated_progress
 
 
 ## Bewegliche Teile ueber ihre Namen einsammeln und Ruhelagen merken.

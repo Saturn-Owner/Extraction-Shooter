@@ -33,6 +33,8 @@ func _initialize() -> void:
 	await _test_stances()
 	await _test_marking()
 	_test_colours()
+	_test_run_in_place()
+	await _test_ragdoll_rig()
 
 	print("\n=== %d bestanden, %d fehlgeschlagen ===" % [_passed, _failed])
 	quit(1 if _failed > 0 else 0)
@@ -1219,3 +1221,100 @@ func _test_colours() -> void:
 		# %v gilt nur fuer Vektoren, eine Color faellt durch — die Meldung blieb
 		# dadurch unlesbar, obwohl die Pruefung selbst stimmte.
 		"halb verletzt liegt dazwischen (%.2f/%.2f/%.2f)" % [half.r, half.g, half.b])
+
+
+## Laeuft auf der Stelle: Animation bewegt sich, die Figur selbst nicht —
+## fuer den Schiessstand mit seinen "auf der Stelle laufenden" Dummys.
+func _test_run_in_place() -> void:
+	_section("Auf der Stelle laufen")
+
+	var figure := HumanoidTarget.new()
+	figure.run_in_place_speed = 4.4
+	root.add_child(figure)
+	await process_frame
+
+	var start := figure.global_position
+	for i in range(30):
+		figure._process(1.0 / 60.0)
+
+	_check(is_equal_approx(figure._animation.speed, 4.4),
+		"die Beinbewegung laeuft mit run_in_place_speed (%.2f)" % figure._animation.speed)
+	_check(figure.global_position.distance_to(start) < 0.001,
+		"die Figur selbst bleibt an ihrem Platz (%.4f m Abstand)"
+			% figure.global_position.distance_to(start))
+
+	# Tot laeuft niemand mehr auf der Stelle.
+	figure.health.apply_damage(HealthSystem.Part.HEAD, 999.0)
+	figure._process(1.0 / 60.0)
+	_check(is_equal_approx(figure._animation.speed, 0.0),
+		"eine tote Figur bewegt die Beine nicht mehr (%.2f)" % figure._animation.speed)
+
+	figure.queue_free()
+
+
+## RagdollRig: die Figur zerlegt sich beim Sterben wirklich in einzelne,
+## gelenkig verbundene Kaesten (kein einzelner starrer Koerper) — und
+## reset() baut die lebende Figur wieder zusammen.
+func _test_ragdoll_rig() -> void:
+	_section("RagdollRig: echtes Ragdoll aus elf Kaesten und zehn Gelenken")
+
+	var figure := HumanoidTarget.new()
+	var rig := RagdollRig.new()
+	root.add_child(rig)
+	rig.global_position = Vector3(0.0, 3.0, -5.0)
+	rig.attach(figure)
+	rig.remember_spawn()
+	await process_frame
+	await physics_frame
+
+	_check(figure.visible, "die Figur steht zunaechst sichtbar da")
+	_check(figure.hitboxes_of(HealthSystem.Part.CHEST)[0].collision_layer == figure.hit_layer,
+		"...und ist noch treffbar")
+	_check(not figure.health.is_dead, "und lebt noch")
+
+	var spawn_position := rig.global_position
+	var head_before := figure.joint_of(HealthSystem.Part.HEAD).global_position
+
+	figure.health.apply_damage(HealthSystem.Part.HEAD, 999.0)
+	await process_frame
+
+	var piece_count := 0
+	for part: HealthSystem.Part in BlockyCharacter.VERTICAL:
+		piece_count += rig._pieces.get(part, []).size()
+	_check(piece_count == 11,
+		"stirbt sie, entstehen elf einzelne Kaesten (%d)" % piece_count)
+	_check(rig._joints.size() == 10,
+		"...verbunden durch zehn Gelenke (%d)" % rig._joints.size())
+	_check(not figure.visible, "die Originalfigur wird unsichtbar")
+	_check(figure.hitboxes_of(HealthSystem.Part.CHEST)[0].collision_layer == 0,
+		"...und ist selbst nicht mehr treffbar (die Kaesten sind es jetzt)")
+
+	var chest_piece: RigidBody3D = rig._pieces[HealthSystem.Part.CHEST][0]
+	var head_piece: RigidBody3D = rig._pieces[HealthSystem.Part.HEAD][0]
+	var chest_start := chest_piece.global_position
+
+	for i in range(60):
+		await physics_frame
+
+	_check(chest_piece.global_position.y < chest_start.y - 0.05,
+		"die Kaesten fallen wirklich, unter Schwerkraft (%.3f m Abstand in Y)"
+			% (chest_start.y - chest_piece.global_position.y))
+	_check(chest_piece.global_position.distance_to(head_piece.global_position) < 1.0,
+		"...bleiben aber am Gelenk zusammen, statt auseinanderzufliegen (%.3f m Kopf-Brust-Abstand)"
+			% chest_piece.global_position.distance_to(head_piece.global_position))
+
+	rig.reset()
+	_check(rig._pieces.is_empty() and rig._joints.is_empty(),
+		"reset() entfernt alle Kaesten und Gelenke wieder")
+	_check(figure.visible, "die Figur ist wieder sichtbar")
+	_check(figure.hitboxes_of(HealthSystem.Part.CHEST)[0].collision_layer == figure.hit_layer,
+		"...und wieder treffbar")
+	_check(not figure.health.is_dead, "...und lebt wieder")
+	_check(rig.global_position.distance_to(spawn_position) < 0.001,
+		"das Rig steht wieder an derselben Stelle (%.4f m Abstand)"
+			% rig.global_position.distance_to(spawn_position))
+	_check(figure.joint_of(HealthSystem.Part.HEAD).global_position.distance_to(head_before) < 0.01,
+		"...und die Figur wieder in ihrer Ausgangshaltung (%.4f m Abstand am Kopf)"
+			% figure.joint_of(HealthSystem.Part.HEAD).global_position.distance_to(head_before))
+
+	rig.queue_free()

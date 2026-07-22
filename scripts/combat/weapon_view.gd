@@ -132,6 +132,16 @@ extends Node3D
 ## Daempfung — niedrig = schwingt nach.
 @export var recoil_damping: float = 17.0
 
+@export_group("Haende")
+
+## Wie schnell der Uebergang zwischen Pfad und Magazin laeuft (siehe
+## _magazine_hold_blend). Niedrig = traege, das Greifen zieht sich sichtbar
+## hin; hoch = fast augenblicklich. Betrifft nur das Greifen und Loslassen
+## des Magazins — der Ladehebelzug der Griffhand hat sein eigenes, progress-
+## basiertes Ueberblenden (siehe _grip_hand_while_reloading()) und braucht
+## das nicht.
+@export var hand_reach_speed: float = 9.0
+
 var _weapon: Weapon
 
 # Knoten der Animationsebenen
@@ -141,6 +151,28 @@ var _recoil: Node3D
 
 ## Die eigenen Haende an der Waffe. Siehe ViewmodelArms.
 var _arms: ViewmodelArms
+
+## Wie weit die Stuetzhand gerade vom berechneten Pfad zur tatsaechlichen
+## Magazinposition uebergeblendet ist: 0 = ganz am Pfad (Handschutz o.ae.),
+## 1 = ganz am Magazin. Rampt weich zwischen beidem, statt beim Kippen von
+## magazine_held_by_hand (siehe _update_arms()) hart umzuschalten — Greifen
+## und Loslassen sollen wie eine Bewegung aussehen, kein Sprung.
+##
+## ---------------------------------------------------------------------------
+## EIN ZAHLENWERT, KEINE WELTPOSITION
+##
+## Der erste Versuch liess eine gespeicherte WELTPOSITION ihrem Ziel
+## hinterherhinken. Das ging beim Umsehen sichtbar kaputt: Griff und
+## Handschutz drehen sich mit der Kamera sofort mit, die gespeicherte
+## Position tat das nur verzoegert — die Hand blieb beim schnellen Umsehen
+## buchstaeblich in der Luft haengen, statt an der Waffe zu bleiben.
+##
+## Ein reiner Uebergangs-WERT hat dieses Problem nicht: Beide Enden des
+## lerp() in _update_arms() (der Pfad-Zielpunkt UND die Magazinposition)
+## werden jeden Frame frisch aus der aktuellen Kamerahaltung berechnet und
+## drehen sich damit automatisch mit. Nur der Uebergang ZWISCHEN ihnen
+## braucht Zeit, nicht ihre Position selbst.
+var _magazine_hold_blend: float = 0.0
 
 ## Wohin die Hand greift, um ein frisches Magazin zu holen — relativ zur
 ## Kamera. Unten links und dicht am Koerper, also dort, wo die Magazintaschen
@@ -300,6 +332,9 @@ func _reset_animation_state() -> void:
 	_sequence_kind = &""
 	_sequence_progress = 0.0
 	_aim_progress = 0.0
+	# Neue Waffe, neues Magazin (oder gar keins) — ein Uebergang von der
+	# vorigen Waffe her ergibt keinen Sinn.
+	_magazine_hold_blend = 0.0
 
 
 ## Das Modell, das gerade in der Hand liegt. Fuer Tests und Werkzeuge.
@@ -349,7 +384,7 @@ func _process(delta: float) -> void:
 	# Bewegungen dieses Bildes wirklich steht. Stuenden sie weiter oben,
 	# griffen sie um einen Frame versetzt — bei Rueckstoss sichtbar als
 	# Zittern zwischen Hand und Griff.
-	_update_arms()
+	_update_arms(delta)
 
 
 ## Zielen ist eine reine Zeitinterpolation. Die Ergonomie der Waffe bestimmt
@@ -569,7 +604,17 @@ func _update_recoil(delta: float) -> void:
 ## Figuren steht. Sie hier abzuschreiben hiesse, dass beide beim naechsten
 ## Abstimmen auseinanderlaufen — dieselbe Ueberlegung wie bei der
 ## Nachladedrehung, die aus dem Waffenmodell kommt.
-func _update_arms() -> void:
+##
+## ---------------------------------------------------------------------------
+## AUSNAHME: DER LADEHEBEL RECHTS AM GEHAEUSE
+##
+## Das oben gilt fuer Waffen wie die AR-15, deren Ladehebel mittig hinten
+## liegt und von der Stuetzhand ueber das Gehaeuse erreicht wird. Bei einer
+## AK sitzt der Hebel rechts, genau dort, wo ohnehin die Schiesshand liegt —
+## die zieht ihn, waehrend die linke zurueck an den Handschutz greift und die
+## Waffe allein haelt. Welche Rolle gilt, sagt `WeaponViewmodel.right_hand_
+## racks_charging_handle`; siehe _grip_hand_while_reloading().
+func _update_arms(delta: float) -> void:
 	if _arms == null:
 		return
 
@@ -581,6 +626,7 @@ func _update_arms() -> void:
 	if _arms.visible != wanted:
 		_arms.visible = wanted
 	if not wanted:
+		_magazine_hold_blend = 0.0
 		return
 
 	var grip := _viewmodel.grip_point.global_position
@@ -593,7 +639,35 @@ func _update_arms() -> void:
 
 	if _sequence_kind == &"reload" and _sequence_duration > 0.0:
 		var progress := 1.0 - _sequence_time_left / _sequence_duration
-		support = _support_hand_while_reloading(progress, handguard)
+		var grip_hand_racks := _viewmodel.right_hand_racks_charging_handle \
+				and _sequence_from_empty
+		support = _support_hand_while_reloading(progress, handguard, grip_hand_racks)
+		if grip_hand_racks:
+			var handle := handguard
+			if _viewmodel.charging_handle != null:
+				handle = _viewmodel.charging_handle.global_position
+			grip = _grip_hand_while_reloading(progress, grip, handle)
+
+	# Die Hand geht ans Magazin, nicht umgekehrt: Solange es gehalten wird
+	# (siehe magazine_held_by_hand in weapon_viewmodel.gd), ist SEINE
+	# tatsaechliche Position die Wahrheit — die eigens dafuer gebaute,
+	# AK-typische Kippbewegung bleibt unangetastet. Die Hand folgt ihr, statt
+	# das Magazin auf einen generischen Handpfad zu zwingen. Gilt fuer jede
+	# Waffe mit Haenden, nicht nur die mit vertauschten Rollen.
+	#
+	# Uebergeblendet wird ueber _magazine_hold_blend (ein reiner Zahlenwert),
+	# NICHT ueber eine gespeicherte Weltposition: "support" und die
+	# Magazinposition werden hier jeden Frame frisch aus der aktuellen
+	# Kamerahaltung berechnet, drehen sich also automatisch mit ihr mit —
+	# nur der Uebergang zwischen beiden braucht Zeit. Eine gespeicherte
+	# Position wuerde beim schnellen Umsehen dagegen sichtbar zurueckbleiben,
+	# weil Griff und Handschutz sich sofort mitdrehen, sie selbst aber nur
+	# verzoegert hinterherkaeme.
+	var wants_magazine := _viewmodel.magazine != null and _viewmodel.magazine_held_by_hand
+	var blend_weight := clampf(hand_reach_speed * delta, 0.0, 1.0)
+	_magazine_hold_blend = lerpf(_magazine_hold_blend, 1.0 if wants_magazine else 0.0, blend_weight)
+	if _viewmodel.magazine != null and _magazine_hold_blend > 0.001:
+		support = support.lerp(_viewmodel.magazine.global_position, _magazine_hold_blend)
 
 	_arms.aim_at(grip, support)
 
@@ -603,7 +677,13 @@ func _update_arms() -> void:
 ## Der Ablauf kommt aus `CharacterAnimation.reload_hand_path()` — dieselbe
 ## Choreografie, die auch die Figuren im Level laufen. Hier werden nur die
 ## Punkte eingesetzt, die es im Kameraraum gibt.
-func _support_hand_while_reloading(progress: float, handguard: Vector3) -> Vector3:
+##
+## `skip_handle`: Bei Waffen, deren rechte Hand den Ladehebel zieht (siehe
+## _update_arms()), hat die linke damit nichts zu tun — sie kehrt nach dem
+## Einsetzen an den Handschutz zurueck und bleibt dort, statt weiter zum
+## Hebel zu greifen.
+func _support_hand_while_reloading(progress: float, handguard: Vector3,
+		skip_handle: bool = false) -> Vector3:
 	if _viewmodel.magwell_point == null:
 		return handguard
 
@@ -618,8 +698,12 @@ func _support_hand_while_reloading(progress: float, handguard: Vector3) -> Vecto
 
 	# Beim blossen Durchladen wird kein Magazin gewechselt: Die Hand bleibt am
 	# Schaft, greift rechtzeitig zum Hebel und faehrt mit ihm mit — dieselbe
-	# Synchronisation wie am Ende der vollen Nachladung.
+	# Synchronisation wie am Ende der vollen Nachladung. Zieht stattdessen die
+	# rechte (Griff-)Hand den Hebel (skip_handle), hat die linke damit nichts
+	# zu tun und bleibt am Schaft.
 	if _sequence_chamber_only:
+		if skip_handle:
+			return handguard
 		var pull_start: float = _viewmodel.handle_pull_start_progress
 		var reach_start := maxf(0.0, pull_start - 0.15)
 		if progress < reach_start:
@@ -644,10 +728,58 @@ func _support_hand_while_reloading(progress: float, handguard: Vector3) -> Vecto
 		return CharacterAnimation.reload_hand_path(progress, handguard, magwell,
 			pulled, pouch, handguard)
 
+	if skip_handle:
+		# WICHTIG: Die linke muss FERTIG sein (schon wieder am Handschutz),
+		# BEVOR die rechte ueberhaupt zum Hebel greift — _grip_hand_while_
+		# reloading() startet ihre Bewegung erst bei rack_turn_start_progress,
+		# und genau dort darf sich die linke nicht mehr bewegen. Die Marken in
+		# CharacterAnimation (REACH..CHARGE, siehe reload_hand_path) sind aber
+		# auf ein Fenster von 0 bis 1 abgestimmt, das bei WAFFENENDE steht,
+		# nicht bei rack_turn_start_progress. Deshalb wird der ganze Wechsel
+		# hier zeitlich gestaucht: "handguard" statt "handle" als Fernziel
+		# laesst die letzten beiden Abschnitte der Choreografie (statt zum
+		# Hebel zu greifen) direkt zum Handschutz zurueckfinden.
+		#
+		# Das Fenster endet bei magazine_seated_progress, nicht bei
+		# rack_turn_start_progress selbst: Genau dort haengt gleichzeitig
+		# magazine_held_by_hand (siehe _animate_magazine_swap()) — sobald das
+		# Magazin sitzt, laesst die Hand es los und ist damit schon am
+		# Handschutz. Dazwischen liegt ohnehin die eingebaute Pause bis
+		# rack_turn_start_progress (siehe Kommentar dort) — die liefert den
+		# Puffer, kein zusaetzlicher Faktor noetig.
+		var window := maxf(0.0001, _viewmodel.magazine_seated_progress)
+		var local_progress := minf(1.0, progress / window)
+		return CharacterAnimation.reload_hand_path(local_progress, handguard,
+			magwell, pulled, pouch, handguard)
+
 	# Der letzte Parameter synchronisiert die Hand mit dem Hebel DIESER Waffe:
 	# Sie greift ihn, wenn er losfaehrt, und bleibt dran, bis er zurueck ist.
 	return CharacterAnimation.reload_hand_path(progress, handguard, magwell,
 		pulled, pouch, handle, _viewmodel.handle_pull_start_progress)
+
+
+## Wo die rechte (Griff-)Hand waehrend einer leergeschossenen Nachladung
+## zeigt — nur wenn `WeaponViewmodel.right_hand_racks_charging_handle` gilt.
+##
+## Drei Abschnitte, an denselben Zeitmarken wie die Kameradrehung
+## (rack_turn_start_progress, handle_pull_start_progress — siehe dort):
+## Griff halten, waehrend die Drehung die Seite zeigt zum Hebel greifen,
+## kurz halten und ziehen, dann den GROESSEREN Teil des restlichen Fensters
+## fuer den Rueckweg — genau wie verlangt: Zeit, die Hand zurueck an den
+## Griff zu bringen, statt sie zurueckschnappen zu lassen.
+func _grip_hand_while_reloading(progress: float, grip: Vector3, handle: Vector3) -> Vector3:
+	var reach_start := _viewmodel.rack_turn_start_progress
+	var pull_start := _viewmodel.handle_pull_start_progress
+	if progress < reach_start:
+		return grip
+
+	if progress < pull_start:
+		return grip.lerp(handle, smoothstep(reach_start, pull_start, progress))
+
+	var release := lerpf(pull_start, 1.0, 0.4)
+	if progress < release:
+		return handle
+	return handle.lerp(grip, smoothstep(release, 1.0, progress))
 
 
 ## Zeitleiste fuer Nachladen und Ladehemmung.
@@ -702,9 +834,15 @@ func _on_fired(_ammo: AmmoData, rounds_left: int) -> void:
 	if _viewmodel != null:
 		strength *= _viewmodel.recoil_scale
 
-	_recoil_velocity.z += recoil_kick_back * strength * 26.0
-	_recoil_velocity.y += recoil_kick_back * strength * 5.0
-	_recoil_angular_velocity += recoil_kick_up * strength * 26.0
+	# Wie stark der Rueckstoss nach hinten schiebt gegenueber wie stark er die
+	# Muendung hochreisst — je Waffe eigens verschiebbar, siehe
+	# recoil_rise_scale/recoil_push_scale in weapon_viewmodel.gd.
+	var rise_scale := _viewmodel.recoil_rise_scale if _viewmodel != null else 1.0
+	var push_scale := _viewmodel.recoil_push_scale if _viewmodel != null else 1.0
+
+	_recoil_velocity.z += recoil_kick_back * strength * push_scale * 26.0
+	_recoil_velocity.y += recoil_kick_back * strength * push_scale * 5.0
+	_recoil_angular_velocity += recoil_kick_up * strength * rise_scale * 26.0
 
 	if _viewmodel != null:
 		_viewmodel.notify_shot()

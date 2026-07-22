@@ -1,0 +1,79 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1_player"]
+[ext_resource type="Script" path="res://scripts/levels/schiessstand.gd" id="2_schiessstand"]
+
+[sub_resource type="ProceduralSkyMaterial" id="Sky_winter"]
+sky_top_color = Color(0.52, 0.58, 0.66, 1)
+sky_horizon_color = Color(0.78, 0.81, 0.84, 1)
+ground_bottom_color = Color(0.66, 0.7, 0.75, 1)
+ground_horizon_color = Color(0.78, 0.81, 0.84, 1)
+sun_angle_max = 12.0
+sun_curve = 0.35
+
+[sub_resource type="Sky" id="Sky_main"]
+sky_material = SubResource("Sky_winter")
+
+[sub_resource type="Environment" id="Env_winter"]
+background_mode = 2
+sky = SubResource("Sky_main")
+ambient_light_source = 3
+ambient_light_color = Color(0.75, 0.79, 0.85, 1)
+ambient_light_sky_contribution = 0.85
+ambient_light_energy = 1.1
+fog_enabled = true
+fog_light_color = Color(0.8, 0.83, 0.87, 1)
+fog_density = 0.003
+fog_sky_affect = 0.3
+
+[sub_resource type="StandardMaterial3D" id="Mat_snow"]
+albedo_color = Color(0.86, 0.88, 0.91, 1)
+roughness = 0.95
+
+[sub_resource type="PlaneMesh" id="Mesh_ground"]
+material = SubResource("Mat_snow")
+size = Vector2(120, 120)
+
+[sub_resource type="BoxShape3D" id="Shape_ground"]
+size = Vector3(120, 1, 120)
+
+[node name="Schiessstand" type="Node3D"]
+script = ExtResource("2_schiessstand")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_winter")
+
+[node name="Sonne" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86, -0.28, 0.42, 0, 0.83, 0.55, -0.5, -0.48, 0.72, 0, 20, 0)
+light_color = Color(1, 0.97, 0.92, 1)
+light_energy = 0.9
+shadow_enabled = true
+
+[node name="Boden" type="StaticBody3D" parent="."]
+collision_layer = 1
+collision_mask = 0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Boden"]
+mesh = SubResource("Mesh_ground")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Boden"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("Shape_ground")
+
+[node name="Waende" type="Node3D" parent="."]
+
+[node name="Ziele" type="Node3D" parent="."]
+
+[node name="Player" parent="." instance=ExtResource("1_player")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="DebugPanel" type="PanelContainer" parent="HUD"]
+offset_left = 16.0
+offset_top = 16.0
+offset_right = 360.0
+offset_bottom = 130.0
+
+[node name="DebugLabel" type="Label" parent="HUD/DebugPanel"]
+text = "..."
