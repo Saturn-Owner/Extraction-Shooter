@@ -54,3 +54,31 @@ Weltkoordinaten, weil die Landflächen bis zu 330 m lang sind.
 
 Kam aus einem Zip, das Lucas selbst erstellt hat (eine three.js-Seite mit dem
 Container-Entwurf oben); der Schneesatz stammt ursprünglich von ambientCG.
+
+## houses/ — Sketchfab-Häuser für den Karten-Generator
+
+Alle sechs **CC BY 4.0**, per Sketchfab-API geprüft (wie beim AR-15 in
+`assets/models/weapons/QUELLEN.md`). Rohdateien lagen zunächst unter
+`C:\Users\lappe\Desktop\3d models red snow\`, aufbereitet nach demselben
+Muster wie `tools/convert_ar15_sketchfab.gd` (Texturen verkleinert, vermessen).
+
+| Datei | Titel | Autor | Quelle |
+| --- | --- | --- | --- |
+| `house_home.glb` | House Home - 53MB | Mehdi Shahsavan (ahmagh2e) | <https://sketchfab.com/3d-models/house-home-53mb-4aa178e6c8b14dcf855de2fdee075f17> |
+| `windmill.glb` | Windmill | Yury Misiyuk (Tim0) | <https://sketchfab.com/3d-models/windmill-0730705327e045bd8cb98a888bd0f954> |
+| `old_wooden_watchtower_house.glb` | Old Wooden Watchtower (House 3) | Blenderust (narighillya) | <https://sketchfab.com/3d-models/old-wooden-watchtower-house-3-49b77f82b0944d5188c04c3fc205a499> |
+| `psx_abandoned_house.glb` | PSX Abandoned House | Arimantos | <https://sketchfab.com/3d-models/psx-abandoned-house-f5d781d374f74eb099be2add7e7c4925> |
+| `old_house.glb` | Old house | Yury Misiyuk (Tim0) | <https://sketchfab.com/3d-models/old-house-19a1121bab5a4aaaad4d973abe5b61cb> |
+| `old_wooden_barn_house.glb` | Old Wooden Barn (House 4) | Blenderust (narighillya) | <https://sketchfab.com/3d-models/old-wooden-barn-house-4-3366ee69c2dd4908a99f386e07faa1d6> |
+| `trees/snow_pine_pack.glb` | Snow Pine Tree and Bush Pack LOWPOLY | EFX (evan4129) | <https://sketchfab.com/3d-models/snow-pine-tree-and-bush-pack-lowpoly-7afc4ca23dd84adea90dc0ba8506c500> |
+
+**Bewusst NICHT dabei**: "Lake Hawea House" (Azimuth Design, CC BY 4.0,
+<https://sketchfab.com/3d-models/lake-hawea-house-1188937400694f1a899741fd49b8dda3>).
+Auch nach Verkleinern der Texturen 80 MB gross (652.000 Dreiecke, ein
+Photogrammetrie-Scan) — reisst die 50-MB-Testgrenze aus `verify_frachthafen.gd`
+(schuetzt vor GitHubs harter 100-MB-Push-Grenze). Ohne verlaessliches Werkzeug
+zur Netzvereinfachung bleibt sie aussen vor.
+
+**PFLICHT FÜR DIE CREDITS**: Sobald es einen Abspann gibt, gehört für jede
+Zeile oben eine Namensnennung hinein (Titel, Autor, CC BY 4.0). Bis dahin
+erfüllt diese Tabelle die Namensnennung im Quell-Repository.
