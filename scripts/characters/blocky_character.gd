@@ -40,7 +40,7 @@ class_name BlockyCharacter
 extends Node3D
 
 signal part_hit(part: HealthSystem.Part, result: Ballistics.HitResult)
-signal died()
+signal died(killing_part: HealthSystem.Part, at: Vector3)
 
 ## Gesamthöhe in Metern. Die Kollisionskapsel des Spielers ist 1,8 m hoch.
 const HEIGHT := 1.8
@@ -120,6 +120,13 @@ var plate_durability: float = 0.0
 var _meshes: Dictionary = {}
 var _hitboxes: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
+
+## Wo der letzte Treffer sass — die Weltposition aus take_hit_on_part(). Fuer
+## RagdollRig, damit eine Figur sich beim Sterben genau dorthin greift statt
+## an eine geschaetzte Stelle. War der Treffer, der gerade toetet, ist das
+## exakt die Wundstelle: apply_damage() loest died() synchron innerhalb
+## desselben Aufrufs aus, bevor sich dieser Wert wieder aendern kann.
+var _last_hit_point: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -495,7 +502,9 @@ func hitboxes_of(part: HealthSystem.Part) -> Array:
 ## gibt, an der über Schaden entschieden wird — dieselbe Stelle, die im
 ## Mehrspielerbetrieb auf den Server wandert.
 func take_hit_on_part(part: HealthSystem.Part, ammo: AmmoData, distance: float,
-		_point: Vector3, _direction: Vector3) -> Ballistics.HitResult:
+		point: Vector3, _direction: Vector3) -> Ballistics.HitResult:
+	_last_hit_point = point
+
 	# Eine Platte deckt nur ab, was sie abdeckt. Ein Kopfschuss geht daran
 	# vorbei, auch wenn die Weste noch heil ist — genau darum ist Rüstung in
 	# diesem Spiel kein Stufensystem, sondern Fläche.
@@ -556,11 +565,11 @@ static func part_name(part: HealthSystem.Part) -> String:
 	}.get(part, "Part")
 
 
-func _on_died(_killing_part: HealthSystem.Part) -> void:
+func _on_died(killing_part: HealthSystem.Part) -> void:
 	# Die Trefferzonen bleiben stehen: Eine Leiche soll man weiter treffen
 	# können, sonst fliegen Schüsse durch sie hindurch in die Wand dahinter.
 	refresh_colors()
-	died.emit()
+	died.emit(killing_part, _last_hit_point)
 
 
 func _make_material(colour: Color) -> StandardMaterial3D:
