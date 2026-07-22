@@ -104,15 +104,18 @@ func _configure() -> void:
 	sight_height = fit_point(Vector3(0.0, RAIL_TOP_MODEL, 0.0)).y
 	muzzle_z = MUZZLE_Z
 	# Leichte, gut ausbalancierte Waffe: liegt ruhig und kickt wenig.
-	recoil_scale = 0.9
+	# Nach dem Spielen gezaehmt (wie die AKM davor): Der sichtbare Kick hier
+	# und der echte Rueckstoss in rifle_ar15.tres wurden ZUSAMMEN gesenkt —
+	# beide getrennt zu aendern laesst Bild und Wirkung auseinanderlaufen.
+	recoil_scale = 0.6
 	action_travel = 0.075
 	action_cycle_time = 0.055
 	# Wie bei der AKM: Beim Zielen rutscht der Schaft hinter die Nahgrenze der
 	# Kamera, sonst füllt er das halbe Bild.
 	ads_distance = -0.06
-	# Bildausschnitt im Hüftanschlag — Modell ist länger als das alte,
-	# deshalb etwas weiter zurück.
-	hip_position = Vector3(0.105, -0.115, 0.02)
+	# Bildausschnitt im Hüftanschlag. Nach dem Spielen nachgestellt: Die Waffe
+	# sass zu dicht am Körper, deshalb ein Stück nach vorn (z 0.02 -> -0.06).
+	hip_position = Vector3(0.105, -0.115, -0.06)
 
 
 func _build_parts() -> void:
