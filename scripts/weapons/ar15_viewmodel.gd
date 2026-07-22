@@ -132,6 +132,9 @@ func _configure() -> void:
 	# in der angewinkelten Haltung — sonst sieht nur die leere Nachladung
 	# "gescheit" aus und die haeufigere wirkt abgebrochen.
 	rack_turn_also_tactical = true
+	# ... und die Hand greift dabei NICHT mehr zum Ladehebel: Die Kammer ist
+	# geladen, es gibt nichts zu ziehen — der Griff sah aus wie ein Zug.
+	hand_skips_handle_on_tactical = true
 	# Die Anwinkelung rahmt die GANZE Nachladung, nicht nur den Hebelzug:
 	# erst hochwinkeln, DANN Magazin raus, neues rein, zum Schluss der Zug.
 	# Deshalb 0.0 — die Feder in weapon_view zieht die Pose gleich zu Beginn

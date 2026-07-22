@@ -73,6 +73,12 @@ var rack_turn_offset_override: Variant = null
 ## wechseln, absenken), setzt das auf true.
 var rack_turn_also_tactical: bool = false
 
+## Bei taktischer Nachladung geht die Stützhand nach dem Einsetzen direkt
+## zurück an den Schaft, statt noch zum Ladehebel zu greifen — die Kammer
+## ist geladen, es gibt nichts zu ziehen. Vorgabe aus (die übrigen Waffen
+## behalten ihre bisherige Choreografie), die AR-15 setzt es auf true.
+var hand_skips_handle_on_tactical: bool = false
+
 ## Hoehe der AKTIVEN Visierlinie ueber dem Modellursprung.
 ##
 ## weapon_view.gd senkt das Modell beim Zielen um genau diesen Wert ab, damit

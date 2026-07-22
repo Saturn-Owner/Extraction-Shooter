@@ -633,6 +633,13 @@ func _support_hand_while_reloading(progress: float, handguard: Vector3) -> Vecto
 	# Wirklichkeit, zur Tasche an der Brust.
 	var pouch: Vector3 = global_transform * POUCH_IN_VIEW
 
+	# Taktische Nachladung ohne Hebelzug: Der Hebel-Abschnitt der Choreografie
+	# wird zum Schaft umgeleitet — die Hand setzt das Magazin und geht direkt
+	# zurueck, statt grundlos zum Ladehebel zu greifen.
+	if not _sequence_from_empty and _viewmodel.hand_skips_handle_on_tactical:
+		return CharacterAnimation.reload_hand_path(progress, handguard, magwell,
+			pulled, pouch, handguard)
+
 	# Der letzte Parameter synchronisiert die Hand mit dem Hebel DIESER Waffe:
 	# Sie greift ihn, wenn er losfaehrt, und bleibt dran, bis er zurueck ist.
 	return CharacterAnimation.reload_hand_path(progress, handguard, magwell,
