@@ -64,6 +64,15 @@ static func get_gunshot(weapon: WeaponData) -> AudioStream:
 const SUPPRESSED_BELOW := 0.6
 
 
+## Ob an dieser Waffe gerade ein Schalldämpfer hängt.
+##
+## Einzige Quelle für diese Frage — MuzzleBlast (Qualm/Blendung) und der
+## sichtbare Mündungsblitz fragen beide hier nach, statt die Grenze selbst
+## zu kennen.
+static func is_suppressed(weapon: WeaponData) -> bool:
+	return weapon != null and weapon.loudness_multiplier < SUPPRESSED_BELOW
+
+
 ## Sucht eine echte Audiodatei für diese Waffe.
 ##
 ## Die gedämpfte Aufnahme steht vorn: Ein Schalldämpfer verändert den Klang so

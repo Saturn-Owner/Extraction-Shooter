@@ -270,7 +270,8 @@ func _fire() -> void:
 	viewmodel.notify_shot()
 
 	var muzzle := viewmodel.muzzle_point
-	if muzzle != null:
+	# Kein grelles Mündungsfeuer bei gedämpften Waffen — siehe Weapon.gd.
+	if muzzle != null and not WeaponAudio.is_suppressed(data):
 		var power := WeaponAudio.get_power_for_weapon(data)
 		MuzzleFlash.spawn(_spawn_parent(), muzzle.global_transform, 0.6 + power)
 
@@ -300,7 +301,8 @@ func drive_shot() -> void:
 		return
 	viewmodel.notify_shot()
 	var muzzle := viewmodel.muzzle_point
-	if muzzle != null:
+	# Kein grelles Mündungsfeuer bei gedämpften Waffen — siehe Weapon.gd.
+	if muzzle != null and not WeaponAudio.is_suppressed(data):
 		var power := WeaponAudio.get_power_for_weapon(data)
 		MuzzleFlash.spawn(_spawn_parent(), muzzle.global_transform, 0.6 + power)
 

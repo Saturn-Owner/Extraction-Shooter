@@ -223,11 +223,11 @@ func add(weapon_data: WeaponData) -> void:
 	smoke = maxf(smoke, smoke_intensity())
 
 
-## Ob an dieser Waffe ein Schalldämpfer hängt.
+## Ob an dieser Waffe ein Schalldämpfer hängt. Weiterhin hier aufrufbar,
+## damit bestehende Stellen nicht umgeschrieben werden müssen — die
+## eigentliche Antwort kommt aus WeaponAudio, der einzigen Quelle dafür.
 static func is_suppressed(weapon_data: WeaponData) -> bool:
-	if weapon_data == null:
-		return false
-	return weapon_data.loudness_multiplier < WeaponAudio.SUPPRESSED_BELOW
+	return WeaponAudio.is_suppressed(weapon_data)
 
 
 ## Wieviel Belastung ein Schuss dieser Waffe hinzufügt.
