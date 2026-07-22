@@ -67,6 +67,12 @@ var handle_pull_start_progress: float = 0.93
 var rack_turn_rotation_override: Variant = null
 var rack_turn_offset_override: Variant = null
 
+## Ob die Nachladepose auch bei TAKTISCHER Nachladung gilt (noch Munition im
+## Magazin, kein Hebelzug am Ende). Vorgabe nein — die AK dreht nur zum
+## Hebelzug. Eine Waffe, die ihre ganze Nachladung rahmt (AR-15: anwinkeln,
+## wechseln, absenken), setzt das auf true.
+var rack_turn_also_tactical: bool = false
+
 ## Hoehe der AKTIVEN Visierlinie ueber dem Modellursprung.
 ##
 ## weapon_view.gd senkt das Modell beim Zielen um genau diesen Wert ab, damit

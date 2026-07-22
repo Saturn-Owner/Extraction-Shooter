@@ -1187,16 +1187,21 @@ func _test_handle_rack_kicks_pose() -> void:
 		"nach dem Nachladen steht sie wieder in der Hueftlage (%.4f m, %.3f Grad Abstand)"
 			% [pose.position.distance_to(hip), rot_distance])
 
-	# Taktische Nachladung (noch Munition im Magazin): Kein Ladehebelzug,
-	# also auch keine Drehung — die Waffe bleibt in der Hueftlage, auch weit
-	# ueber RACK_TURN_START_PROGRESS hinaus.
+	# Taktische Nachladung (noch Munition im Magazin): Ob sich die Waffe
+	# dabei bewegt, sagt die Waffe selbst (rack_turn_also_tactical) — die AK
+	# bleibt liegen, die AR-15 rahmt jede Nachladung mit ihrer Anwinkelung.
 	view._on_reload_started(RELOAD_DURATION, false, false)
 	for i in int(RELOAD_DURATION / DT * 0.95):
 		view._update_sequence(DT)
 		view._update_pose(DT)
-	_check(pose.position.distance_to(hip) < 0.001,
-		"bei taktischer Nachladung bleibt sie in der Hueftlage (%.4f m Abstand)"
-			% pose.position.distance_to(hip))
+	if viewmodel.rack_turn_also_tactical:
+		_check(pose.position.distance_to(hip) > 0.001,
+			"taktische Nachladung laeuft in der eigenen Pose (%.4f m Abstand)"
+				% pose.position.distance_to(hip))
+	else:
+		_check(pose.position.distance_to(hip) < 0.001,
+			"bei taktischer Nachladung bleibt sie in der Hueftlage (%.4f m Abstand)"
+				% pose.position.distance_to(hip))
 
 	player.free()
 

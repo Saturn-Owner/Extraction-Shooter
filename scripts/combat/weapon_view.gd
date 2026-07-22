@@ -424,7 +424,11 @@ func _update_pose(delta: float) -> void:
 	# darueber hinaus — das wirkt glatt und maschinell. Eine schwach gedaempfte
 	# Feder schiesst leicht ueber die Zieldrehung hinaus und federt zurueck,
 	# das liest sich als Ruck einer echten Hand.
-	var wants_rack := _sequence_kind == &"reload" and _sequence_from_empty \
+	# Waffen mit rack_turn_also_tactical rahmen JEDE Nachladung mit ihrer
+	# Pose, nicht nur die leere — die AR-15 winkelt z. B. immer an, auch
+	# wenn am Ende kein Hebelzug kommt.
+	var wants_rack := _sequence_kind == &"reload" \
+			and (_sequence_from_empty or _viewmodel.rack_turn_also_tactical) \
 			and _sequence_progress > _viewmodel.rack_turn_start_progress
 	var rack_target := 1.0 if wants_rack else 0.0
 	var rack_step := minf(delta, 1.0 / 30.0)
@@ -609,24 +613,30 @@ func _support_hand_while_reloading(progress: float, handguard: Vector3) -> Vecto
 		handle = _viewmodel.charging_handle.global_position
 
 	# Beim blossen Durchladen wird kein Magazin gewechselt: Die Hand bleibt am
-	# Schaft und zieht nur zum Schluss den Ladehebel.
+	# Schaft, greift rechtzeitig zum Hebel und faehrt mit ihm mit — dieselbe
+	# Synchronisation wie am Ende der vollen Nachladung.
 	if _sequence_chamber_only:
-		if progress < CharacterAnimation.RELOAD_SEAT:
+		var pull_start: float = _viewmodel.handle_pull_start_progress
+		var reach_start := maxf(0.0, pull_start - 0.15)
+		if progress < reach_start:
 			return handguard
-		if progress < CharacterAnimation.RELOAD_CHARGE:
+		if progress < pull_start:
 			return handguard.lerp(handle,
-				smoothstep(CharacterAnimation.RELOAD_SEAT,
-					CharacterAnimation.RELOAD_CHARGE, progress))
+				smoothstep(reach_start, pull_start, progress))
+		if progress < CharacterAnimation.RELOAD_RELEASE:
+			return handle
 		return handle.lerp(handguard,
-			smoothstep(CharacterAnimation.RELOAD_CHARGE, 1.0, progress))
+			smoothstep(CharacterAnimation.RELOAD_RELEASE, 1.0, progress))
 
 	# Wo das frische Magazin herkommt. Im Kameraraum gibt es keine Weste, also
 	# ein Punkt unten links ausserhalb des Bildes — dorthin greift man auch in
 	# Wirklichkeit, zur Tasche an der Brust.
 	var pouch: Vector3 = global_transform * POUCH_IN_VIEW
 
+	# Der letzte Parameter synchronisiert die Hand mit dem Hebel DIESER Waffe:
+	# Sie greift ihn, wenn er losfaehrt, und bleibt dran, bis er zurueck ist.
 	return CharacterAnimation.reload_hand_path(progress, handguard, magwell,
-		pulled, pouch, handle)
+		pulled, pouch, handle, _viewmodel.handle_pull_start_progress)
 
 
 ## Zeitleiste fuer Nachladen und Ladehemmung.

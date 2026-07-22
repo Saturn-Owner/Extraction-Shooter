@@ -128,6 +128,10 @@ func _configure() -> void:
 	# nach unten, genau falsch herum.
 	rack_turn_rotation_override = Vector3(14.0, -3.0, 12.0)
 	rack_turn_offset_override = Vector3(0.0, -0.012, 0.03)
+	# Auch die taktische Nachladung (Magazin halb voll, kein Hebelzug) laeuft
+	# in der angewinkelten Haltung — sonst sieht nur die leere Nachladung
+	# "gescheit" aus und die haeufigere wirkt abgebrochen.
+	rack_turn_also_tactical = true
 	# Die Anwinkelung rahmt die GANZE Nachladung, nicht nur den Hebelzug:
 	# erst hochwinkeln, DANN Magazin raus, neues rein, zum Schluss der Zug.
 	# Deshalb 0.0 — die Feder in weapon_view zieht die Pose gleich zu Beginn
