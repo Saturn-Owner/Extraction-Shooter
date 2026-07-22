@@ -186,6 +186,24 @@ var muzzle_point: Node3D
 var grip_point: Node3D
 var support_point: Node3D
 
+## Wo die STUETZHAND IM KAMERARAUM anfassen soll — fuer den Spieler selbst.
+##
+## ---------------------------------------------------------------------------
+## WARUM NICHT EINFACH support_point
+##
+## Ein Vordergriff verschiebt, wo die Hand ergonomisch hingehoert. Am
+## Kameramodell (ViewmodelArms, deutlich kuerzere Arme, siehe dort) passt das
+## ohne Weiteres. Am von aussen sichtbaren Koerper (CharacterAnimation) reicht
+## der Arm der Blockfigur dagegen nicht mehr hin — sie steht mit dem blossen
+## Handschutz (support_point) schon fast gestreckt an ihrer Reichweitengrenze,
+## und der gemessene Griffpunkt des Vordergriffs liegt gut 13 cm weiter vorn,
+## als sie ueberhaupt fassen kann.
+##
+## Deshalb zwei Punkte: `support_point` bleibt fuer den Koerper unangetastet
+## der Handschutz, `camera_support_point` darf fuer die Kamera-Arme auf den
+## Vordergriff wandern. Ohne Vordergriff zeigen beide auf denselben Knoten.
+var camera_support_point: Node3D
+
 ## Wo die Hand beim Nachladen hingreift: an den Magazinschacht.
 ##
 ## NICHT AN DAS MAGAZIN SELBST. Das faellt beim Wechsel 34 cm nach unten, und
@@ -306,6 +324,19 @@ func _adopt_attachment_geometry(mount: WeaponMount, part: AttachmentViewmodel) -
 		# an der Spitze des Daempfers erscheint und nicht mittendrin.
 		if muzzle_point != null:
 			muzzle_point.position.z = muzzle_z
+
+	if mount.slot == AttachmentData.Slot.FOREGRIP and part.grip_point != null:
+		# Nur die KAMERA-Stuetzhand wandert auf den Vordergriff — support_point
+		# selbst bleibt der Handschutz, siehe die Begruendung bei
+		# camera_support_point oben. Ein eigener Knoten statt Wiederverwendung
+		# von SupportPoint, weil beide gleichzeitig gebraucht werden: der
+		# Koerper haelt weiter den Handschutz, waehrend die Kamera-Arme schon
+		# auf den Griff zielen.
+		var camera_point := Node3D.new()
+		camera_point.name = "CameraSupportPoint"
+		camera_point.position = position_in_model(part.grip_point)
+		add_child(camera_point)
+		camera_support_point = camera_point
 
 
 ## Wo dieser Knoten im Koordinatensystem des Modells liegt.
@@ -458,6 +489,9 @@ func _collect_parts() -> void:
 	muzzle_point = get_node_or_null("MuzzlePoint") as Node3D
 	grip_point = get_node_or_null("GripPoint") as Node3D
 	support_point = get_node_or_null("SupportPoint") as Node3D
+	# Vorgabe: dieselbe Stelle wie der Koerper. _adopt_attachment_geometry()
+	# haengt bei angebautem Vordergriff einen eigenen Knoten hier ein.
+	camera_support_point = support_point
 	magwell_point = get_node_or_null("MagwellPoint") as Node3D
 
 	if action != null:

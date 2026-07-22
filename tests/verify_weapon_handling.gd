@@ -472,6 +472,33 @@ func _test_viewmodel_arms() -> void:
 	_check(reach < to_fore + 0.20,
 		"und nicht unnoetig weit darueber (%.3f gegen %.3f m)" % [reach, to_fore])
 
+	# --- MIT VORDERGRIFF WANDERT NUR DIE KAMERA-STUETZHAND ---
+	#
+	# camera_support_point in weapon_viewmodel.gd wandert bei angebautem
+	# Vordergriff auf dessen gemessenen Griffpunkt — das darf hier aber nur
+	# fuer die KURZEN Kamera-Arme gelten. Der Koerper (verify_character.gd)
+	# reicht dorthin nicht und bleibt bewusst beim Handschutz.
+	var with_grip := data.create_viewmodel()
+	with_grip.weapon_data = data
+	with_grip.attachments = {int(AttachmentData.Slot.FOREGRIP): &"ar15_foregrip_vertical"}
+	root.add_child(with_grip)
+	await process_frame
+	with_grip.position = with_grip.hip_position
+	with_grip.rotation_degrees = with_grip.hip_rotation_degrees
+
+	_check(with_grip.mounted.has(int(AttachmentData.Slot.FOREGRIP)),
+		"der Vordergriff ist fuer diesen Test angebaut")
+	_check(with_grip.camera_support_point != with_grip.support_point,
+		"die Kamera-Stuetzhand bekommt einen eigenen Punkt")
+
+	var to_foregrip := ViewmodelArms.LEFT_SHOULDER.distance_to(
+		with_grip.camera_support_point.position + with_grip.position)
+	_check(reach > to_foregrip,
+		"die Kamera-Stuetzhand erreicht auch den Vordergriff (%.3f von %.3f m)"
+			% [to_foregrip, reach])
+
+	with_grip.queue_free()
+
 	# Duenner als ein Weltglied — das war der eigentliche Punkt an
 	# "Kameragroesse".
 	_check(ViewmodelArms.UPPER_THICK < 0.10,

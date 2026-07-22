@@ -29,6 +29,11 @@ var aim_point: Node3D
 ## Wert gepflegt zu werden, der irgendwann nicht mehr zur Geometrie passt.
 var muzzle_point: Node3D
 
+## Wo die Stützhand anfassen soll, bei Vordergriffen.
+## Bleibt null bei allem, was keinen eigenen Handgriff bietet — die Figur
+## greift dann weiter an den Standardpunkt der Waffe (support_point).
+var grip_point: Node3D
+
 var _mats: Dictionary
 
 ## Verhindert doppeltes Bauen, wenn build() von Hand aufgerufen wird und der
@@ -51,6 +56,7 @@ func build() -> void:
 	_build_parts()
 	aim_point = get_node_or_null("AimPoint") as Node3D
 	muzzle_point = get_node_or_null("MuzzlePoint") as Node3D
+	grip_point = get_node_or_null("GripPoint") as Node3D
 
 
 # --- Von Unterklassen zu überschreiben ---

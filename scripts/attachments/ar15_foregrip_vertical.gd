@@ -13,3 +13,12 @@ func get_model_name() -> String:
 
 func _configure() -> void:
 	extract_node = "BCM VFG"
+
+
+## Mitte der Griffschale, relativ zum Teil gemessen (tools/_measure_foregrip.gd:
+## AABB x -0.0133..0.0133, y -0.0544..0.0100, z -0.2721..-0.2261 — Mittelpunkt
+## dieser drei Spannen). weapon_viewmodel.gd zieht die Stützhand hierher, statt
+## sie am Handschutz stehen zu lassen, wenn dieser Griff angebaut ist.
+func _build_parts() -> void:
+	super()
+	add_child(ViewmodelParts.pivot("GripPoint", Vector3(0.0, -0.022, -0.249)))

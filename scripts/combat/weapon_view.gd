@@ -584,7 +584,11 @@ func _update_arms() -> void:
 		return
 
 	var grip := _viewmodel.grip_point.global_position
-	var handguard := _viewmodel.support_point.global_position
+	# Kamera-Version des Stuetzpunkts: dieselbe Stelle wie am Koerper, ausser
+	# ein Vordergriff verschiebt sie (siehe camera_support_point in
+	# weapon_viewmodel.gd) — der Arm der Blockfigur reicht dorthin nicht,
+	# die kurzen Kamera-Arme schon.
+	var handguard := _viewmodel.camera_support_point.global_position
 	var support := handguard
 
 	if _sequence_kind == &"reload" and _sequence_duration > 0.0:
