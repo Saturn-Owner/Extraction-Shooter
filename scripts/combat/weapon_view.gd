@@ -432,8 +432,17 @@ func _update_pose(delta: float) -> void:
 	_rack_velocity += rack_accel * rack_step
 	_rack_progress += _rack_velocity * rack_step
 
-	target_pos += rack_turn_offset * _rack_progress
-	target_rot += rack_turn_rotation * _rack_progress
+	# Die Drehpose kommt vom Modell, wenn es eine eigene mitbringt: Die
+	# Vorgaben hier sind fuer seitliche Hebel (AK) entworfen, eine AR-15
+	# winkelt stattdessen an (siehe rack_turn_rotation_override im Modell).
+	var turn_offset: Vector3 = rack_turn_offset
+	var turn_rotation: Vector3 = rack_turn_rotation
+	if _viewmodel.rack_turn_offset_override != null:
+		turn_offset = _viewmodel.rack_turn_offset_override
+	if _viewmodel.rack_turn_rotation_override != null:
+		turn_rotation = _viewmodel.rack_turn_rotation_override
+	target_pos += turn_offset * _rack_progress
+	target_rot += turn_rotation * _rack_progress
 
 	_pose.position = _pose.position.lerp(target_pos, weight)
 	_pose.rotation_degrees = _pose.rotation_degrees.lerp(target_rot, weight)

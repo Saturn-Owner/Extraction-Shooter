@@ -55,6 +55,18 @@ extends Node3D
 var rack_turn_start_progress: float = 0.87
 var handle_pull_start_progress: float = 0.93
 
+## WOHIN die Waffe fuer den Ladehebelzug dreht — null heisst: die Vorgabe
+## der Kamera gilt (rack_turn_rotation/-offset in weapon_view.gd, entworfen
+## fuer seitliche Hebel wie am AK).
+##
+## Eine Waffe, deren Ladehebel woanders sitzt, setzt hier ihre eigene Pose:
+## Die AR-15 hat ihn hinten OBEN — sie wird zum Durchladen angewinkelt statt
+## zur Seite gedreht (siehe AR15Viewmodel._configure()). Bewusst am Modell
+## statt in weapon_view: weapon_view kennt keine Waffenteile, aber das
+## Modell weiss, wo sein Hebel sitzt.
+var rack_turn_rotation_override: Variant = null
+var rack_turn_offset_override: Variant = null
+
 ## Hoehe der AKTIVEN Visierlinie ueber dem Modellursprung.
 ##
 ## weapon_view.gd senkt das Modell beim Zielen um genau diesen Wert ab, damit

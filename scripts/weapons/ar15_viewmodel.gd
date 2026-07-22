@@ -117,6 +117,22 @@ func _configure() -> void:
 	# sass zu dicht am Körper, deshalb ein Stück nach vorn (z 0.02 -> -0.06).
 	hip_position = Vector3(0.105, -0.115, -0.06)
 
+	# --- Durchladen bei leerer Nachladung -----------------------------------
+	#
+	# Die Kamera-Vorgabe (Drehung nach links, rack_turn_rotation in
+	# weapon_view.gd) ist für seitliche Hebel wie am AK gebaut. Der Ladehebel
+	# der AR-15 sitzt hinten OBEN — die Waffe wird deshalb ANGEWINKELT
+	# (Mündung hoch, leicht gerollt und näher ans Auge), damit man den Zug
+	# von oben sieht, statt sie wegzudrehen. Nach dem Spielen eingestellt.
+	rack_turn_rotation_override = Vector3(-14.0, -3.0, 12.0)
+	rack_turn_offset_override = Vector3(0.0, -0.012, 0.03)
+	# Und der Zug selbst bekommt mehr Zeit: Das Fenster beginnt früher
+	# (0.82 statt 0.93 der Grundklasse), damit die Hand den Hebel sichtbar
+	# ZIEHT statt ihn nur zucken zu lassen. Die Drehung beginnt entsprechend
+	# davor, dieselbe Staffelung wie bei der AKM.
+	rack_turn_start_progress = 0.72
+	handle_pull_start_progress = 0.82
+
 
 func _build_parts() -> void:
 	_build_body()
