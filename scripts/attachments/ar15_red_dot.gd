@@ -28,4 +28,12 @@ func _build_parts() -> void:
 	super()
 	# Gemessen am Leuchtpunkt selbst, nicht am Ursprung des Visiers. Genau
 	# hier entscheidet sich, ob die Waffe dorthin schiesst, wo der Punkt steht.
-	add_child(ViewmodelParts.pivot("AimPoint", aim_centre()))
+	var aim := aim_centre()
+	# Der Leuchtpunkt liegt in der alten Datei nicht exakt auf der Mittelachse.
+	# Beim Zielen zieht weapon_view die Waffe auf x = 0 — laege der Punkt
+	# daneben, zielte man haarscharf an der eigenen Kugel vorbei (im Zielbild
+	# als zweiter Punkt neben der Zielkugel sichtbar). Deshalb rueckt das
+	# ganze Visier seitlich, bis der Punkt genau mittig sitzt.
+	position.x -= aim.x
+	aim.x = 0.0
+	add_child(ViewmodelParts.pivot("AimPoint", aim))

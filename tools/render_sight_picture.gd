@@ -2,6 +2,7 @@
 ##
 ##   godot --path . --script res://tools/render_sight_picture.gd -- C:\ziel akm
 ##   godot --path . --script res://tools/render_sight_picture.gd -- C:\ziel akm h=0.083 d=-0.02
+##   godot --path . --script res://tools/render_sight_picture.gd -- C:\ziel ar15 optik=ar15_sight_holo
 ##
 ## Mehrere Paare hintereinander ergeben eine Reihe zum Vergleichen.
 ##
@@ -41,6 +42,7 @@ var _camera: Camera3D
 var _model: WeaponViewmodel
 var _pose: Node3D
 var _label := ""
+var _optic := ""
 
 
 func _initialize() -> void:
@@ -52,6 +54,13 @@ func _initialize() -> void:
 
 	_output_dir = args[0]
 	var wanted: String = args[1]
+
+	# "optik=ar15_sight_holo" montiert das Visier, bevor gerendert wird —
+	# nur so laesst sich pruefen, ob der Leuchtpunkt dorthin zeigt, wo die
+	# Kugel hingeht.
+	for token in args.slice(2):
+		if String(token).begins_with("optik="):
+			_optic = String(token).trim_prefix("optik=")
 
 	# Ordner selbst anlegen. Sonst schlaegt erst das Speichern fehl, und das
 	# steht als beilaeufige Zeile zwischen den Erfolgsmeldungen — man haelt die
@@ -165,6 +174,12 @@ func _build_scene(data: WeaponData) -> void:
 	_scene.add_child(_pose)
 
 	_model = data.create_viewmodel()
+	# Ohne weapon_data montiert _apply_attachments() STILL nichts — die Waffe
+	# kennt ihre Aufnahmen nur ueber die Daten (render_viewmodel.gd macht es
+	# genauso).
+	_model.weapon_data = data
+	if _optic != "":
+		_model.attachments = {int(AttachmentData.Slot.SIGHT): StringName(_optic)}
 	# Selbst bauen statt auf _ready() zu warten: In _initialize() steht der
 	# Baum noch nicht, _ready() liefe erst nach dem ersten Bild — bis dahin
 	# waeren sight_height und ads_distance noch die Grundwerte aus

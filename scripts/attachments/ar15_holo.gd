@@ -10,12 +10,14 @@ extends Ar15GlbPart
 ## Sammelmaterial ("eotech") hat und sich der Leuchtpunkt nicht per
 ## Materialname finden laesst (siehe aim_centre in der Basisklasse).
 ##
-## GEMESSEN: Das Gehaeuse reicht von y 0.4823 bis 1.1782 (Messprotokoll des
-## Konverters). Beim echten EXPS-2 liegt die optische Achse gut auf halber
-## Gehaeusehoehe — das ergibt y ≈ 0.88. Die Fensterfront sitzt bei x ≈ 0.3,
-## seitlich mittig (z ≈ 0). Ob der Punkt im Fenster mittig WIRKT, muss ein
-## Mensch beim Zielen pruefen — dann hier nachziehen.
-const AIM_MODEL := Vector3(0.3, 0.88, 0.0)
+## GEMESSEN am Zielbild (tools/render_sight_picture.gd mit optik=): Das
+## Modell traegt sein Absehen als Leuchtgrafik im Fenster, und die sitzt
+## bewusst HOCH im Fenster, wie beim echten EXPS-2. Der erste Schaetzwert
+## (0.88, "halbe Gehaeusehoehe") lag 53 Bildpunkte unter dem Absehen — man
+## zielte mit dem Kreis und traf rund vier Grad tiefer. Aus dem Versatz
+## zurueckgerechnet: 0.983. Die Fensterfront sitzt bei x ≈ 0.3, seitlich
+## mittig (z ≈ 0).
+const AIM_MODEL := Vector3(0.3, 0.983, 0.0)
 
 
 func get_model_name() -> String:
