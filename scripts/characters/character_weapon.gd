@@ -43,6 +43,14 @@ enum Behaviour {
 
 @export var behaviour: Behaviour = Behaviour.HOLD
 
+## Sichtbarkeits-Ebene für das eigene Mündungsfeuer dieser Waffe.
+##
+## Vorgabe 1 (Standard, für jede Kamera sichtbar) — passend für NPCs, die
+## normal gesehen werden sollen. PlayerController setzt das für die eigene
+## Körperwaffe auf ihre versteckte Ebene (siehe dort), sonst blitzt das
+## Körpermodell zusätzlich zum Kameramodell mitten im eigenen Bild.
+var muzzle_flash_layers: int = 1
+
 ## Wie viele Schuss, bevor nachgeladen wird.
 @export var magazine_size: int = 12
 
@@ -273,7 +281,8 @@ func _fire() -> void:
 	# Kein grelles Mündungsfeuer bei gedämpften Waffen — siehe Weapon.gd.
 	if muzzle != null and not WeaponAudio.is_suppressed(data):
 		var power := WeaponAudio.get_power_for_weapon(data)
-		MuzzleFlash.spawn(_spawn_parent(), muzzle.global_transform, 0.6 + power)
+		MuzzleFlash.spawn(_spawn_parent(), muzzle.global_transform, 0.6 + power,
+			muzzle_flash_layers)
 
 	_play(_shot_sound, randf_range(0.94, 1.06), WeaponAudio.volume_db_for(data))
 
@@ -304,7 +313,8 @@ func drive_shot() -> void:
 	# Kein grelles Mündungsfeuer bei gedämpften Waffen — siehe Weapon.gd.
 	if muzzle != null and not WeaponAudio.is_suppressed(data):
 		var power := WeaponAudio.get_power_for_weapon(data)
-		MuzzleFlash.spawn(_spawn_parent(), muzzle.global_transform, 0.6 + power)
+		MuzzleFlash.spawn(_spawn_parent(), muzzle.global_transform, 0.6 + power,
+			muzzle_flash_layers)
 
 
 func drive_dry_shot() -> void:

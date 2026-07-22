@@ -711,6 +711,11 @@ func _hide_own_body_from_camera() -> void:
 		for node in _all_children(body_weapon):
 			if node is VisualInstance3D:
 				(node as VisualInstance3D).layers = own_bit
+		# Ihr Mündungsfeuer entsteht erst beim Schuss, als eigener Knoten neben
+		# dem Körpermodell (nicht darunter, siehe CharacterWeapon._spawn_parent)
+		# — die Schleife oben trifft es nie. Ohne diese Zeile blitzte das
+		# Körpermodell zusätzlich zum Kameramodell mitten im eigenen Bild.
+		body_weapon.muzzle_flash_layers = own_bit
 
 	# Weste und Ersatzmagazin ebenso: Sie haengen am Koerper und wuerden dem
 	# Traeger sonst auf der Brust schweben.
