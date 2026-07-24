@@ -354,6 +354,7 @@ func reset() -> void:
 	if health != null:
 		health.reset()
 	plate_durability = plate.max_durability if plate != null else 0.0
+	clear_blood()
 	refresh_colors()
 	_update_label()
 
