@@ -128,6 +128,11 @@ var _rng := RandomNumberGenerator.new()
 ## desselben Aufrufs aus, bevor sich dieser Wert wieder aendern kann.
 var _last_hit_point: Vector3 = Vector3.ZERO
 
+## Alle bisher gesetzten Einschusslöcher und Blutstreifen — siehe
+## _spawn_wound(). Nur damit clear_blood() sie beim Zuruecksetzen
+## wiederfindet, ohne den ganzen Knotenbaum abzusuchen.
+var _blood: Array[Node3D] = []
+
 
 func _ready() -> void:
 	_rng.randomize()
@@ -502,7 +507,7 @@ func hitboxes_of(part: HealthSystem.Part) -> Array:
 ## gibt, an der über Schaden entschieden wird — dieselbe Stelle, die im
 ## Mehrspielerbetrieb auf den Server wandert.
 func take_hit_on_part(part: HealthSystem.Part, ammo: AmmoData, distance: float,
-		point: Vector3, _direction: Vector3) -> Ballistics.HitResult:
+		point: Vector3, direction: Vector3) -> Ballistics.HitResult:
 	_last_hit_point = point
 
 	# Eine Platte deckt nur ab, was sie abdeckt. Ein Kopfschuss geht daran
@@ -517,9 +522,173 @@ func take_hit_on_part(part: HealthSystem.Part, ammo: AmmoData, distance: float,
 	if health != null and result.damage_to_target > 0.0:
 		health.apply_damage(part, result.damage_to_target)
 
+	# JEDER Treffer, der wirklich Fleisch erreicht — nicht mehr nur, wenn
+	# Ballistics eine Blutung auswuerfelt (AmmoData.bleeding_chance faerbt nur
+	# noch, wie stark der Streifen ausfaellt, siehe caused_heavy_bleeding
+	# unten). Ein von der Platte GESTOPPTER Treffer bleibt aussen vor: stumpfe
+	# Wucht durch heile Haut blutet nicht, siehe Ballistics._roll_bleeding().
+	var reached_flesh := result.damage_to_target > 0.0 and (not result.was_armored or result.penetrated)
+	if reached_flesh:
+		_spawn_wound(part, point, direction, result.caused_heavy_bleeding)
+
 	refresh_colors()
 	part_hit.emit(part, result)
 	return result
+
+
+## Setzt Einschussloch, herablaufenden Blutstreifen und ein paar Spritzer an
+## die Einschlagstelle. Haengt am naeheren der ein oder zwei Meshes des
+## Koerperteils, damit alles bei zweiteiligen Gliedern (Arm/Bein) am
+## richtigen Segment sitzt und nicht am Oberarm klebt, obwohl der Unterarm
+## getroffen wurde.
+##
+## `direction` ist die Flugrichtung des Geschosses (Schuetze -> Trefferpunkt),
+## keine echte Flaechennormale — CharacterHitbox liefert keine. Die
+## GEGENRICHTUNG ist trotzdem eine brauchbare Naeherung: Genau dieselbe
+## Ersatzrechnung nutzt Projectile._check_segment() schon dort, wo die Physik
+## keine echte Normale liefert (`-_velocity.normalized()`).
+func _spawn_wound(part: HealthSystem.Part, point: Vector3, direction: Vector3, heavy: bool) -> void:
+	var target_mesh: MeshInstance3D = null
+	var local_point := Vector3.ZERO
+
+	for mesh: MeshInstance3D in meshes_of(part):
+		var candidate := mesh.global_transform.affine_inverse() * point
+		if target_mesh == null:
+			target_mesh = mesh
+			local_point = candidate
+
+		var box := mesh.mesh as BoxMesh
+		if box == null:
+			continue
+		var half := box.size * 0.5
+		if absf(candidate.x) <= half.x and absf(candidate.y) <= half.y \
+				and absf(candidate.z) <= half.z:
+			target_mesh = mesh
+			local_point = candidate
+			break
+
+	if target_mesh == null:
+		return
+
+	var normal := -direction if direction.length_squared() > 0.0001 else Vector3.FORWARD
+	var hole := WoundHole.spawn(target_mesh, point, normal)
+	if hole != null:
+		_blood.append(hole)
+
+	var bleed := WoundBleed.new()
+	bleed.heavy = heavy
+	bleed.target_length = _edge_length(target_mesh, local_point)
+	bleed.body_hit_layer = hit_layer
+	target_mesh.add_child(bleed)
+	bleed.position = local_point
+	_blood.append(bleed)
+
+	_spawn_splatter(point, direction, part)
+
+
+## Standardlaenge, wenn das Mesh aus irgendeinem Grund kein BoxMesh ist.
+const FALLBACK_DRIP_LENGTH := 0.16
+
+## Wie weit die Wunde vom UNTEREN Rand des eigenen Meshs entfernt ist — so
+## weit darf WoundBleed als starrer Streifen laufen, bevor er (siehe dort)
+## in einzelne, frei fallende Tropfen uebergeht.
+##
+## FRUEHER lief der Streifen bis zum BODEN (per Strahl gemessen), egal wie
+## weit das war. Bei einem Brusttreffer bedeutete das: der Streifen zog sich
+## als starre, gerade Linie durch die Luft bis zum Boden — durch die Luecke
+## zwischen den Beinen hindurch, denn die Figur ist dort keine durchgehende
+## Flaeche. Jetzt bleibt der Streifen auf dem Koerperteil, an dem er
+## tatsaechlich haengt, und alles danach faellt als echter Tropfen (siehe
+## BloodDrop), statt eine Gerade zu simulieren, wo keine Flaeche ist.
+##
+## `local_point` ist bereits im lokalen Raum von `mesh` — ein BoxMesh ist
+## dort um seinen eigenen Mittelpunkt zentriert, der untere Rand liegt also
+## bei -size.y * 0.5.
+func _edge_length(mesh: MeshInstance3D, local_point: Vector3) -> float:
+	var box := mesh.mesh as BoxMesh
+	if box == null:
+		return FALLBACK_DRIP_LENGTH
+	return maxf(0.03, local_point.y + box.size.y * 0.5)
+
+
+## Wie viele Spritzer ein Treffer zusaetzlich zum Hauptstreifen wirft. War 6.
+const SPLATTER_COUNT := 10
+
+## Wie weit ein einzelner Spritzer hoechstens fliegt, bevor er landen kann.
+const SPLATTER_DISTANCE := 0.5
+
+## Wirft ein paar kleine Spritzer in eine zufaellige, nach unten und vom
+## Schuetzen weg geneigte Richtung — landen sie auf einer festen Flaeche
+## (Boden, Wand, oder ein anderes Koerperteil derselben Figur), bleibt dort
+## ein kleiner Fleck zurueck. Landet keiner (offener Raum), passiert einfach
+## nichts — kein Spritzer erzwungen, wo keiner hinpasst.
+func _spawn_splatter(point: Vector3, direction: Vector3, part: HealthSystem.Part) -> void:
+	var space := get_world_3d().direct_space_state
+	if space == null:
+		return
+
+	var away := -direction if direction.length_squared() > 0.0001 else Vector3.FORWARD
+	var own_hitbox := hitbox_of(part)
+
+	for i in range(SPLATTER_COUNT):
+		# Zufallsrichtung, bevorzugt nach unten (nie nach oben — das saehe aus
+		# wie ein Springbrunnen), mit der Schussgegenrichtung gemischt, damit
+		# es tendenziell vom Schuetzen weg spritzt statt kreisfoermig.
+		var random_dir := Vector3(
+			randf_range(-1.0, 1.0),
+			randf_range(-1.0, -0.1),
+			randf_range(-1.0, 1.0))
+		var spread := (random_dir + away * 0.6).normalized()
+		var to := point + spread * randf_range(0.15, SPLATTER_DISTANCE)
+
+		var query := PhysicsRayQueryParameters3D.create(point, to)
+		# Welt UND die eigenen Trefferzonen — ein Spritzer soll auch auf einem
+		# anderen Koerperteil derselben Figur landen koennen.
+		query.collision_mask = 1 | hit_layer
+		query.collide_with_areas = false
+		if own_hitbox != null:
+			query.exclude = [own_hitbox.get_rid()]
+
+		var hit := space.intersect_ray(query)
+		if hit.is_empty():
+			continue
+
+		var collider: Object = hit.get("collider")
+		var landing_point: Vector3 = hit.position
+		var landing_normal: Vector3 = hit.get("normal", Vector3.UP)
+		var landing_parent: Node = get_tree().current_scene
+
+		if collider is CharacterHitbox and (collider as CharacterHitbox).character == self:
+			var landed_meshes := meshes_of((collider as CharacterHitbox).part)
+			if not landed_meshes.is_empty():
+				landing_parent = landed_meshes[0]
+
+		if landing_parent == null:
+			continue
+
+		var splatter := WoundHole.spawn(landing_parent, landing_point, landing_normal)
+		if splatter != null:
+			splatter.size *= 0.6
+			_blood.append(splatter)
+
+
+## Entfernt alle Einschusslöcher und Blutstreifen — gerufen beim
+## Zuruecksetzen (siehe HumanoidTarget.reset()), sonst klebt eine geheilte
+## Figur weiter voller Wunden von der letzten Runde.
+func clear_blood() -> void:
+	for mark in _blood:
+		if is_instance_valid(mark):
+			mark.queue_free()
+	_blood.clear()
+
+
+## Meldet einen Wund-/Blutfleck zur Nachverfolgung an, der NICHT direkt beim
+## Treffer entstand, sondern zeitversetzt — etwa ein BloodDrop (siehe dort),
+## der erst Sekunden spaeter auf einem Koerperteil DERSELBEN Figur landet.
+## Ohne das wuerde clear_blood() ihn nicht finden, und ein zurueckgesetztes
+## Ziel bliebe an dieser einen Stelle trotzdem befleckt.
+func remember_wound_mark(mark: Node3D) -> void:
+	_blood.append(mark)
 
 
 ## Welche Teile eine Brustplatte abdeckt.
